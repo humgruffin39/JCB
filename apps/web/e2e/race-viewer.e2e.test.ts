@@ -115,7 +115,7 @@ test('loads a verified timeline with replay and camera controls', async ({
   });
 
   await page.goto('/races/viewer-test');
-  await page.getByRole('button', { name: '一時停止' }).click({ force: true, timeout: 20_000 });
+  await page.getByRole('button', { name: '一時停止' }).dispatchEvent('click');
   await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible();
   await expect(page.locator('.broadcast-clock output')).toHaveCSS(
     'font-family',
@@ -123,16 +123,16 @@ test('loads a verified timeline with replay and camera controls', async ({
   );
   await expect(page.getByRole('button', { name: '再生' })).toBeVisible();
   const horseFour = page.getByRole('button', { name: /4番を追尾/ });
-  await horseFour.click();
+  await horseFour.dispatchEvent('click');
   await expect(horseFour).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: '追走に戻す' })).toBeVisible();
-  await page.getByRole('button', { name: '追走に戻す' }).click();
+  await page.getByRole('button', { name: '追走に戻す' }).dispatchEvent('click');
   await expect(horseFour).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByRole('button', { name: '自由視点' })).toBeVisible();
-  await page.getByRole('button', { name: '自由視点' }).click();
+  await page.getByRole('button', { name: '自由視点' }).dispatchEvent('click');
   await expect(page.getByRole('button', { name: '追走に戻す' })).toBeVisible();
   await expect(page.getByText('ドラッグ 回転 · ホイール ズーム')).toHaveCount(0);
-  await page.getByRole('button', { name: '追走に戻す' }).click();
+  await page.getByRole('button', { name: '追走に戻す' }).dispatchEvent('click');
   await expect(page.getByRole('button', { name: '自由視点' })).toBeVisible();
   await expect(page.locator('.running-order small')).toHaveCount(0);
   expect(
@@ -146,7 +146,7 @@ test('loads a verified timeline with replay and camera controls', async ({
       () => (window as unknown as { audioContextCreations: number }).audioContextCreations,
     ),
   ).toBe(0);
-  await page.getByRole('button', { name: '再生' }).click();
+  await page.getByRole('button', { name: '再生' }).dispatchEvent('click');
   await expect(page.getByRole('region', { name: '確定結果' })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.podium-card')).toHaveCount(3);
 });

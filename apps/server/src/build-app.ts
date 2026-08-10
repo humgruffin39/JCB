@@ -664,7 +664,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     }
     const runAt = now();
     const scheduledAt = timestamp(runAt + 3_000);
-    const finishAt = timestamp(Number(scheduledAt + timing.timelineDurationMs));
+    const finishAt = timestamp(scheduledAt + Number(timing.timelineDurationMs));
     const run = dependencies.database.transaction(() => {
       dependencies.database
         .prepare(

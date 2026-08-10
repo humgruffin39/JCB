@@ -1,0 +1,31 @@
+{
+  "name": "@jcb/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "deploy": "pnpm build && wrangler pages deploy dist",
+    "preview": "vite preview --host 127.0.0.1 --port 4173"
+  },
+  "dependencies": {
+    "@fontsource-variable/noto-sans-jp": "^5.3.0",
+    "@jcb/config": "workspace:*",
+    "@jcb/contracts": "workspace:*",
+    "@jcb/ui": "workspace:*",
+    "lucide-react": "^1.30.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "three": "0.185.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@types/three": "0.185.0",
+    "@vitejs/plugin-react": "6.0.5",
+    "vite": "8.2.0",
+    "wrangler": "4.118.0"
+  }
+}

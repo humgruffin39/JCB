@@ -1,0 +1,32 @@
+logging:
+  level: info
+  type: json
+
+snapshot:
+  interval: 1h
+  retention: 720h
+
+retention:
+  enabled: true
+
+validation:
+  interval: 6h
+
+verify-compaction: true
+shutdown-sync-timeout: 30s
+
+dbs:
+  - path: ${DATABASE_PATH}
+    monitor-interval: 1s
+    checkpoint-interval: 1m
+    restore-if-db-not-exists: true
+    replica:
+      type: s3
+      bucket: ${R2_BACKUP_BUCKET}
+      path: litestream/jcb.sqlite
+      endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      region: auto
+      access-key-id: ${R2_ACCESS_KEY_ID}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY}
+      sync-interval: 1m
+      auto-recover: true

@@ -1,0 +1,76 @@
+import type { Money, PoolType, Timestamp } from '@jcb/domain';
+
+export interface DiscordRaceHorse {
+  readonly horseNumber: number;
+  readonly name: string;
+  readonly currentWinOdds: string;
+}
+
+export interface DiscordRaceCard {
+  readonly raceId: string;
+  readonly version: number;
+  readonly name: string;
+  readonly raceDate: string;
+  readonly kindLabel: string;
+  readonly scheduledAtLabel: string;
+  readonly distanceM: number;
+  readonly surfaceLabel: string;
+  readonly horses: readonly DiscordRaceHorse[];
+  readonly trifectaPoolTotal: Money;
+  readonly carryover: Money;
+  readonly bettingClosesAtLabel: string;
+  readonly statusLabel: string;
+  readonly canBuy: boolean;
+  readonly canView: boolean;
+}
+
+export interface PurchaseSession {
+  readonly id: string;
+  readonly discordUserId: string;
+  readonly raceId: string;
+  readonly raceVersion: number;
+  readonly step: string;
+  readonly payload: Readonly<Record<string, string>>;
+  readonly expiresAt: Timestamp;
+}
+
+export interface PurchaseSessionStore {
+  create(input: Omit<PurchaseSession, 'id'>): PurchaseSession;
+  get(id: string): PurchaseSession | undefined;
+  update(id: string, step: string, payload: Readonly<Record<string, string>>): PurchaseSession;
+}
+
+export interface PurchasePreview {
+  readonly estimatedBasePayout: Money;
+  readonly estimatedCarryoverBonus: Money;
+  readonly balanceAfter: Money;
+}
+
+export interface PurchaseReceipt {
+  readonly betId: string;
+  readonly balanceAfter: Money;
+  readonly wasDuplicate: boolean;
+}
+
+export interface DiscordPurchaseGateway {
+  currentRaceVersion(raceId: string): Promise<number>;
+  preview(input: {
+    readonly discordUserId: string;
+    readonly raceId: string;
+    readonly poolType: PoolType;
+    readonly selectionCode: string;
+    readonly stake: Money;
+  }): Promise<PurchasePreview>;
+  purchase(input: {
+    readonly discordUserId: string;
+    readonly raceId: string;
+    readonly raceVersion: number;
+    readonly poolType: PoolType;
+    readonly selectionCode: string;
+    readonly stake: Money;
+    readonly interactionId: string;
+  }): Promise<PurchaseReceipt>;
+  raceHorses(
+    raceId: string,
+  ): Promise<readonly { readonly number: number; readonly name: string }[]>;
+}

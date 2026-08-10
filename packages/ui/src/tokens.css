@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light;
+  --surface-0: #f6f7f5;
+  --surface-1: #ffffff;
+  --surface-2: #ecefeb;
+  --line: #d5d9d3;
+  --text: #20231f;
+  --muted: #626960;
+  --cyan: #2f6757;
+  --accent-strong: #245044;
+  --action-fill: #2f6757;
+  --action-hover: #245044;
+  --action-text: #ffffff;
+  --amber: #8a5a21;
+  --magenta: #a33f55;
+  --green: #2f6757;
+  --red: #b42335;
+  --red-strong: #8f1d2c;
+  --danger-fill: #b42335;
+  --danger-hover: #8f1d2c;
+  --danger-text: #ffffff;
+  --focus: #1d5b9f;
+  --overlay: rgb(32 35 31 / 48%);
+  --grid: transparent;
+  --scanline: transparent;
+  --line-contrast: #858d82;
+  --muted-contrast: #454b43;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --font-display: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  --font-body: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  --font-mono: 'Noto Sans JP Variable', 'Noto Sans JP', sans-serif;
+  --content-max: 88rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 0.125rem solid var(--focus);
+  outline-offset: 0.125rem;
+}
+
+::selection {
+  color: #ffffff;
+  background: var(--focus);
+}

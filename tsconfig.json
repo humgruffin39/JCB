@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "WebWorker"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@jcb/application": ["packages/application/src/index.ts"],
+      "@jcb/config": ["packages/config/src/index.ts"],
+      "@jcb/contracts": ["packages/contracts/src/index.ts"],
+      "@jcb/database": ["packages/database/src/index.ts"],
+      "@jcb/discord": ["packages/discord/src/index.ts"],
+      "@jcb/domain": ["packages/domain/src/index.ts"],
+      "@jcb/economy": ["packages/economy/src/index.ts"],
+      "@jcb/odds": ["packages/odds/src/index.ts"],
+      "@jcb/simulation": ["packages/simulation/src/index.ts"],
+      "@jcb/test-support": ["packages/test-support/src/index.ts"],
+      "@jcb/ui": ["packages/ui/src/index.ts"]
+    },
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "*.ts",
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "scripts/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "playwright-report", "test-results"]
+}

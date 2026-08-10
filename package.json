@@ -1,0 +1,44 @@
+{
+  "name": "josan-central-bank-racing",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.3.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=11 <12"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "dev": "node --env-file=.env.local --import tsx apps/server/src/index.ts",
+    "dev:watch": "node --env-file=.env.local --watch --import tsx apps/server/src/index.ts",
+    "dev:web": "pnpm --filter @jcb/web dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --exclude **/*.integration.test.ts --exclude **/*.e2e.test.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "db:migration:check": "tsx scripts/check-migrations.ts",
+    "simulation:determinism": "vitest run packages/simulation/src/determinism.test.ts",
+    "economy:integrity": "vitest run packages/economy/src/integrity.test.ts",
+    "deploy:check-window": "tsx scripts/check-deploy-window.ts",
+    "odds:benchmark": "tsx scripts/benchmark-odds.ts",
+    "secrets:generate": "tsx scripts/generate-secrets.ts",
+    "audit": "pnpm audit --audit-level high"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "26.1.2",
+    "eslint": "10.8.0",
+    "eslint-plugin-import-x": "4.17.1",
+    "fast-check": "4.9.0",
+    "prettier": "3.9.6",
+    "tsx": "4.23.4",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "vitest": "4.1.10"
+  }
+}

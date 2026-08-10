@@ -1,0 +1,14 @@
+{
+  "name": "@jcb/application",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@jcb/contracts": "workspace:*",
+    "@jcb/domain": "workspace:*",
+    "@jcb/odds": "workspace:*",
+    "@jcb/simulation": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

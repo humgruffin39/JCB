@@ -1,0 +1,16 @@
+.git
+.github
+.env
+.env.*
+.tmp
+.private-objects
+coverage
+data
+node_modules
+playwright-report
+temp
+test-results
+**/dist
+**/*.test.ts
+**/*.integration.test.ts
+**/*.e2e.test.ts

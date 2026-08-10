@@ -1,0 +1,86 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { timestamp } from '@jcb/domain';
+import { openDatabase } from './connection.js';
+import { SqliteJobStore } from './job-store.js';
+import { applyMigrations } from './migrations.js';
+
+function createStore(): { database: ReturnType<typeof openDatabase>; store: SqliteJobStore } {
+  const database = openDatabase(':memory:');
+  applyMigrations(
+    database,
+    join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+    1,
+  );
+  return { database, store: new SqliteJobStore(database, () => 0.5) };
+}
+
+describe('SQLite job store', () => {
+  it('claims a due job after the database process restarts', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'jcb-job-restart-'));
+    const databasePath = join(directory, 'jobs.sqlite');
+    let database = openDatabase(databasePath);
+    try {
+      applyMigrations(
+        database,
+        join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+        1,
+      );
+      new SqliteJobStore(database, () => 0.5).enqueue({
+        jobType: 'settle_race',
+        deduplicationKey: 'settle:restart-race',
+        payload: { raceId: 'restart-race' },
+        runAt: timestamp(100),
+      });
+      database.close();
+
+      database = openDatabase(databasePath);
+      const resumed = new SqliteJobStore(database, () => 0.5).claimDue(
+        timestamp(100),
+        'restarted-worker',
+      );
+      expect(resumed?.payload).toEqual({ raceId: 'restart-race' });
+    } finally {
+      if (database.open) database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('prevents double claims and resumes after a stale worker lock', () => {
+    const { database, store } = createStore();
+    store.enqueue({
+      jobType: 'settle_race',
+      deduplicationKey: 'settle:race-1',
+      payload: { raceId: 'race-1' },
+      runAt: timestamp(100),
+    });
+    const first = store.claimDue(timestamp(100), 'worker-a');
+    expect(first).toBeDefined();
+    expect(store.claimDue(timestamp(100), 'worker-b')).toBeUndefined();
+    expect(store.reclaimStale(timestamp(10_000), 5_000)).toBe(1);
+    expect(store.claimDue(timestamp(10_000), 'worker-b')?.id).toBe(first?.id);
+    database.close();
+  });
+
+  it('moves a repeatedly failing job to dead letter', () => {
+    const { database, store } = createStore();
+    store.enqueue({
+      jobType: 'simulate_race',
+      deduplicationKey: 'simulate:race-1',
+      payload: { raceId: 'race-1' },
+      runAt: timestamp(100),
+    });
+    let now = 100;
+    let status = 'pending';
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const job = store.claimDue(timestamp(now), 'worker');
+      expect(job).toBeDefined();
+      status = store.fail(job!.id, 'worker', timestamp(now), 'TEST', 'redacted');
+      now += 10_000;
+    }
+    expect(status).toBe('dead_letter');
+    database.close();
+  });
+});

@@ -1,0 +1,19 @@
+{
+  "name": "@jcb/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@jcb/application": "workspace:*",
+    "@jcb/config": "workspace:*",
+    "@jcb/domain": "workspace:*",
+    "@jcb/discord": "workspace:*",
+    "@jcb/economy": "workspace:*",
+    "@jcb/odds": "workspace:*",
+    "@jcb/simulation": "workspace:*",
+    "better-sqlite3": "12.6.2",
+    "drizzle-orm": "0.45.2",
+    "ulid": "3.0.2"
+  }
+}

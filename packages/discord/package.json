@@ -1,0 +1,11 @@
+{
+  "name": "@jcb/discord",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@jcb/domain": "workspace:*",
+    "discord.js": "14.27.0"
+  }
+}

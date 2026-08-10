@@ -1,0 +1,14 @@
+{
+  "name": "@jcb/odds",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@jcb/domain": "workspace:*",
+    "@jcb/simulation": "workspace:*"
+  },
+  "devDependencies": {
+    "@jcb/test-support": "workspace:*"
+  }
+}

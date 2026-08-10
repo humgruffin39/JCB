@@ -1,0 +1,35 @@
+{
+  "name": "@jcb/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "esbuild src/index.ts src/odds-worker.ts src/record-restore-drill.ts src/render-litestream-config.ts --bundle --platform=node --format=esm --target=node24 --outdir=dist --external:@aws-sdk/* --external:@fastify/* --external:better-sqlite3 --external:discord.js --external:fastify --external:pino --external:ulid --external:zod"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1101.0",
+    "@fastify/cookie": "11.1.2",
+    "@fastify/cors": "11.3.0",
+    "@fastify/helmet": "13.1.0",
+    "@fastify/rate-limit": "11.2.0",
+    "@jcb/application": "workspace:*",
+    "@jcb/config": "workspace:*",
+    "@jcb/contracts": "workspace:*",
+    "@jcb/database": "workspace:*",
+    "@jcb/discord": "workspace:*",
+    "@jcb/domain": "workspace:*",
+    "@jcb/economy": "workspace:*",
+    "@jcb/odds": "workspace:*",
+    "@jcb/simulation": "workspace:*",
+    "better-sqlite3": "12.6.2",
+    "discord.js": "14.27.0",
+    "fastify": "5.11.0",
+    "pino": "10.3.1",
+    "ulid": "3.0.2",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}

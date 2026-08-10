@@ -2,8 +2,14 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import type { GuildMembership, PrivateObjectStore } from '@jcb/application';
-import { createEdgeAccessToken, createOpaqueToken, type JobStore } from '@jcb/application';
+import {
+  createEdgeAccessToken,
+  createOpaqueToken,
+  signReleaseManifest,
+  type GuildMembership,
+  type JobStore,
+  type PrivateObjectStore,
+} from '@jcb/application';
 import { DEFAULT_GAME_SETTINGS, gameSettingsSchema, type Environment } from '@jcb/config';
 import {
   adminAdjustmentSchema,
@@ -16,6 +22,7 @@ import {
   jobIdParamsSchema,
   raceIdParamsSchema,
   racePatchSchema,
+  signedManifestSchema,
   ticketExchangeSchema,
 } from '@jcb/contracts';
 import {
@@ -665,6 +672,25 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     const runAt = now();
     const scheduledAt = timestamp(runAt + 3_000);
     const finishAt = timestamp(scheduledAt + Number(timing.timelineDurationMs));
+    if (dependencies.timelineStore !== undefined) {
+      const stored = await dependencies.timelineStore.get(`race-manifests/${raceId}.json`);
+      if (stored !== undefined && dependencies.environment.MANIFEST_PRIVATE_KEY !== undefined) {
+        const signed = signedManifestSchema.parse(JSON.parse(Buffer.from(stored).toString('utf8')));
+        await dependencies.timelineStore.put(
+          `race-manifests/${raceId}.json`,
+          Buffer.from(
+            JSON.stringify(
+              signReleaseManifest(
+                { ...signed.manifest, scheduledStart: scheduledAt },
+                dependencies.environment.MANIFEST_PRIVATE_KEY,
+              ),
+            ),
+            'utf8',
+          ),
+          { raceId, type: 'release-manifest' },
+        );
+      }
+    }
     const run = dependencies.database.transaction(() => {
       dependencies.database
         .prepare(

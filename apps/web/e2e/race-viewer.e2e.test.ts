@@ -123,7 +123,7 @@ test('loads a verified timeline with replay and camera controls', async ({
     /Noto Sans JP Variable/,
   );
   await expect(page.getByRole('button', { name: '一時停止' })).toBeVisible();
-  await page.getByRole('button', { name: '一時停止' }).click();
+  await page.getByRole('button', { name: '一時停止' }).click({ force: true });
   await expect(page.getByRole('button', { name: '再生' })).toBeVisible();
   const horseFour = page.getByRole('button', { name: /4番を追尾/ });
   await horseFour.click();

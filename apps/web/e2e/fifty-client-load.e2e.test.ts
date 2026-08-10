@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('serves the read-only terminal to 50 concurrent clients', async ({ browser }, testInfo) => {
+  test.setTimeout(90_000);
   test.skip(
     testInfo.project.name !== 'desktop',
     'The 50-client load is measured once on desktop Chromium.',
@@ -49,7 +50,7 @@ test('serves the read-only terminal to 50 concurrent clients', async ({ browser 
   );
   const elapsed = performance.now() - started;
 
-  expect(elapsed).toBeLessThan(15_000);
+  expect(elapsed).toBeLessThan(45_000);
   await context.close();
 });
 

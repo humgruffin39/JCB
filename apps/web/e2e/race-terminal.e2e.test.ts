@@ -61,5 +61,7 @@ test('keeps controls keyboard reachable and honors reduced motion', async ({ pag
   await page.goto('/races/race-demo');
   await page.locator('.skip-link').focus();
   await expect(page.locator('.skip-link')).toBeFocused();
-  expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await expect
+    .poll(async () => page.evaluate(() => document.getAnimations().length))
+    .toBe(0);
 });

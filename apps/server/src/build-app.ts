@@ -694,9 +694,16 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     const run = dependencies.database.transaction(() => {
       dependencies.database
         .prepare(
-          'UPDATE races SET scheduled_at = ?, betting_closes_at = ?, viewer_opens_at = ?, updated_at = ? WHERE id = ?',
+          'UPDATE races SET scheduled_at = ?, betting_opens_at = ?, betting_closes_at = ?, viewer_opens_at = ?, updated_at = ? WHERE id = ?',
         )
-        .run(BigInt(scheduledAt), BigInt(runAt), BigInt(runAt), BigInt(runAt), raceId);
+        .run(
+          BigInt(scheduledAt),
+          BigInt(runAt - 1_000),
+          BigInt(runAt),
+          BigInt(runAt),
+          BigInt(runAt),
+          raceId,
+        );
       lifecycle.closeBetting(raceId, timestamp(runAt));
       lifecycle.markReady(raceId);
       lifecycle.markRunning(raceId, scheduledAt);

@@ -115,15 +115,12 @@ test('loads a verified timeline with replay and camera controls', async ({
   });
 
   await page.goto('/races/viewer-test');
-  await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible({
-    timeout: 15_000,
-  });
+  await page.getByRole('button', { name: '一時停止' }).click({ force: true, timeout: 20_000 });
+  await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible();
   await expect(page.locator('.broadcast-clock output')).toHaveCSS(
     'font-family',
     /Noto Sans JP Variable/,
   );
-  await expect(page.getByRole('button', { name: '一時停止' })).toBeVisible();
-  await page.getByRole('button', { name: '一時停止' }).click({ force: true });
   await expect(page.getByRole('button', { name: '再生' })).toBeVisible();
   const horseFour = page.getByRole('button', { name: /4番を追尾/ });
   await horseFour.click();

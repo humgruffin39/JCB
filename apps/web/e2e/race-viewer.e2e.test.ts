@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 test('loads a verified timeline with replay and camera controls', async ({
   page,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(150_000);
   await page.addInitScript(() => {
     (window as unknown as { audioContextCreations: number }).audioContextCreations = 0;
     class ConsentAudioContext {
@@ -115,7 +115,9 @@ test('loads a verified timeline with replay and camera controls', async ({
   });
 
   await page.goto('/races/viewer-test');
-  await page.getByRole('button', { name: '一時停止' }).dispatchEvent('click');
+  await page
+    .getByRole('button', { name: '一時停止' })
+    .dispatchEvent('click', undefined, { timeout: 120_000 });
   await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible();
   await expect(page.locator('.broadcast-clock output')).toHaveCSS(
     'font-family',

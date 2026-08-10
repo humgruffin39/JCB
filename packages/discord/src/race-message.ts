@@ -21,11 +21,9 @@ export function renderRaceMessage(card: DiscordRaceCard): {
         '',
         `三連単プール: ${card.trifectaPoolTotal.toString()} R`,
         `キャリーオーバー: ${card.carryover.toString()} R`,
-        `状態: ${card.statusLabel}`,
       ].join('\n'),
     )
-    .setColor(0x25d9ff)
-    .setFooter({ text: 'ルピーはゲーム内通貨です。実通貨との交換はできません。' });
+    .setColor(0x25d9ff);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`jcb:buy:${card.raceId}`)

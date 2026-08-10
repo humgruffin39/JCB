@@ -70,6 +70,36 @@ describe('Cloudflare release edge', () => {
     );
     expect(manifestResponse.status).toBe(401);
   });
+
+  it('serves a release with lowercased R2 metadata keys', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const response = await requestRelease(
+      validToken(),
+      environment(signedManifest(now - 1_000), {
+        raceid: raceId,
+        sha256: 'a'.repeat(64),
+        codecversion: 'json-gzip-v1',
+      }),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { result: { scheduledStart: number } };
+    expect(body.result.scheduledStart).toBe(now - 1_000);
+  });
+
+  it('rejects a release whose timeline metadata is invalid', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const response = await requestRelease(
+      validToken(),
+      environment(signedManifest(now - 1_000), {
+        raceid: 'another-race',
+        sha256: 'a'.repeat(64),
+      }),
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'TIMELINE_METADATA_INVALID' },
+    });
+  });
 });
 
 function requestRelease(token: string, bindings: Bindings): Promise<Response> {
@@ -116,17 +146,31 @@ function signedManifest(scheduledStart: number) {
   );
 }
 
-function environment(manifest: ReturnType<typeof signedManifest>): Bindings {
+function environment(
+  manifest: ReturnType<typeof signedManifest>,
+  timelineMetadata: Record<string, string> = { raceid: raceId, sha256: 'a'.repeat(64) },
+): Bindings {
   return {
     TIMELINE_BUCKET: {
       async get(key) {
-        if (key !== `race-manifests/${raceId}.json`) return null;
-        return {
-          body: new Blob([]).stream(),
-          async json() {
-            return manifest;
-          },
-        };
+        if (key === `race-manifests/${raceId}.json`) {
+          return {
+            body: new Blob([]).stream(),
+            async json() {
+              return manifest;
+            },
+          };
+        }
+        if (key === manifest.manifest.ciphertextObjectKey) {
+          return {
+            body: new Blob([new Uint8Array(32)]).stream(),
+            customMetadata: timelineMetadata,
+            async json() {
+              return {};
+            },
+          };
+        }
+        return null;
       },
     },
     TIMELINE_MASTER_SECRET: Buffer.alloc(32, 3).toString('base64'),

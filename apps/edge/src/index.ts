@@ -70,9 +70,15 @@ export async function handleEdgeRequest(
     if (timelineObject === null) {
       return errorResponse(503, 'TIMELINE_UNAVAILABLE', environment.WEB_ORIGIN);
     }
+    const timelineMetadata = Object.fromEntries(
+      Object.entries(timelineObject.customMetadata ?? {}).map(([key, value]) => [
+        key.toLowerCase(),
+        value,
+      ]),
+    );
     if (
-      timelineObject.customMetadata?.sha256 !== manifest.ciphertextSha256 ||
-      timelineObject.customMetadata?.raceId !== raceId
+      timelineMetadata.sha256 !== manifest.ciphertextSha256 ||
+      timelineMetadata.raceid !== raceId
     ) {
       return errorResponse(409, 'TIMELINE_METADATA_INVALID', environment.WEB_ORIGIN);
     }

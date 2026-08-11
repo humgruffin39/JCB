@@ -163,7 +163,31 @@ function createHandlers(
     if (typeof value !== 'string') throw new Error('Job raceId is missing.');
     return value;
   };
+  const raceVersion = (job: ScheduledJob): number | undefined => {
+    const payloadVersion = job.payload.raceVersion;
+    if (
+      typeof payloadVersion === 'number' &&
+      Number.isSafeInteger(payloadVersion) &&
+      payloadVersion > 0
+    ) {
+      return payloadVersion;
+    }
+    const keyVersion =
+      /^(?:simulate|publish|open-viewer|close|running|finished|settle):[^:]+:(\d+)(?::|$)/.exec(
+        job.deduplicationKey,
+      )?.[1];
+    if (keyVersion === undefined) return undefined;
+    const parsed = Number(keyVersion);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+  };
+  const isCurrentRaceJob = (job: ScheduledJob): boolean => {
+    const expectedVersion = raceVersion(job);
+    if (expectedVersion === undefined) return true;
+    const race = gameStore.getRace(raceId(job));
+    return race.version === expectedVersion && race.status !== 'cancelled';
+  };
   const publish = async (job: ScheduledJob): Promise<void> => {
+    if (!isCurrentRaceJob(job)) return;
     if (dependencies.discordClient === undefined) return;
     await publishRaceMessage({
       client: dependencies.discordClient,
@@ -176,6 +200,7 @@ function createHandlers(
 
   return {
     async simulate_race(job) {
+      if (!isCurrentRaceJob(job)) return;
       const id = raceId(job);
       const raceBeforePreparation = gameStore.getRace(id);
       const prepared = loadPreparedRaceTiming(
@@ -263,19 +288,23 @@ function createHandlers(
     refresh_race_message: publish,
     open_viewer: publish,
     async close_betting(job) {
+      if (!isCurrentRaceJob(job)) return;
       const id = raceId(job);
       lifecycle.closeBetting(id, dependencies.clock.now());
       lifecycle.markReady(id);
       await publish(job);
     },
     async mark_running(job) {
+      if (!isCurrentRaceJob(job)) return;
       lifecycle.markRunning(raceId(job), dependencies.clock.now());
       await publish(job);
     },
     async mark_finished(job) {
+      if (!isCurrentRaceJob(job)) return;
       lifecycle.markFinished(raceId(job), dependencies.clock.now());
     },
     async settle_race(job) {
+      if (!isCurrentRaceJob(job)) return;
       lifecycle.settleRace(raceId(job), dependencies.clock.now());
       await publish(job);
       await sendAdminNotice(dependencies, {
@@ -484,11 +513,12 @@ function enqueueRaceFollowUpJobs(
   ];
   for (const job of jobs) {
     const existing = jobStore.getByDeduplicationKey(job.deduplicationKey);
+    if (existing !== undefined) continue;
     jobStore.enqueue({
       jobType: job.jobType,
       deduplicationKey: job.deduplicationKey,
-      payload: { raceId: race.id },
-      runAt: existing?.runAt ?? job.runAt,
+      payload: job.jobType === 'grant_relief' ? {} : { raceId: race.id, raceVersion: race.version },
+      runAt: job.runAt,
     });
   }
 }

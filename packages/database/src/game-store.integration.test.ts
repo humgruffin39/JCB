@@ -5,6 +5,7 @@ import { transfer } from '@jcb/economy';
 import { openDatabase } from './connection.js';
 import { SqliteGameStore, type HorseWrite } from './game-store.js';
 import { SqliteInteractionSessionStore } from './interaction-session-store.js';
+import { SqliteJobStore } from './job-store.js';
 import { applyMigrations } from './migrations.js';
 import { SqliteRaceLifecycleStore } from './race-lifecycle-store.js';
 
@@ -190,8 +191,30 @@ describe('SQLite game store', () => {
       /draft/i,
     );
     const lifecycle = new SqliteRaceLifecycleStore(database, () => now, 'unused');
+    const jobs = new SqliteJobStore(
+      database,
+      () => 0.5,
+      () => now,
+    );
+    for (const [jobType, key] of [
+      ['close_betting', 'close-before-cancel'],
+      ['mark_running', 'running-before-cancel'],
+      ['settle_race', 'settle-before-cancel'],
+    ] as const) {
+      jobs.enqueue({
+        jobType,
+        deduplicationKey: key,
+        payload: { raceId: race.id },
+        runAt: timestamp(now),
+      });
+    }
     lifecycle.cancelAndRefund(race.id, '統合試験の取消', timestamp(now));
     lifecycle.cancelAndRefund(race.id, '冪等な再実行', timestamp(now));
+    expect(
+      database
+        .prepare("SELECT COUNT(*) AS count FROM scheduled_jobs WHERE status = 'completed'")
+        .get() as { count: bigint },
+    ).toEqual({ count: 3n });
     expect(store.ledgerStore().balance(user.accountId)).toBe(50_000n);
     expect(
       (

@@ -7,7 +7,6 @@ import {
   createOpaqueToken,
   signReleaseManifest,
   type GuildMembership,
-  type JobStore,
   type PrivateObjectStore,
 } from '@jcb/application';
 import { DEFAULT_GAME_SETTINGS, gameSettingsSchema, type Environment } from '@jcb/config';
@@ -160,7 +159,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     'SESSION_SECRET',
   );
   const lifecycle = new SqliteRaceLifecycleStore(dependencies.database, now, resultMasterSecret);
-  const jobStore: JobStore = new SqliteJobStore(
+  const jobStore = new SqliteJobStore(
     dependencies.database,
     () => {
       return randomInt(0, 1_000_000) / 1_000_000;
@@ -630,7 +629,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
         jobStore.enqueue({
           jobType: 'simulate_race',
           deduplicationKey: `simulate:${locked.id}:${String(locked.version)}`,
-          payload: { raceId: locked.id },
+          payload: { raceId: locked.id, raceVersion: locked.version },
           runAt: now(),
         });
         adminStore.recordAudit({
@@ -707,12 +706,19 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     const session = await authenticate(request, { admin: true, csrf: true });
     const { raceId } = raceIdParamsSchema.parse(request.params);
     const race = gameStore.getRace(raceId);
-    jobStore.enqueue({
-      jobType: 'simulate_race',
-      deduplicationKey: `simulate:${raceId}:${String(race.version)}:manual:${String(now())}`,
-      payload: { raceId },
-      runAt: now(),
-    });
+    const runAt = now();
+    const deduplicationKey = `simulate:${raceId}:${String(race.version)}:manual`;
+    const existing = jobStore.getByDeduplicationKey(deduplicationKey);
+    if (existing === undefined) {
+      jobStore.enqueue({
+        jobType: 'simulate_race',
+        deduplicationKey,
+        payload: { raceId, raceVersion: race.version },
+        runAt,
+      });
+    } else if (existing.status === 'retry_wait' || existing.status === 'dead_letter') {
+      adminStore.retryJob(existing.id, runAt);
+    }
     adminStore.recordAudit({
       actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
       action: 'race.simulation_retry_queued',
@@ -724,12 +730,20 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
   app.post('/api/v1/admin/races/:raceId/retry-settlement', async (request) => {
     const session = await authenticate(request, { admin: true, csrf: true });
     const { raceId } = raceIdParamsSchema.parse(request.params);
-    jobStore.enqueue({
-      jobType: 'settle_race',
-      deduplicationKey: `settle:${raceId}:manual:${String(now())}`,
-      payload: { raceId },
-      runAt: now(),
-    });
+    const race = gameStore.getRace(raceId);
+    const runAt = now();
+    const deduplicationKey = `settle:${raceId}:${String(race.version)}:manual`;
+    const existing = jobStore.getByDeduplicationKey(deduplicationKey);
+    if (existing === undefined) {
+      jobStore.enqueue({
+        jobType: 'settle_race',
+        deduplicationKey,
+        payload: { raceId, raceVersion: race.version },
+        runAt,
+      });
+    } else if (existing.status === 'retry_wait' || existing.status === 'dead_letter') {
+      adminStore.retryJob(existing.id, runAt);
+    }
     adminStore.recordAudit({
       actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
       action: 'race.settlement_retry_queued',
@@ -820,7 +834,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       jobStore.enqueue({
         jobType: 'publish_race',
         deduplicationKey: `publish:${raceId}:rehearsal:${String(runAt)}`,
-        payload: { raceId },
+        payload: { raceId, raceVersion: race.version },
         runAt,
       });
       jobStore.enqueue({

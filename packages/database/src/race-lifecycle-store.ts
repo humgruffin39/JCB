@@ -218,6 +218,18 @@ export class SqliteRaceLifecycleStore {
       if (race.status === 'cancelled') return;
       transitionRace(race.status, 'cancelled');
       const centralBank = this.findAccount('central_bank', 'global');
+      this.database
+        .prepare(
+          `UPDATE scheduled_jobs
+           SET status = 'completed', locked_at = NULL, locked_by = NULL, updated_at = ?
+           WHERE status IN ('pending', 'retry_wait')
+             AND job_type IN (
+               'simulate_race', 'publish_race', 'refresh_race_message', 'open_viewer',
+               'close_betting', 'mark_running', 'mark_finished', 'settle_race'
+             )
+             AND json_extract(payload_json, '$.raceId') = ?`,
+        )
+        .run(BigInt(at), raceId);
       for (const pool of this.loadPools(raceId)) {
         const tickets = this.loadTickets(pool.id);
         for (const ticket of tickets) {

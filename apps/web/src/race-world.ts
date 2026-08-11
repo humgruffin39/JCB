@@ -793,8 +793,8 @@ export function calculateFinishSnapshotCamera(
   const validPositions = horsePositions.filter((position) =>
     [position.x, position.y, position.z].every(Number.isFinite),
   );
-  const candidates = validPositions
-    .toSorted(
+  const candidates = [...validPositions]
+    .sort(
       (left, right) =>
         right.clone().sub(finishLine.position).dot(tangent) -
         left.clone().sub(finishLine.position).dot(tangent),

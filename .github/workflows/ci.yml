@@ -37,3 +37,49 @@ jobs:
       - run: pnpm simulation:determinism
       - run: pnpm economy:integrity
       - run: pnpm audit --audit-level high
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm deploy:check-window
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy API
+        run: flyctl deploy --remote-only --app jcb-racing-api --yes
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Verify API
+        run: curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors https://jcb-racing-api.fly.dev/health/ready
+      - name: Deploy release edge
+        run: |
+          pnpm --filter @jcb/edge build
+          pnpm --filter @jcb/edge exec wrangler deploy --keep-vars
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Verify release edge
+        run: test "$(curl --silent --output /dev/null --write-out '%{http_code}' https://jcb-race-edge.hugh-fabre.workers.dev/)" = "404"
+      - name: Deploy web
+        run: |
+          pnpm --filter @jcb/web build
+          pnpm --filter @jcb/web exec wrangler pages deploy dist --project-name jcb-race-web --branch main --commit-hash "${GITHUB_SHA}" --commit-dirty=false
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VITE_EDGE_ORIGIN: ${{ vars.VITE_EDGE_ORIGIN }}
+      - name: Verify web
+        run: curl --fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors https://jcb-race-web.pages.dev/

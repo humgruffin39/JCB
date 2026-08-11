@@ -40,7 +40,7 @@ test('separates currency and system operations into focused sections', async ({ 
     } else if (path.endsWith('/admin/ledger')) {
       result = [];
     } else if (path.endsWith('/admin/system-objects')) {
-      result = { discordMessages: [], timelineObjects: [] };
+      result = { discordMessages: [], timelineObjects: [], objectPublications: [] };
     } else if (path.endsWith('/admin/settings')) {
       result = { gameSettings: {}, history: [] };
     } else if (path.endsWith('/admin/administrators')) {

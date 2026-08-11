@@ -106,6 +106,7 @@ const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'race.emergency_revealed': '緊急結果閲覧を実行',
   'job.retry_queued': '自動処理を再試行',
   'job.dead_lettered': '自動処理を停止',
+  'object_publication.retry_queued': '公開データを再試行',
   'ledger.adjusted': '台帳残高を補正',
   'administrator.added': '管理者を追加',
   'administrator.removed': '管理者を削除',
@@ -119,6 +120,7 @@ const AUDIT_TARGET_LABELS: Readonly<Record<string, string>> = {
   ledger: '台帳',
   administrator: '管理者',
   job: '自動処理',
+  object_publication: '公開データ',
 };
 
 const REFERENCE_TYPE_LABELS: Readonly<Record<string, string>> = {

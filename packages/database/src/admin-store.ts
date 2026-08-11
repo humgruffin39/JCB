@@ -201,6 +201,7 @@ export class SqliteAdminStore {
   public systemObjects(): {
     readonly discordMessages: readonly Record<string, string | number | null>[];
     readonly timelineObjects: readonly Record<string, string | number | null>[];
+    readonly objectPublications: readonly Record<string, string | number | null>[];
   } {
     const discordMessages = (
       this.database
@@ -226,7 +227,18 @@ export class SqliteAdminStore {
         )
         .all() as Record<string, unknown>[]
     ).map(normalizeRow) as Record<string, string | number | null>[];
-    return { discordMessages, timelineObjects };
+    const objectPublications = (
+      this.database
+        .prepare(
+          `SELECT id, object_key AS objectKey, status,
+                  attempt_count AS attemptCount, next_attempt_at AS nextAttemptAt,
+                  last_error_redacted AS lastError, locked_at AS lockedAt,
+                  locked_by AS lockedBy, created_at AS createdAt, updated_at AS updatedAt
+           FROM object_publications ORDER BY updated_at DESC LIMIT 500`,
+        )
+        .all() as Record<string, unknown>[]
+    ).map(normalizeRow) as Record<string, string | number | null>[];
+    return { discordMessages, timelineObjects, objectPublications };
   }
 
   public adjustBalance(input: {

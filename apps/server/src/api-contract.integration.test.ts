@@ -102,6 +102,7 @@ describe('server API contract', () => {
       ['GET', '/api/v1/admin/audit'],
       ['GET', '/api/v1/admin/health'],
       ['GET', '/api/v1/admin/system-objects'],
+      ['POST', '/api/v1/admin/object-publications/:publicationId/retry'],
       ['GET', '/api/v1/admin/settings'],
       ['GET', '/api/v1/admin/administrators'],
     ] as const) {

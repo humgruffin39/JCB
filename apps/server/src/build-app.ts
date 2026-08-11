@@ -935,6 +935,20 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     });
     return envelope({ queued: true });
   });
+  app.post('/api/v1/admin/object-publications/:publicationId/retry', async (request) => {
+    const session = await authenticate(request, { admin: true, csrf: true });
+    const { publicationId } = z
+      .object({ publicationId: z.string().min(1).max(80) })
+      .parse(request.params);
+    new SqliteObjectPublicationStore(dependencies.database).retryDeadLetter(publicationId, now());
+    adminStore.recordAudit({
+      actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
+      action: 'object_publication.retry_queued',
+      targetType: 'object_publication',
+      targetId: publicationId,
+    });
+    return envelope({ queued: true });
+  });
   app.get('/api/v1/admin/audit', async (request) => {
     await authenticate(request, { admin: true });
     return envelope(adminStore.listAudit());

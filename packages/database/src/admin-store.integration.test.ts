@@ -63,6 +63,7 @@ describe('admin operational store', () => {
     expect(admin.economyOperations().accounts).toHaveLength(3);
     expect(admin.systemObjects()).toEqual({
       discordMessages: [],
+      objectPublications: [],
       timelineObjects: [],
     });
 

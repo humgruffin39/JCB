@@ -22,9 +22,11 @@ export function SystemAdmin() {
   const [objects, setObjects] = useState<{
     readonly discordMessages: readonly Record<string, string | number | null>[];
     readonly timelineObjects: readonly Record<string, string | number | null>[];
-  }>({ discordMessages: [], timelineObjects: [] });
+    readonly objectPublications: readonly Record<string, string | number | null>[];
+  }>({ discordMessages: [], timelineObjects: [], objectPublications: [] });
   const [operationError, setOperationError] = useState('');
   const [retryingJob, setRetryingJob] = useState<string>();
+  const [retryingPublication, setRetryingPublication] = useState<string>();
   const [section, setSection] = useState<SystemSection>('status');
   const refresh = useCallback(async () => {
     const [nextHealth, nextJobs, nextAudit, nextObjects] = await Promise.all([
@@ -65,6 +67,27 @@ export function SystemAdmin() {
         );
       } finally {
         setRetryingJob(undefined);
+      }
+    })();
+  };
+
+  const retryPublication = (publicationId: string): void => {
+    if (retryingPublication !== undefined) return;
+    setRetryingPublication(publicationId);
+    setOperationError('');
+    void (async () => {
+      try {
+        await apiRequest(
+          `/api/v1/admin/object-publications/${encodeURIComponent(publicationId)}/retry`,
+          { method: 'POST', body: '{}' },
+        );
+        await refreshNow();
+      } catch (caught) {
+        setOperationError(
+          caught instanceof Error ? caught.message : '公開データを再試行できません。',
+        );
+      } finally {
+        setRetryingPublication(undefined);
       }
     })();
   };
@@ -185,6 +208,52 @@ export function SystemAdmin() {
                         <td>{formatTimestamp(row.completedAt)}</td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </TerminalPanel>
+            <TerminalPanel
+              heading="公開outbox"
+              status={`${String(objects.objectPublications.length)}件`}
+            >
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <caption className="visually-hidden">公開outbox</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">キー</th>
+                      <th scope="col">状態</th>
+                      <th scope="col">試行</th>
+                      <th scope="col">エラー</th>
+                      <th scope="col">
+                        <span className="visually-hidden">操作</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {objects.objectPublications.map((row) => {
+                      const publicationId = row.id;
+                      return (
+                        <tr key={String(publicationId)}>
+                          <td>{String(row.objectKey)}</td>
+                          <td>{processStatusLabel(String(row.status))}</td>
+                          <td>{String(row.attemptCount)}</td>
+                          <td>{String(row.lastError ?? '—')}</td>
+                          <td>
+                            {typeof publicationId === 'string' && row.status === 'dead_letter' ? (
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() => retryPublication(publicationId)}
+                                disabled={retryingPublication !== undefined}
+                              >
+                                {retryingPublication === publicationId ? '再試行中…' : '再試行する'}
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

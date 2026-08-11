@@ -55,6 +55,19 @@ interface SeedRow {
   readonly stake: bigint;
 }
 
+const RACE_PROGRESS_ORDER: readonly RaceStatus[] = [
+  'draft',
+  'locked',
+  'simulating',
+  'betting_open',
+  'betting_closed',
+  'ready',
+  'running',
+  'finished',
+  'settling',
+  'settled',
+];
+
 export class SqliteRaceLifecycleStore {
   private readonly ledger: SqliteLedgerStore;
 
@@ -69,15 +82,18 @@ export class SqliteRaceLifecycleStore {
   public closeBetting(raceId: string, at: Timestamp): void {
     const run = this.database.transaction(() => {
       const race = this.loadRace(raceId);
+      if (isAtOrAfter(race.status, 'betting_closed')) return;
       transitionRace(race.status, 'betting_closed');
       if (at < Number(race.bettingClosesAt)) throw new Error('Betting close boundary not reached.');
       const odds = this.calculateFinalOdds(raceId);
-      this.database
+      const update = this.database
         .prepare(
           `UPDATE races SET status = 'betting_closed', final_odds_json = ?, updated_at = ?
            WHERE id = ? AND status = 'betting_open'`,
         )
         .run(JSON.stringify(odds), BigInt(at), raceId);
+      if (update.changes !== 1)
+        throw new Error('Betting close transition lost a concurrent update.');
       this.database
         .prepare("UPDATE bet_pools SET status = 'closed', finalized_at = ? WHERE race_id = ?")
         .run(BigInt(at), raceId);
@@ -87,17 +103,20 @@ export class SqliteRaceLifecycleStore {
 
   public markReady(raceId: string): void {
     const race = this.loadRace(raceId);
+    if (isAtOrAfter(race.status, 'ready')) return;
     transitionRace(race.status, 'ready');
-    this.database
+    const result = this.database
       .prepare(
         `UPDATE races SET status = 'ready', updated_at = ?
          WHERE id = ? AND status = 'betting_closed'`,
       )
       .run(BigInt(this.now()), raceId);
+    if (result.changes !== 1) throw new Error('Race ready transition lost a concurrent update.');
   }
 
   public markRunning(raceId: string, at: Timestamp): void {
     const race = this.loadRace(raceId);
+    if (isAtOrAfter(race.status, 'running')) return;
     transitionRace(race.status, 'running');
     if (at < Number(race.scheduledAt)) throw new Error('Scheduled start boundary not reached.');
     const result = this.database
@@ -112,6 +131,8 @@ export class SqliteRaceLifecycleStore {
   public markFinished(raceId: string, at: Timestamp): OfficialSimulationResult {
     const run = this.database.transaction(() => {
       const race = this.loadRace(raceId);
+      if (isAtOrAfter(race.status, 'finished'))
+        return this.decryptOfficialResult(raceId, Number(race.version));
       transitionRace(race.status, 'finished');
       if (race.timelineDurationMs === null) throw new Error('Timeline duration is missing.');
       if (at < Number(race.scheduledAt + race.timelineDurationMs)) {
@@ -131,12 +152,14 @@ export class SqliteRaceLifecycleStore {
         );
         if (result.changes !== 1) throw new Error('Official finish entry is missing.');
       }
-      this.database
+      const updateRace = this.database
         .prepare(
           `UPDATE races SET status = 'finished', updated_at = ?
            WHERE id = ? AND status = 'running'`,
         )
         .run(BigInt(at), raceId);
+      if (updateRace.changes !== 1)
+        throw new Error('Race finished transition lost a concurrent update.');
       return official;
     });
     return run.immediate();
@@ -428,4 +451,10 @@ export class SqliteRaceLifecycleStore {
     if (row === undefined) throw new Error(`Account missing: ${accountType}:${ownerKey}`);
     return identifier(row.id);
   }
+}
+
+function isAtOrAfter(status: RaceStatus, target: RaceStatus): boolean {
+  const statusIndex = RACE_PROGRESS_ORDER.indexOf(status);
+  const targetIndex = RACE_PROGRESS_ORDER.indexOf(target);
+  return statusIndex >= 0 && targetIndex >= 0 && statusIndex >= targetIndex;
 }

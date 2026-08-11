@@ -108,8 +108,11 @@ describe('race lifecycle and settlement', () => {
     const lifecycle = new SqliteRaceLifecycleStore(database, () => now, resultMasterSecret);
     expect(() => lifecycle.closeBetting(race.id, timestamp(89_999))).toThrow();
     lifecycle.closeBetting(race.id, timestamp(90_000));
+    lifecycle.closeBetting(race.id, timestamp(90_000));
+    lifecycle.markReady(race.id);
     lifecycle.markReady(race.id);
     expect(() => lifecycle.markRunning(race.id, timestamp(99_999))).toThrow();
+    lifecycle.markRunning(race.id, timestamp(100_000));
     lifecycle.markRunning(race.id, timestamp(100_000));
     expect(
       (
@@ -121,7 +124,8 @@ describe('race lifecycle and settlement', () => {
       ).count,
     ).toBe(0n);
     const finishAt = 100_000 + completion.official.timelineDurationMs;
-    lifecycle.markFinished(race.id, timestamp(finishAt));
+    const firstOfficial = lifecycle.markFinished(race.id, timestamp(finishAt));
+    expect(lifecycle.markFinished(race.id, timestamp(finishAt))).toEqual(firstOfficial);
     lifecycle.settleRace(race.id, timestamp(finishAt + 3_000));
     lifecycle.settleRace(race.id, timestamp(finishAt + 3_000));
     expect(game.getRace(race.id).status).toBe('settled');

@@ -105,4 +105,35 @@ describe('SQLite ledger store', () => {
     ).toBe(0n);
     database.close();
   });
+
+  it('detects an imbalanced transaction inserted outside the ledger store', () => {
+    const database = openDatabase(':memory:');
+    const migrationsDirectory = join(
+      dirname(dirname(fileURLToPath(import.meta.url))),
+      'migrations',
+    );
+    applyMigrations(database, migrationsDirectory, 1);
+    const ledger = new SqliteLedgerStore(database, () => 2);
+    const accountId = ledger.createAccount({
+      ownerType: 'system',
+      ownerKey: 'direct-write-test',
+      accountType: 'issuance',
+    });
+    database
+      .prepare(
+        `INSERT INTO ledger_transactions
+         (id, kind, reference_type, reference_id, idempotency_key, description, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('direct-transaction', 'test', 'test', 'direct', 'direct-key', 'Direct write', 2n);
+    database
+      .prepare(
+        `INSERT INTO ledger_entries (id, transaction_id, account_id, amount, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run('direct-entry', 'direct-transaction', accountId, 1n, 2n);
+
+    expect(() => ledger.assertProjectionIntegrity()).toThrow(/imbalanced transaction/i);
+    database.close();
+  });
 });

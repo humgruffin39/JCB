@@ -149,8 +149,19 @@ export class SqliteLedgerStore {
          WHERE ab.amount <> COALESCE(le.expected, 0)`,
       )
       .all();
-    if (differences.length > 0) {
-      throw new Error(`Balance projection mismatch for ${differences.length} account(s).`);
+    const imbalancedTransactions = this.database
+      .prepare(
+        `SELECT transaction_id
+         FROM ledger_entries
+         GROUP BY transaction_id
+         HAVING COALESCE(SUM(amount), 0) <> 0`,
+      )
+      .all();
+    if (differences.length > 0 || imbalancedTransactions.length > 0) {
+      throw new Error(
+        `Ledger integrity mismatch: ${String(differences.length)} account projection(s), ` +
+          `${String(imbalancedTransactions.length)} imbalanced transaction(s).`,
+      );
     }
   }
 

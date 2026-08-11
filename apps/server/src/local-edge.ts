@@ -51,6 +51,7 @@ export function registerLocalEdgeRoutes(
       apiVersion: 'v1',
       result: {
         raceId,
+        raceVersion: manifest.raceVersion,
         scheduledStart: manifest.scheduledStart,
         timelineDuration: manifest.timelineDuration,
         timelineKey: key.toString('base64'),

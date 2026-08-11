@@ -145,7 +145,7 @@ export function RaceViewer({
           token = refreshed.edgeAccessToken;
           sessionStorage.setItem(tokenKey, token);
         }
-        const loadedTimeline = await loadTimeline(race.id, token);
+        const loadedTimeline = await loadTimeline(race.id, race.version, token);
         if (!isCancelled) {
           hasLoaded = true;
           setViewer({
@@ -722,7 +722,11 @@ function BroadcastState({
   );
 }
 
-async function loadTimeline(raceId: string, token: string): Promise<LoadedTimeline> {
+async function loadTimeline(
+  raceId: string,
+  raceVersion: number,
+  token: string,
+): Promise<LoadedTimeline> {
   const headers = { authorization: `Bearer ${token}` };
   const releaseResponse = await fetch(
     `${EDGE_ORIGIN}/edge/v1/races/${encodeURIComponent(raceId)}/release`,
@@ -737,7 +741,9 @@ async function loadTimeline(raceId: string, token: string): Promise<LoadedTimeli
     );
   }
   const release = edgeReleaseResponseSchema.parse(await releaseResponse.json()).result;
-  if (release.raceId !== raceId) throw new Error('レース識別子が一致しません');
+  if (release.raceId !== raceId || release.raceVersion !== raceVersion) {
+    throw new Error('レース情報の版が一致しません');
+  }
   const timelineResponse = await fetch(`${EDGE_ORIGIN}${release.timelinePath}`, { headers });
   if (!timelineResponse.ok) throw new Error('暗号化されたレース映像を取得できません');
   const ciphertext = new Uint8Array(await timelineResponse.arrayBuffer());

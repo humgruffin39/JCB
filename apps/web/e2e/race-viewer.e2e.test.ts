@@ -105,6 +105,7 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
         apiVersion: 'v1',
         result: {
           raceId: 'viewer-test',
+          raceVersion: 1,
           scheduledStart: scheduledAt,
           timelineDuration: 4_000,
           timelineKey: encrypted.key,

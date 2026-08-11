@@ -30,6 +30,7 @@ export const signedManifestSchema = z.object({
 
 export const edgeReleaseSchema = z.object({
   raceId: z.string().min(1),
+  raceVersion: z.number().int().positive(),
   scheduledStart: timestampSchema,
   timelineDuration: z.number().int().positive(),
   timelineKey: z.string().min(16),

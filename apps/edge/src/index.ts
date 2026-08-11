@@ -129,6 +129,7 @@ export async function handleEdgeRequest(
         apiVersion: 'v1',
         result: {
           raceId,
+          raceVersion: manifest.raceVersion,
           scheduledStart: manifest.scheduledStart,
           timelineDuration: manifest.timelineDuration,
           timelineKey: bytesToBase64(timelineKey),

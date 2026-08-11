@@ -154,23 +154,30 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
     ),
   ).toBe(0);
   await page.getByRole('button', { name: '再生' }).dispatchEvent('click');
+  await expect(
+    page.getByRole('img', { name: '1位がゴールした瞬間のフィニッシュ写真' }),
+  ).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(page.getByRole('region', { name: '確定結果' })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.podium-card')).toHaveCount(3);
 });
 
 function timelineFixture() {
   const finalFrame = 40;
+  const finishFrames = [32, 33, 34, 35, 36, 37, 38, 40];
   return Array.from({ length: finalFrame + 1 }, (_, frame) => ({
     timeMs: frame * 100,
     horses: Array.from({ length: 8 }, (_, index) => ({
       horseNumber: index + 1,
-      progress: Math.min(1, frame / finalFrame - index * 0.002),
+      progress: Math.min(1, frame / finishFrames[index]!),
       laneIndex: index,
       lateralOffset: 0,
       rank: index + 1,
       speed: frame === 0 ? 0 : 16,
-      animationState: frame === 0 ? 'waiting' : frame === finalFrame ? 'finished' : 'running',
-    })).map((horse) => ({ ...horse, progress: Math.max(0, horse.progress) })),
+      animationState:
+        frame === 0 ? 'waiting' : frame >= finishFrames[index]! ? 'finished' : 'running',
+    })),
   }));
 }
 

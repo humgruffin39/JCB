@@ -61,6 +61,7 @@ export function RaceViewer({
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
   const [trackedHorseNumber, setTrackedHorseNumber] = useState<number>();
   const [cameraMode, setCameraMode] = useState<RaceCameraMode>('follow');
+  const [finishSnapshot, setFinishSnapshot] = useState<string>();
   const [bets, setBets] = useState<readonly Bet[]>([]);
   const [result, setResult] = useState<RaceResult>();
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
@@ -276,6 +277,7 @@ export function RaceViewer({
     setIsPaused(false);
     setHasPlaybackStarted(false);
     setPosition(0);
+    setFinishSnapshot(undefined);
   };
 
   return (
@@ -347,10 +349,18 @@ export function RaceViewer({
             surface={race.surface}
             onTrackHorse={setTrackedHorseNumber}
             onCameraModeChange={setCameraMode}
+            onFinishSnapshot={setFinishSnapshot}
             onReady={() => {
               setIsSceneReady(true);
             }}
           />
+          {phase === 'photo' && finishSnapshot !== undefined ? (
+            <img
+              className="finish-snapshot"
+              src={finishSnapshot}
+              alt="1位がゴールした瞬間のフィニッシュ写真"
+            />
+          ) : null}
           {phase === 'photo' ? <PhotoFinish /> : null}
           {phase === 'results' ? (
             <ResultsScreen

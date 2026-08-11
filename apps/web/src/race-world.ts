@@ -2,8 +2,8 @@ import type { TimelineFrameContract } from '@jcb/contracts';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
-  FINISH_CAMERA_TRIGGER_PROGRESS,
   getBattleCameraShot,
+  getFinishCameraShot,
   selectBroadcastCameraShot,
   type BroadcastShotId,
 } from './race-camera-director.js';
@@ -77,8 +77,7 @@ export class RaceWorld {
   private leaderHorseNumber: number | undefined;
   private trackedCameraInitialized = false;
   private broadcastShotId: BroadcastShotId | undefined;
-  private readonly finishSnapshotFocus = new THREE.Vector3();
-  private finishSnapshotActive = false;
+  private finishSnapshotDataUrl: string | undefined;
   private readonly previousRanks = new Map<number, number>();
   private battleHorseNumbers: readonly [number, number] | undefined;
   private battleUntilMs = 0;
@@ -93,6 +92,7 @@ export class RaceWorld {
     private readonly distanceM: number,
     private readonly onCameraModeChange?: (mode: RaceCameraMode) => void,
     private readonly onTrackedHorseChange?: (horseNumber: number | undefined) => void,
+    private readonly onFinishSnapshot?: (snapshot: string | undefined) => void,
   ) {
     this.renderer = renderer;
     this.environment = environment;
@@ -158,6 +158,7 @@ export class RaceWorld {
     surface: RaceSurface,
     onCameraModeChange?: (mode: RaceCameraMode) => void,
     onTrackedHorseChange?: (horseNumber: number | undefined) => void,
+    onFinishSnapshot?: (snapshot: string | undefined) => void,
   ): Promise<RaceWorld> {
     const renderer = new THREE.WebGLRenderer({
       canvas,
@@ -187,6 +188,7 @@ export class RaceWorld {
         distanceM,
         onCameraModeChange,
         onTrackedHorseChange,
+        onFinishSnapshot,
       );
     } catch (error) {
       rigs.forEach((rig) => rig.dispose());
@@ -212,7 +214,6 @@ export class RaceWorld {
       this.orbit.enablePan = false;
       this.trackedCameraInitialized = false;
     }
-    this.orbit.enabled = !this.finishSnapshotActive;
     this.onCameraModeChange?.(mode);
   }
 
@@ -244,6 +245,10 @@ export class RaceWorld {
     const rewound = state.positionMs + 700 < this.lastPositionMs;
     const snap = rewound || state.isPhoto || !this.cameraInitialized;
     this.lastPositionMs = state.positionMs;
+    if (rewound && this.finishSnapshotDataUrl !== undefined) {
+      this.finishSnapshotDataUrl = undefined;
+      this.onFinishSnapshot?.(undefined);
+    }
     this.environment.update(state.positionMs);
 
     const ranked = [...state.frame.horses].sort(
@@ -253,23 +258,6 @@ export class RaceWorld {
       state.frame.horses.find((horse) => horse.rank === 1)?.horseNumber ?? ranked[0]?.horseNumber;
     const leaderProgress = ranked[0]?.progress ?? 0;
     const focusRaceProgress = state.isPhoto ? 1 : Math.min(leaderProgress, 1);
-    const finishCameraActive = state.isPhoto || focusRaceProgress >= FINISH_CAMERA_TRIGGER_PROGRESS;
-    if (finishCameraActive && !this.finishSnapshotActive) {
-      const finishLine = sampleCourse(
-        raceProgressToCourseProgress(1, 0, this.distanceM),
-        0,
-        this.distanceM,
-      );
-      this.finishSnapshotFocus.copy(finishLine.position);
-      this.finishSnapshotActive = true;
-    } else if (!finishCameraActive && this.finishSnapshotActive) {
-      this.finishSnapshotActive = false;
-      this.orbit.enabled = true;
-    }
-    if (finishCameraActive) {
-      this.orbit.enabled = false;
-      if (this.cameraMode === 'horse') this.setCameraMode('follow');
-    }
 
     for (const horse of this.horses) {
       if (rewound) {
@@ -385,24 +373,96 @@ export class RaceWorld {
       poseHorse(horse.rig, state.positionMs, frameHorse.speed, poseState, finishingElapsedMs);
     }
 
+    if (
+      !state.isPhoto &&
+      this.finishSnapshotDataUrl === undefined &&
+      state.frame.horses.some((horse) => horse.progress >= 1)
+    ) {
+      const firstFinisher = this.horses
+        .filter((horse) => horse.visualFinishTimeMs !== undefined)
+        .sort(
+          (left, right) =>
+            (left.visualFinishTimeMs ?? Number.POSITIVE_INFINITY) -
+            (right.visualFinishTimeMs ?? Number.POSITIVE_INFINITY),
+        )[0];
+      const snapshot = this.captureFinishSnapshot(firstFinisher);
+      if (snapshot !== undefined) {
+        this.finishSnapshotDataUrl = snapshot;
+        this.onFinishSnapshot?.(snapshot);
+      }
+    }
+
     this.updateBattleSelection(state, focusRaceProgress, rewound);
 
-    if (this.cameraMode === 'horse') {
-      this.updateTrackedHorseCamera();
-    } else {
-      const battleProgress =
-        focusRaceProgress >= 0.9 ? undefined : this.getBattleFocusProgress(state);
-      this.updateCamera(
-        battleProgress ?? focusRaceProgress,
-        state.isPhoto,
-        battleProgress !== undefined,
-        snap,
-        deltaSeconds,
-        this.finishSnapshotActive ? this.finishSnapshotFocus : undefined,
-      );
-      this.orbit.target.copy(this.cameraTarget);
+    if (!state.isPhoto) {
+      if (this.cameraMode === 'horse') {
+        this.updateTrackedHorseCamera();
+      } else {
+        const battleProgress =
+          focusRaceProgress >= 0.9 ? undefined : this.getBattleFocusProgress(state);
+        this.updateCamera(
+          battleProgress ?? focusRaceProgress,
+          battleProgress !== undefined,
+          snap,
+          deltaSeconds,
+        );
+        this.orbit.target.copy(this.cameraTarget);
+      }
     }
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private captureFinishSnapshot(firstFinisher?: AnimatedHorse): string | undefined {
+    const shot = getFinishCameraShot();
+    const finishLine = sampleCourse(
+      raceProgressToCourseProgress(shot.anchorRaceProgress ?? 1, 0, this.distanceM),
+      0,
+      this.distanceM,
+    );
+    const targetLook = firstFinisher?.rig.root.position.clone() ?? finishLine.position.clone();
+    const targetCamera = finishLine.position
+      .clone()
+      .addScaledVector(finishLine.tangent, shot.tangentOffset)
+      .addScaledVector(finishLine.normal, shot.normalOffset);
+    targetCamera.y = shot.height;
+    targetLook.y = shot.lookHeight;
+    const portraitCompensation = THREE.MathUtils.clamp(1.65 / this.camera.aspect, 1, 1.42);
+    const targetFieldOfView = shot.fieldOfView * portraitCompensation;
+    const previousPosition = this.camera.position.clone();
+    const previousQuaternion = this.camera.quaternion.clone();
+    const previousFieldOfView = this.camera.fov;
+    const previousRenderTarget = this.renderer.getRenderTarget();
+    const drawingBufferSize = new THREE.Vector2();
+    this.renderer.getDrawingBufferSize(drawingBufferSize);
+    const width = Math.max(1, Math.round(drawingBufferSize.x));
+    const height = Math.max(1, Math.round(drawingBufferSize.y));
+    const renderTarget = new THREE.WebGLRenderTarget(width, height, {
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
+    renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+
+    try {
+      this.camera.position.copy(targetCamera);
+      this.camera.fov = targetFieldOfView;
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(targetLook);
+      this.camera.updateMatrixWorld(true);
+      this.renderer.setRenderTarget(renderTarget);
+      this.renderer.render(this.scene, this.camera);
+      return readRenderTargetDataUrl(this.renderer, renderTarget, width, height);
+    } catch (error) {
+      console.warn('Failed to capture the finish snapshot.', error);
+      return undefined;
+    } finally {
+      this.renderer.setRenderTarget(previousRenderTarget);
+      renderTarget.dispose();
+      this.camera.position.copy(previousPosition);
+      this.camera.quaternion.copy(previousQuaternion);
+      this.camera.fov = previousFieldOfView;
+      this.camera.updateProjectionMatrix();
+      this.camera.updateMatrixWorld(true);
+    }
   }
 
   dispose(): void {
@@ -427,15 +487,11 @@ export class RaceWorld {
 
   private updateCamera(
     focusRaceProgress: number,
-    isPhoto: boolean,
     isBattle: boolean,
     snap: boolean,
     deltaSeconds: number,
-    finishSnapshotFocus?: THREE.Vector3,
   ): void {
-    const shot = isBattle
-      ? getBattleCameraShot()
-      : selectBroadcastCameraShot(focusRaceProgress, isPhoto);
+    const shot = isBattle ? getBattleCameraShot() : selectBroadcastCameraShot(focusRaceProgress);
     const shotChanged = shot.id !== this.broadcastShotId;
     this.broadcastShotId = shot.id;
     const focus = sampleCourse(
@@ -460,9 +516,7 @@ export class RaceWorld {
       .addScaledVector(cameraOrigin.tangent, shot.tangentOffset)
       .addScaledVector(cameraOrigin.normal, shot.normalOffset);
     targetCamera.y = shot.height;
-    const targetLook =
-      finishSnapshotFocus?.clone() ??
-      focus.position.clone().addScaledVector(focus.tangent, shot.lookAhead);
+    const targetLook = focus.position.clone().addScaledVector(focus.tangent, shot.lookAhead);
     targetLook.y = shot.lookHeight;
     const portraitCompensation = THREE.MathUtils.clamp(1.65 / this.camera.aspect, 1, 1.42);
     const targetFieldOfView = shot.fieldOfView * portraitCompensation;
@@ -683,6 +737,32 @@ export function postFinishCourseProgress(
   return (
     finishRootProgress + Math.min(32, elapsedSeconds * Math.max(0, finishSpeedMps)) / courseLength
   );
+}
+
+function readRenderTargetDataUrl(
+  renderer: THREE.WebGLRenderer,
+  renderTarget: THREE.WebGLRenderTarget,
+  width: number,
+  height: number,
+): string | undefined {
+  const pixels = new Uint8Array(width * height * 4);
+  renderer.readRenderTargetPixels(renderTarget, 0, 0, width, height, pixels);
+  const flippedPixels = new Uint8ClampedArray(pixels.length);
+  const rowLength = width * 4;
+  for (let row = 0; row < height; row += 1) {
+    const sourceOffset = (height - row - 1) * rowLength;
+    const targetOffset = row * rowLength;
+    flippedPixels.set(pixels.subarray(sourceOffset, sourceOffset + rowLength), targetOffset);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (context === null) return undefined;
+  const imageData = context.createImageData(width, height);
+  imageData.data.set(flippedPixels);
+  context.putImageData(imageData, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.92);
 }
 
 function createSky(): THREE.Mesh {

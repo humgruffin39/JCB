@@ -233,7 +233,17 @@ export class SqliteViewerStore {
     }>;
     if (
       rows.length !== 8 ||
-      rows.some((row) => row.position === null || row.finishTimeMs === null)
+      rows.some(
+        (row) =>
+          row.position === null ||
+          row.finishTimeMs === null ||
+          row.position < 1n ||
+          row.position > 8n ||
+          row.horseNumber < 1n ||
+          row.horseNumber > 8n,
+      ) ||
+      new Set(rows.map((row) => row.position)).size !== 8 ||
+      new Set(rows.map((row) => row.horseNumber)).size !== 8
     ) {
       throw new Error('RACE_NOT_FINISHED');
     }

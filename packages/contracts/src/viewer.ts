@@ -65,14 +65,26 @@ export const betResponseSchema = z.object({
   createdAt: timestampSchema,
 });
 
+const resultEntrySchema = z.object({
+  horseNumber: z.number().int().min(1).max(8),
+  position: z.number().int().min(1).max(8),
+  finishTimeMs: z.number().int().positive(),
+});
+
 export const resultResponseSchema = z.object({
-  finishOrder: z.array(
-    z.object({
-      horseNumber: z.number().int().min(1).max(8),
-      position: z.number().int().min(1).max(8),
-      finishTimeMs: z.number().int().positive(),
+  finishOrder: z
+    .array(resultEntrySchema)
+    .length(8)
+    .superRefine((entries, context) => {
+      const horseNumbers = new Set(entries.map((entry) => entry.horseNumber));
+      const positions = new Set(entries.map((entry) => entry.position));
+      if (horseNumbers.size !== 8) {
+        context.addIssue({ code: 'custom', message: 'Finish order contains duplicate horses.' });
+      }
+      if (positions.size !== 8) {
+        context.addIssue({ code: 'custom', message: 'Finish order contains duplicate positions.' });
+      }
     }),
-  ),
 });
 
 export const publicSettingsSchema = z.object({

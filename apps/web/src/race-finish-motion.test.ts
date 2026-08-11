@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COURSE_LENGTH, raceProgressToCourseProgress } from './race-course.js';
-import { photoFinishCourseProgress, postFinishCourseProgress } from './race-world.js';
+import { postFinishCourseProgress } from './race-world.js';
 
 describe('race finish motion', () => {
   it('continues from the visible finish crossing instead of the official timestamp', () => {
@@ -11,7 +11,7 @@ describe('race finish motion', () => {
 
     expect((atCrossing - beforeCrossing) * COURSE_LENGTH).toBeLessThan(0.1);
     expect(nextFrame).toBeGreaterThan(atCrossing);
-    expect((nextFrame - atCrossing) * COURSE_LENGTH).toBeCloseTo(0.92, 2);
+    expect((nextFrame - atCrossing) * COURSE_LENGTH).toBeCloseTo(0.97, 3);
   });
 
   it('never jumps forward when the visual crossing is still in the future', () => {
@@ -20,12 +20,12 @@ describe('race finish motion', () => {
     );
   });
 
-  it('keeps distinct finish gaps in the photo layout instead of collapsing them', () => {
-    const winnerTimeMs = 100_000;
-    const second = photoFinishCourseProgress(101_000, winnerTimeMs, 1_200);
-    const third = photoFinishCourseProgress(101_600, winnerTimeMs, 1_200);
+  it('keeps the previous runout distance before the camera enters the photo phase', () => {
+    const finishTimeMs = 100_000;
+    const stopped = postFinishCourseProgress(101_500, finishTimeMs, 12);
 
-    expect(second).toBeGreaterThan(third);
-    expect((second - third) * 1_200).toBeCloseTo(7.5, 5);
+    expect(
+      (stopped - postFinishCourseProgress(finishTimeMs, finishTimeMs, 12)) * COURSE_LENGTH,
+    ).toBeCloseTo(18, 8);
   });
 });

@@ -26,6 +26,8 @@ export interface BroadcastCameraShot {
   readonly targetDamping: number;
 }
 
+export const FINISH_CAMERA_TRIGGER_PROGRESS = 1;
+
 const SHOTS = {
   break: {
     id: 'break',
@@ -182,7 +184,7 @@ export function selectBroadcastCameraShot(
   isPhoto: boolean,
 ): BroadcastCameraShot {
   const progress = Math.max(0, Math.min(1, raceProgress));
-  if (isPhoto || progress >= 0.985) return SHOTS.finishLine;
+  if (isPhoto || progress >= FINISH_CAMERA_TRIGGER_PROGRESS) return SHOTS.finishLine;
   if (progress < 0.035) return SHOTS.break;
   if (progress < 0.1) return SHOTS.launchTrack;
   if (progress < 0.22) return SHOTS.firstTurnTower;

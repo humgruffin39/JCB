@@ -19,6 +19,7 @@ import {
   type SqliteDatabase,
 } from '@jcb/database';
 import { timestamp, toJstDateKey, type Clock, type Timestamp } from '@jcb/domain';
+import { randomUUID } from 'node:crypto';
 import type { Client } from 'discord.js';
 import type { BackupProbe } from './backup-probe.js';
 import { publishRaceMessage } from './discord-gateway.js';
@@ -41,7 +42,7 @@ export interface SchedulerDependencies {
 }
 
 export function startScheduler(dependencies: SchedulerDependencies): () => void {
-  const workerId = `server:${process.pid.toString()}`;
+  const workerId = `server:${process.pid.toString()}:${randomUUID()}`;
   const jobStore = new SqliteJobStore(dependencies.database, cryptoJitter, () =>
     dependencies.clock.now(),
   );
@@ -60,6 +61,9 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
     if (isPolling) return;
     isPolling = true;
     try {
+      const maintenanceNow = dependencies.clock.now();
+      jobStore.reclaimStale(maintenanceNow, STALE_LOCK_MILLISECONDS);
+      publications.reclaimStale(maintenanceNow, STALE_LOCK_MILLISECONDS);
       if (dependencies.clock.now() >= nextMaintenanceAt) {
         maintenance.cleanup(dependencies.clock.now());
         nextMaintenanceAt = dependencies.clock.now() + 60 * 60 * 1_000;

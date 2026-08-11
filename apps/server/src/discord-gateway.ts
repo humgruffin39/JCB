@@ -202,7 +202,8 @@ export async function publishRaceMessage(input: {
       const message = await channel.messages.fetch(existing.messageId);
       await message.edit(options);
       return;
-    } catch {
+    } catch (error) {
+      if (!isMissingDiscordMessage(error)) throw error;
       // A deleted fixed message is recreated below and its ID is replaced.
     }
   }
@@ -217,6 +218,12 @@ export async function publishRaceMessage(input: {
     channelId,
     messageId: created.id,
   });
+}
+
+export function isMissingDiscordMessage(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { readonly code?: unknown; readonly status?: unknown };
+  return candidate.code === 10_008 || candidate.status === 404;
 }
 
 function messageNonce(content: string): string {

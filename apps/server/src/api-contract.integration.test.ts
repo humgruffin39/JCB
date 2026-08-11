@@ -261,6 +261,28 @@ describe('server API contract', () => {
          (discord_user_id, added_by_user_id, created_at) VALUES (?, NULL, ?)`,
       )
       .run('654321', BigInt(Date.now()));
+    const selfRemoval = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/admin/administrators/123456',
+      headers: {
+        cookie: `jcb_session=${oauthSession.sessionToken}`,
+        'x-csrf-token': oauthSession.csrfToken,
+      },
+      payload: { reason: '自己削除の回帰テスト' },
+    });
+    expect(selfRemoval.statusCode).toBe(403);
+    expect(selfRemoval.json()).toMatchObject({
+      apiVersion: 'v1',
+      error: {
+        code: 'ADMIN_SELF_REMOVAL_FORBIDDEN',
+        message: 'Administrators cannot remove themselves.',
+      },
+    });
+    expect(
+      database
+        .prepare('SELECT 1 AS present FROM admin_allowlist WHERE discord_user_id = ?')
+        .get('123456'),
+    ).toEqual({ present: 1n });
     const unregisteredAdminSession = authStore.createOAuthSession('654321');
     const createHorse = await app.inject({
       method: 'POST',

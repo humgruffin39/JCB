@@ -963,6 +963,13 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       .object({ reason: z.string().trim().min(5).max(300) })
       .strict()
       .parse(request.body);
+    if (discordUserId === session.discordUserId) {
+      throw httpError(
+        403,
+        'ADMIN_SELF_REMOVAL_FORBIDDEN',
+        'Administrators cannot remove themselves.',
+      );
+    }
     adminStore.removeAdministrator({
       discordUserId,
       reason,

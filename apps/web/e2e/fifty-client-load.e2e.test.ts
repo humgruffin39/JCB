@@ -41,9 +41,12 @@ test('serves the read-only terminal to 50 concurrent clients', async ({ browser 
   await Promise.all(
     pages.map((page) => page.goto('/races/load-test', { waitUntil: 'domcontentloaded' })),
   );
+  const remainingPerformanceBudgetMs = Math.max(1, 45_000 - (performance.now() - started));
   await Promise.all(
     pages.map((page) =>
-      expect(page.getByRole('region', { name: '50クライアント負荷試験 レース観戦' })).toBeVisible(),
+      expect(page.getByRole('region', { name: '50クライアント負荷試験 レース観戦' })).toBeVisible({
+        timeout: remainingPerformanceBudgetMs,
+      }),
     ),
   );
   const elapsed = performance.now() - started;

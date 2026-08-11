@@ -19,6 +19,7 @@ export function RaceScene3D({
   onTrackHorse,
   onCameraModeChange,
   onFinishSnapshot,
+  onFinishSnapshotError,
   horseCoats,
   distanceM,
   surface,
@@ -33,6 +34,7 @@ export function RaceScene3D({
   readonly onTrackHorse: (horseNumber: number | undefined) => void;
   readonly onCameraModeChange: (mode: RaceCameraMode) => void;
   readonly onFinishSnapshot?: (snapshot: string | undefined) => void;
+  readonly onFinishSnapshotError?: () => void;
   readonly horseCoats: readonly {
     readonly horseNumber: number;
     readonly coatColor: HorseCoatColor;
@@ -48,6 +50,7 @@ export function RaceScene3D({
   const onTrackHorseRef = useRef(onTrackHorse);
   const onCameraModeChangeRef = useRef(onCameraModeChange);
   const onFinishSnapshotRef = useRef(onFinishSnapshot);
+  const onFinishSnapshotErrorRef = useRef(onFinishSnapshotError);
   const trackedHorseNumberRef = useRef(trackedHorseNumber);
   const cameraModeRef = useRef(cameraMode);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -56,6 +59,7 @@ export function RaceScene3D({
   onTrackHorseRef.current = onTrackHorse;
   onCameraModeChangeRef.current = onCameraModeChange;
   onFinishSnapshotRef.current = onFinishSnapshot;
+  onFinishSnapshotErrorRef.current = onFinishSnapshotError;
   trackedHorseNumberRef.current = trackedHorseNumber;
   cameraModeRef.current = cameraMode;
 
@@ -91,6 +95,9 @@ export function RaceScene3D({
       },
       (snapshot) => {
         onFinishSnapshotRef.current?.(snapshot);
+      },
+      () => {
+        onFinishSnapshotErrorRef.current?.();
       },
     )
       .then((createdWorld) => {

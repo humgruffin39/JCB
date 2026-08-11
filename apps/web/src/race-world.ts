@@ -94,6 +94,8 @@ export class RaceWorld {
   private trackedCameraInitialized = false;
   private broadcastShotId: BroadcastShotId | undefined;
   private finishSnapshotDataUrl: string | undefined;
+  private finishSnapshotAttempts = 0;
+  private finishSnapshotFailed = false;
   private readonly previousRanks = new Map<number, number>();
   private battleHorseNumbers: readonly [number, number] | undefined;
   private battleUntilMs = 0;
@@ -109,6 +111,7 @@ export class RaceWorld {
     private readonly onCameraModeChange?: (mode: RaceCameraMode) => void,
     private readonly onTrackedHorseChange?: (horseNumber: number | undefined) => void,
     private readonly onFinishSnapshot?: (snapshot: string | undefined) => void,
+    private readonly onFinishSnapshotError?: () => void,
   ) {
     this.renderer = renderer;
     this.environment = environment;
@@ -176,6 +179,7 @@ export class RaceWorld {
     onCameraModeChange?: (mode: RaceCameraMode) => void,
     onTrackedHorseChange?: (horseNumber: number | undefined) => void,
     onFinishSnapshot?: (snapshot: string | undefined) => void,
+    onFinishSnapshotError?: () => void,
   ): Promise<RaceWorld> {
     const renderer = new THREE.WebGLRenderer({
       canvas,
@@ -206,6 +210,7 @@ export class RaceWorld {
         onCameraModeChange,
         onTrackedHorseChange,
         onFinishSnapshot,
+        onFinishSnapshotError,
       );
     } catch (error) {
       rigs.forEach((rig) => rig.dispose());
@@ -265,6 +270,10 @@ export class RaceWorld {
     if (rewound && this.finishSnapshotDataUrl !== undefined) {
       this.finishSnapshotDataUrl = undefined;
       this.onFinishSnapshot?.(undefined);
+    }
+    if (rewound) {
+      this.finishSnapshotAttempts = 0;
+      this.finishSnapshotFailed = false;
     }
     this.environment.update(state.positionMs);
 
@@ -413,7 +422,9 @@ export class RaceWorld {
 
     if (
       !state.isPhoto &&
+      !this.finishSnapshotFailed &&
       this.finishSnapshotDataUrl === undefined &&
+      this.finishSnapshotAttempts < 3 &&
       state.frame.horses.some((horse) => horse.progress >= 1)
     ) {
       const firstFinisher = this.horses
@@ -423,10 +434,14 @@ export class RaceWorld {
             (left.visualFinishTimeMs ?? Number.POSITIVE_INFINITY) -
             (right.visualFinishTimeMs ?? Number.POSITIVE_INFINITY),
         )[0];
+      this.finishSnapshotAttempts += 1;
       const snapshot = this.captureFinishSnapshot(firstFinisher);
       if (snapshot !== undefined) {
         this.finishSnapshotDataUrl = snapshot;
         this.onFinishSnapshot?.(snapshot);
+      } else if (this.finishSnapshotAttempts >= 3) {
+        this.finishSnapshotFailed = true;
+        this.onFinishSnapshotError?.();
       }
     }
 

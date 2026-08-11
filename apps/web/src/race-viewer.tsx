@@ -64,6 +64,7 @@ export function RaceViewer({
   const [trackedHorseNumber, setTrackedHorseNumber] = useState<number>();
   const [cameraMode, setCameraMode] = useState<RaceCameraMode>('follow');
   const [finishSnapshot, setFinishSnapshot] = useState<string>();
+  const [finishSnapshotUnavailable, setFinishSnapshotUnavailable] = useState(false);
   const [bets, setBets] = useState<readonly Bet[]>([]);
   const [result, setResult] = useState<RaceResult>();
   const [resultError, setResultError] = useState<string>();
@@ -233,9 +234,10 @@ export function RaceViewer({
       position < viewer.duration + POST_FINISH_RUNOUT_MS
     )
       return;
+    if (finishSnapshot === undefined && !finishSnapshotUnavailable) return;
     setIsPaused(true);
-    setPhase('photo');
-  }, [phase, position, viewer]);
+    setPhase(finishSnapshotUnavailable ? 'results' : 'photo');
+  }, [finishSnapshotUnavailable, finishSnapshot, phase, position, viewer]);
 
   useEffect(() => {
     if (phase !== 'photo') return;
@@ -307,6 +309,7 @@ export function RaceViewer({
     setHasPlaybackStarted(false);
     setPosition(0);
     setFinishSnapshot(undefined);
+    setFinishSnapshotUnavailable(false);
   };
 
   return (
@@ -379,6 +382,7 @@ export function RaceViewer({
             onTrackHorse={setTrackedHorseNumber}
             onCameraModeChange={setCameraMode}
             onFinishSnapshot={setFinishSnapshot}
+            onFinishSnapshotError={() => setFinishSnapshotUnavailable(true)}
             onReady={() => {
               setIsSceneReady(true);
             }}

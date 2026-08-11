@@ -69,7 +69,10 @@ describe('race preparation workflow', () => {
       () => now,
       randomBytes(32).toString('base64'),
     );
-    original.begin(race.id);
+    const interrupted = original.begin(race.id);
+    const resumed = original.begin(race.id);
+    expect(resumed.officialSeed).toBe(interrupted.officialSeed);
+    expect(resumed.oddsSeed).toBe(interrupted.oddsSeed);
     original.fail(race.id, 'TEST_FAILURE', 'test failure');
 
     const replacement = new SqliteRacePreparationRepository(

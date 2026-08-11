@@ -67,7 +67,7 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
   public begin(raceId: string): RacePreparationStart {
     const run = this.database.transaction((): RacePreparationStart => {
       const race = this.loadRace(raceId);
-      transitionRace(race.status, 'simulating');
+      if (race.status !== 'simulating') transitionRace(race.status, 'simulating');
       const entries = this.loadEntries(raceId);
       const simulationSettings = parseSimulationSettings(race.simulationConfigJson);
       const seeds = this.loadOrCreateSeeds(race);

@@ -74,8 +74,9 @@ export async function prepareRace(
   raceId: string,
   dependencies: PrepareRaceDependencies,
 ): Promise<RacePreparationCompletion> {
+  let start: RacePreparationStart | undefined;
   try {
-    const start = dependencies.repository.begin(raceId);
+    start = dependencies.repository.begin(raceId);
     const [official, probabilities] = await Promise.all([
       Promise.resolve(simulateOfficialRace(start.input, start.officialSeed)),
       dependencies.probabilityGenerator.generate(start.input, start.oddsSeed),
@@ -136,7 +137,9 @@ export async function prepareRace(
   } catch (error) {
     const message =
       error instanceof Error ? error.message.slice(0, 300) : 'Unknown preparation error';
-    dependencies.repository.fail(raceId, 'RACE_PREPARATION_FAILED', message);
+    if (start !== undefined) {
+      dependencies.repository.fail(raceId, 'RACE_PREPARATION_FAILED', message);
+    }
     throw error;
   }
 }

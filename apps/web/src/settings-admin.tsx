@@ -297,7 +297,9 @@ export function SettingsAdmin() {
             {error}
           </p>
         )}
-        <button type="submit">設定を保存</button>
+        <button type="submit" className="form-submit">
+          設定を保存
+        </button>
       </form>
 
       <details>

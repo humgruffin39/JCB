@@ -113,7 +113,9 @@ export function AdministratorAdmin() {
             {message}
           </p>
         )}
-        <button type="submit">管理者を追加</button>
+        <button type="submit" className="form-submit">
+          管理者を追加
+        </button>
       </form>
       {removalTarget === undefined ? null : (
         <AdministratorRemovalDialog
@@ -173,7 +175,7 @@ function AdministratorRemovalDialog({
           />
         </label>
         <div className="inline-actions">
-          <button type="submit" className="button-danger" disabled={isSubmitting}>
+          <button type="submit" className="button-danger form-submit" disabled={isSubmitting}>
             権限を外す
           </button>
           <button

@@ -503,6 +503,13 @@ main {
   font-size: 0.82rem;
 }
 
+.app-shell--admin .terminal-panel__header-actions > button {
+  min-height: 1.75rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
 .app-shell--admin .terminal-panel__body {
   padding: var(--space-2);
 }
@@ -869,7 +876,7 @@ main {
 }
 
 .text-button {
-  min-height: 2rem;
+  min-height: 1.75rem;
   padding: var(--space-1) var(--space-2);
   color: var(--cyan);
   background: transparent;
@@ -908,7 +915,29 @@ main {
   border-color: var(--danger-hover);
 }
 
+.form-submit {
+  width: fit-content;
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.76rem;
+}
+
 .terminal-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.currency-adjustment-review {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.currency-adjustment-review h3 {
+  margin: 0;
+  font: 650 0.88rem/1.3 var(--font-display);
+}
+
+.currency-adjustment-review form {
   display: grid;
   gap: var(--space-3);
 }

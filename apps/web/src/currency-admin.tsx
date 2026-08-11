@@ -1,12 +1,11 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type FormEvent } from 'react';
 import {
   accountTypeLabel,
   betStatusLabel,
   poolTypeLabel,
   referenceTypeLabel,
 } from './admin-labels.js';
-import { AdminDialog } from './admin-dialog.js';
 import { apiRequest } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
@@ -37,7 +36,6 @@ export function CurrencyAdmin() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [adjustmentDraft, setAdjustmentDraft] = useState<AdjustmentDraft>();
-  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [section, setSection] = useState<CurrencySection>('overview');
   const adjustmentForm = useRef<HTMLFormElement>(null);
 
@@ -65,7 +63,6 @@ export function CurrencyAdmin() {
       reason: String(form.get('reason')),
       idempotencyKey: `admin-adjustment:${crypto.randomUUID()}`,
     });
-    setAdjustmentOpen(false);
   }
 
   async function confirmAdjustment(draft: AdjustmentDraft): Promise<void> {
@@ -104,12 +101,6 @@ export function CurrencyAdmin() {
       </div>
     );
   }
-
-  const adjustmentAction: ReactNode = (
-    <button type="button" onClick={() => setAdjustmentOpen(true)}>
-      残高を補正
-    </button>
-  );
 
   return (
     <div className="admin-page">
@@ -156,7 +147,6 @@ export function CurrencyAdmin() {
           <div className="admin-surface-grid">
             <OperationTable
               heading="口座残高"
-              headerAction={adjustmentAction}
               rows={economy.accounts}
               columns={[
                 ['displayName', '名義'],
@@ -166,6 +156,52 @@ export function CurrencyAdmin() {
               ]}
               moneyColumns={new Set(['amount'])}
             />
+            <TerminalPanel heading="残高補正">
+              {adjustmentDraft === undefined ? (
+                <form ref={adjustmentForm} className="terminal-form" onSubmit={adjust}>
+                  <label>
+                    対象口座
+                    <select name="accountId" required defaultValue="">
+                      <option value="" disabled>
+                        口座を選択
+                      </option>
+                      {economy.accounts.map((account) => (
+                        <option key={String(account.id)} value={String(account.id)}>
+                          {String(account.displayName ?? account.ownerKey)} /{' '}
+                          {accountTypeLabel(String(account.accountType))} /{' '}
+                          {formatMoney(account.amount)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    補正額
+                    <input name="amount" type="number" step={1} required />
+                    <span className="field-hint">正の値は加算、負の値は減算です。</span>
+                  </label>
+                  <label>
+                    理由
+                    <textarea name="reason" minLength={3} maxLength={300} required />
+                  </label>
+                  {error === '' ? null : (
+                    <p className="field-error" role="alert">
+                      {error}
+                    </p>
+                  )}
+                  <div className="form-actions">
+                    <button type="submit" className="form-submit">
+                      確認する
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <AdjustmentReview
+                  draft={adjustmentDraft}
+                  onClose={() => setAdjustmentDraft(undefined)}
+                  onConfirm={confirmAdjustment}
+                />
+              )}
+            </TerminalPanel>
             <TerminalPanel heading="三連単キャリーオーバー">
               {economy.carryover === null ? (
                 <p>キャリーオーバー口座がありません。</p>
@@ -190,7 +226,6 @@ export function CurrencyAdmin() {
         ) : section === 'bets' ? (
           <OperationTable
             heading="馬券履歴"
-            headerAction={adjustmentAction}
             rows={economy.bets}
             columns={[
               ['raceDate', '開催日'],
@@ -208,7 +243,6 @@ export function CurrencyAdmin() {
           <div className="admin-surface-grid">
             <OperationTable
               heading="精算・返金履歴"
-              headerAction={adjustmentAction}
               rows={economy.settlements}
               columns={[
                 ['createdAt', '記録時刻'],
@@ -233,7 +267,6 @@ export function CurrencyAdmin() {
         ) : section === 'profit-loss' ? (
           <OperationTable
             heading="初期流動性の損益"
-            headerAction={adjustmentAction}
             rows={economy.seedPositions}
             columns={[
               ['raceDate', '開催日'],
@@ -249,7 +282,6 @@ export function CurrencyAdmin() {
         ) : (
           <OperationTable
             heading="台帳明細"
-            headerAction={adjustmentAction}
             rows={ledger}
             columns={[
               ['createdAt', '記録時刻'],
@@ -262,62 +294,11 @@ export function CurrencyAdmin() {
           />
         )}
       </div>
-      {adjustmentOpen ? (
-        <AdminDialog title="残高を補正" onCancel={() => setAdjustmentOpen(false)}>
-          <form ref={adjustmentForm} className="terminal-form" onSubmit={adjust}>
-            <label>
-              対象口座
-              <select name="accountId" required defaultValue="">
-                <option value="" disabled>
-                  口座を選択
-                </option>
-                {economy.accounts.map((account) => (
-                  <option key={String(account.id)} value={String(account.id)}>
-                    {String(account.displayName ?? account.ownerKey)} /{' '}
-                    {accountTypeLabel(String(account.accountType))} / {formatMoney(account.amount)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              補正額
-              <input name="amount" type="number" step={1} required />
-              <span className="field-hint">正の値は加算、負の値は減算です。</span>
-            </label>
-            <label>
-              理由
-              <textarea name="reason" minLength={3} maxLength={300} required />
-            </label>
-            {error === '' ? null : (
-              <p className="field-error" role="alert">
-                {error}
-              </p>
-            )}
-            <div className="form-actions">
-              <button type="submit">確認する</button>
-              <button
-                type="button"
-                className="button-secondary"
-                onClick={() => setAdjustmentOpen(false)}
-              >
-                キャンセル
-              </button>
-            </div>
-          </form>
-        </AdminDialog>
-      ) : null}
-      {adjustmentDraft === undefined ? null : (
-        <AdjustmentReviewDialog
-          draft={adjustmentDraft}
-          onClose={() => setAdjustmentDraft(undefined)}
-          onConfirm={confirmAdjustment}
-        />
-      )}
     </div>
   );
 }
 
-function AdjustmentReviewDialog({
+function AdjustmentReview({
   draft,
   onClose,
   onConfirm,
@@ -330,13 +311,8 @@ function AdjustmentReviewDialog({
   const [error, setError] = useState('');
 
   return (
-    <AdminDialog
-      title="残高補正を記録しますか"
-      onCancel={() => {
-        if (!isSubmitting) onClose();
-      }}
-      canCancel={!isSubmitting}
-    >
+    <section className="currency-adjustment-review" aria-labelledby="adjustment-review-title">
+      <h3 id="adjustment-review-title">残高補正を記録しますか</h3>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -370,7 +346,7 @@ function AdjustmentReviewDialog({
           </p>
         )}
         <div className="inline-actions">
-          <button type="submit" disabled={isSubmitting}>
+          <button type="submit" className="form-submit" disabled={isSubmitting}>
             {isSubmitting ? '記録中…' : '補正を記録する'}
           </button>
           <button
@@ -383,29 +359,23 @@ function AdjustmentReviewDialog({
           </button>
         </div>
       </form>
-    </AdminDialog>
+    </section>
   );
 }
 
 function OperationTable({
   heading,
-  headerAction,
   rows,
   columns,
   moneyColumns = new Set<string>(),
 }: {
   readonly heading: string;
-  readonly headerAction?: ReactNode;
   readonly rows: readonly OperationRow[];
   readonly columns: readonly (readonly [string, string])[];
   readonly moneyColumns?: ReadonlySet<string>;
 }) {
   return (
-    <TerminalPanel
-      heading={heading}
-      status={`${String(rows.length)}件`}
-      headerAction={headerAction}
-    >
+    <TerminalPanel heading={heading} status={`${String(rows.length)}件`}>
       <div className="data-table-wrap">
         <table className="data-table">
           <caption className="visually-hidden">{heading}</caption>

@@ -225,15 +225,15 @@ export function RaceAdmin() {
 
   return (
     <div className="admin-page">
-      <div className="admin-page__toolbar">
-        <div>
-          <h2>レース管理</h2>
-        </div>
-        <button type="button" onClick={(event) => openRaceForm(undefined, event.currentTarget)}>
-          レースを作成
-        </button>
-      </div>
-      <TerminalPanel heading="開催一覧" status={`${String(races.length)}件`}>
+      <TerminalPanel
+        heading="開催一覧"
+        status={`${String(races.length)}件`}
+        headerAction={
+          <button type="button" onClick={(event) => openRaceForm(undefined, event.currentTarget)}>
+            レースを作成
+          </button>
+        }
+      >
         {refreshError === undefined ? null : (
           <p className="field-error" role="alert">
             {refreshError}

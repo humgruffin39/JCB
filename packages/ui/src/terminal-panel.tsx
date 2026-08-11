@@ -3,6 +3,7 @@ import type { HTMLAttributes, ReactNode } from 'react';
 export interface TerminalPanelProps extends HTMLAttributes<HTMLElement> {
   readonly heading: string;
   readonly status?: string;
+  readonly headerAction?: ReactNode;
   readonly children: ReactNode;
   readonly as?: 'section' | 'article';
 }
@@ -10,6 +11,7 @@ export interface TerminalPanelProps extends HTMLAttributes<HTMLElement> {
 export function TerminalPanel({
   heading,
   status,
+  headerAction,
   children,
   as: Element = 'section',
   className = '',
@@ -19,7 +21,12 @@ export function TerminalPanel({
     <Element className={`terminal-panel ${className}`.trim()} {...properties}>
       <header className="terminal-panel__header">
         <h2>{heading}</h2>
-        {status === undefined ? null : <span className="status-readout">{status}</span>}
+        {headerAction === undefined && status === undefined ? null : (
+          <div className="terminal-panel__header-actions">
+            {headerAction}
+            {status === undefined ? null : <span className="status-readout">{status}</span>}
+          </div>
+        )}
       </header>
       <div className="terminal-panel__body">{children}</div>
     </Element>

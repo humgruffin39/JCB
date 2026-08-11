@@ -82,15 +82,15 @@ export function HorseAdmin() {
 
   return (
     <div className="admin-page">
-      <div className="admin-page__toolbar">
-        <div>
-          <h2>馬管理</h2>
-        </div>
-        <button type="button" onClick={(event) => openHorseForm(undefined, event.currentTarget)}>
-          馬を登録
-        </button>
-      </div>
-      <TerminalPanel heading="登録済みの馬" status={`${String(horses.length)}頭`}>
+      <TerminalPanel
+        heading="登録済みの馬"
+        status={`${String(horses.length)}頭`}
+        headerAction={
+          <button type="button" onClick={(event) => openHorseForm(undefined, event.currentTarget)}>
+            馬を登録
+          </button>
+        }
+      >
         {refreshError === undefined ? null : (
           <p className="field-error" role="alert">
             {refreshError} 馬の一覧を更新できません。

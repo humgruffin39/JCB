@@ -5,6 +5,7 @@ import {
   getBattleCameraShot,
   getFinishCameraShot,
   selectBroadcastCameraShot,
+  type BroadcastCameraShot,
   type BroadcastShotId,
 } from './race-camera-director.js';
 import {
@@ -13,6 +14,7 @@ import {
   raceProgressToCourseProgress,
   sampleCourse,
   sampleCourseWithRunout,
+  type CourseSample,
 } from './race-course.js';
 import { RaceEnvironment, type RaceSurface } from './race-environment.js';
 import {
@@ -49,6 +51,12 @@ export interface RaceWorldState {
 }
 
 export type RaceCameraMode = 'follow' | 'horse';
+
+export interface FinishSnapshotCamera {
+  readonly cameraPosition: THREE.Vector3;
+  readonly targetPosition: THREE.Vector3;
+  readonly fieldOfView: number;
+}
 
 interface AnimatedHorse {
   readonly rig: HorseRig;
@@ -449,15 +457,17 @@ export class RaceWorld {
       0,
       this.distanceM,
     );
-    const targetLook = firstFinisher?.rig.root.position.clone() ?? finishLine.position.clone();
-    const targetCamera = finishLine.position
-      .clone()
-      .addScaledVector(finishLine.tangent, shot.tangentOffset)
-      .addScaledVector(finishLine.normal, shot.normalOffset);
-    targetCamera.y = shot.height;
-    targetLook.y = shot.lookHeight;
-    const portraitCompensation = THREE.MathUtils.clamp(1.65 / this.camera.aspect, 1, 1.42);
-    const targetFieldOfView = shot.fieldOfView * portraitCompensation;
+    const snapshotCamera = calculateFinishSnapshotCamera(
+      finishLine,
+      this.horses
+        .filter((horse) => horse.initialized)
+        .sort((left, right) => right.courseProgress - left.courseProgress)
+        .slice(0, 3)
+        .map((horse) => horse.rig.root.position),
+      this.camera.aspect,
+      shot,
+      firstFinisher?.rig.root.position,
+    );
     const previousPosition = this.camera.position.clone();
     const previousQuaternion = this.camera.quaternion.clone();
     const previousFieldOfView = this.camera.fov;
@@ -473,10 +483,10 @@ export class RaceWorld {
     renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
 
     try {
-      this.camera.position.copy(targetCamera);
-      this.camera.fov = targetFieldOfView;
+      this.camera.position.copy(snapshotCamera.cameraPosition);
+      this.camera.fov = snapshotCamera.fieldOfView;
       this.camera.updateProjectionMatrix();
-      this.camera.lookAt(targetLook);
+      this.camera.lookAt(snapshotCamera.targetPosition);
       this.camera.updateMatrixWorld(true);
       this.renderer.setRenderTarget(renderTarget);
       this.renderer.render(this.scene, this.camera);
@@ -754,6 +764,59 @@ export class RaceWorld {
   private readonly handleContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
   };
+}
+
+export function calculateFinishSnapshotCamera(
+  finishLine: Pick<CourseSample, 'position' | 'tangent' | 'normal'>,
+  horsePositions: readonly THREE.Vector3[],
+  aspect: number,
+  shot: BroadcastCameraShot = getFinishCameraShot(),
+  fallbackHorsePosition?: THREE.Vector3,
+): FinishSnapshotCamera {
+  const tangent = finishLine.tangent.clone().normalize();
+  const normal = finishLine.normal.clone().normalize();
+  const validPositions = horsePositions.filter((position) =>
+    [position.x, position.y, position.z].every(Number.isFinite),
+  );
+  const candidates = validPositions
+    .toSorted(
+      (left, right) =>
+        right.clone().sub(finishLine.position).dot(tangent) -
+        left.clone().sub(finishLine.position).dot(tangent),
+    )
+    .slice(0, 3);
+  const fallback = fallbackHorsePosition ?? finishLine.position;
+  const positions = candidates.length > 0 ? candidates : [fallback];
+  const along = positions.map((position) => position.clone().sub(finishLine.position).dot(tangent));
+  const across = positions.map((position) => position.clone().sub(finishLine.position).dot(normal));
+  const minimumAlong = Math.min(...along);
+  const maximumAlong = Math.max(...along);
+  const centerAlong = (minimumAlong + maximumAlong) / 2;
+  const centerAcross = across.reduce((sum, value) => sum + value, 0) / across.length;
+  const targetPosition = finishLine.position
+    .clone()
+    .addScaledVector(tangent, centerAlong)
+    .addScaledVector(normal, centerAcross);
+  targetPosition.y = shot.lookHeight;
+
+  const normalDistance = Math.max(10, Math.abs(shot.normalOffset));
+  const framingMargin = 4.5;
+  const halfWidth = Math.max(6, (maximumAlong - minimumAlong) / 2 + framingMargin);
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const requiredFieldOfView =
+    (2 * Math.atan(halfWidth / (normalDistance * safeAspect)) * 180) / Math.PI;
+  const portraitCompensation = THREE.MathUtils.clamp(1.65 / safeAspect, 1, 1.42);
+  const fieldOfView = THREE.MathUtils.clamp(
+    Math.max(shot.fieldOfView * portraitCompensation, requiredFieldOfView),
+    18,
+    56,
+  );
+  const cameraPosition = finishLine.position
+    .clone()
+    .addScaledVector(tangent, centerAlong + shot.tangentOffset)
+    .addScaledVector(normal, centerAcross + shot.normalOffset);
+  cameraPosition.y = shot.height;
+  return { cameraPosition, targetPosition, fieldOfView };
 }
 
 export function postFinishCourseProgress(

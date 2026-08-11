@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { COURSE_LENGTH, raceProgressToCourseProgress } from './race-course.js';
+import { COURSE_LENGTH, raceProgressToCourseProgress, sampleCourse } from './race-course.js';
 import {
+  calculateFinishSnapshotCamera,
   isPostFinishPoseReady,
   POST_FINISH_RUNOUT_DISTANCE_M,
   postFinishCourseProgress,
@@ -66,5 +67,21 @@ describe('race finish motion', () => {
     expect(
       isPostFinishPoseReady(runoutStopTimeMs, finishTimeMs, finishSpeedMps, atStop, atStop),
     ).toBe(true);
+  });
+
+  it('frames only the leading three horses from their captured finish positions', () => {
+    const finishLine = sampleCourse(1);
+    const leadingPositions = [
+      finishLine.position.clone().addScaledVector(finishLine.tangent, 4),
+      finishLine.position.clone().addScaledVector(finishLine.tangent, -2),
+      finishLine.position.clone().addScaledVector(finishLine.tangent, -7),
+      finishLine.position.clone().addScaledVector(finishLine.tangent, -80),
+    ];
+    const camera = calculateFinishSnapshotCamera(finishLine, leadingPositions, 16 / 9);
+
+    expect(camera.targetPosition.x).toBeCloseTo(finishLine.position.x - 1.5, 6);
+    expect(camera.targetPosition.z).toBeCloseTo(finishLine.position.z, 6);
+    expect(camera.fieldOfView).toBeGreaterThan(30);
+    expect(camera.fieldOfView).toBeLessThan(56);
   });
 });

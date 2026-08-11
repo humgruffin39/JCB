@@ -607,6 +607,22 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+.health-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.health-group {
+  min-width: 0;
+}
+
+.health-group h3 {
+  margin: 0 0 var(--space-2);
+  color: var(--muted);
+  font: 650 0.72rem/1.2 var(--font-display);
+}
+
 .terminal-note,
 .empty-copy {
   color: var(--muted);
@@ -684,6 +700,66 @@ main {
   gap: var(--space-3);
 }
 
+.admin-page {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.admin-page__toolbar {
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.admin-page__toolbar h2 {
+  margin: 0;
+  font: 650 1rem/1.2 var(--font-display);
+}
+
+.admin-page__toolbar p {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.admin-subnav {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 0.0625rem solid var(--line);
+}
+
+.admin-subnav button {
+  flex: 0 0 auto;
+  min-height: 2.25rem;
+  padding-inline: var(--space-2);
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.admin-subnav button:hover,
+.admin-subnav button[aria-selected='true'] {
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  border-bottom: 0.125rem solid var(--text);
+}
+
+.admin-surface-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-2);
+}
+
 .admin-message {
   grid-column: 1 / -1;
   min-height: 1.5rem;
@@ -712,6 +788,67 @@ main {
 .data-table th {
   color: var(--muted);
   font: 700 0.68rem/1 var(--font-display);
+}
+
+.admin-dialog {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: var(--space-4);
+  overflow: auto;
+  color: var(--text);
+  background: var(--surface-1);
+  border: 0.0625rem solid var(--line-contrast);
+  border-radius: 0.25rem;
+}
+
+.admin-dialog::backdrop {
+  background: var(--overlay);
+}
+
+.admin-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 0.0625rem solid var(--line);
+}
+
+.admin-dialog__header h2 {
+  margin: 0;
+  font: 650 1rem/1.25 var(--font-display);
+}
+
+.admin-dialog__close {
+  min-width: 2.25rem;
+  padding-inline: var(--space-2);
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.admin-dialog__close:hover {
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+}
+
+.admin-dialog__description {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.admin-dialog > .terminal-form,
+.admin-dialog > form {
+  margin-top: var(--space-3);
+}
+
+.app-shell--admin :is(button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 0.125rem solid var(--focus);
+  outline-offset: 0.125rem;
 }
 
 .text-button {
@@ -850,6 +987,60 @@ main {
   font: 600 0.75rem/1.4 var(--font-mono);
   font-variant-numeric: tabular-nums;
   text-align: end;
+}
+
+.ability-slider__value,
+.preference-slider__value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ability-slider__value input[type='number'],
+.preference-slider__value input[type='number'] {
+  width: 4.25rem;
+  min-height: 1.75rem;
+  padding: var(--space-1);
+  font: 600 0.75rem/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ability-slider > input[type='number'],
+.preference-slider > input[type='number'] {
+  min-height: 2rem;
+  padding: var(--space-1) var(--space-2);
+  font: 650 0.82rem/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ability-meter,
+.preference-meter {
+  position: relative;
+  height: 0.25rem;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.ability-meter span,
+.preference-meter span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: block;
+  width: 0;
+  background: var(--text);
+}
+
+.preference-meter::after {
+  position: absolute;
+  top: -0.25rem;
+  left: 50%;
+  width: 0.0625rem;
+  height: 0.75rem;
+  background: var(--line-contrast);
+  content: '';
 }
 
 .ability-slider input[type='range'],
@@ -1007,26 +1198,28 @@ main {
   grid-column: 1 / -1;
 }
 
-.race-operation-metrics {
-  margin-block: var(--space-1);
-  gap: var(--space-2);
+.race-admin-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  margin: var(--space-1) 0 0;
+  gap: 0 var(--space-3);
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
 }
 
-.race-operation-metrics div {
-  padding: 0;
-  border: 0;
+.race-admin-card__facts div {
+  display: inline-flex;
+  gap: 0.3rem;
 }
 
-.race-operation-metrics dt {
-  font-size: 0.62rem;
-  line-height: 1.2;
+.race-admin-card__facts dt::after {
+  content: ':';
 }
 
-.race-operation-metrics dd {
-  margin-top: 0.1rem;
+.race-admin-card__facts dd {
+  margin: 0;
   color: var(--text);
-  font-size: 0.74rem;
-  line-height: 1.3;
 }
 
 .condition-readout {
@@ -1042,13 +1235,6 @@ main {
   min-height: 0;
 }
 
-@media (min-width: 52rem) {
-  .race-operation-metrics div + div {
-    padding-left: var(--space-2);
-    border-left: 0.0625rem solid var(--line);
-  }
-}
-
 .race-admin-list h3,
 .race-admin-list p {
   margin: 0;
@@ -1060,28 +1246,6 @@ main {
 
 .race-admin-list .inline-actions {
   grid-column: 1 / -1;
-}
-
-.race-operation-metrics {
-  display: grid;
-  margin-block: var(--space-2);
-  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-  gap: var(--space-2);
-}
-
-.race-operation-metrics div {
-  padding: var(--space-2);
-  border: 0.0625rem solid var(--line);
-}
-
-.race-operation-metrics dt {
-  color: var(--muted);
-  font-size: 0.65rem;
-}
-
-.race-operation-metrics dd {
-  margin: var(--space-1) 0 0;
-  color: var(--cyan);
 }
 
 .condition-readout {
@@ -1139,7 +1303,9 @@ main {
 
 @media (max-width: 52rem) {
   .race-data-grid,
-  .admin-workspace {
+  .admin-workspace,
+  .admin-surface-grid,
+  .health-groups {
     grid-template-columns: 1fr;
   }
 
@@ -1209,6 +1375,24 @@ main {
 
   .form-row,
   .entry-selects {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-page__toolbar {
+    align-items: flex-start;
+  }
+
+  .admin-page__toolbar h2 {
+    font-size: 0.92rem;
+  }
+
+  .admin-dialog {
+    width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    padding: var(--space-3);
+  }
+
+  .ability-grid {
     grid-template-columns: 1fr;
   }
 

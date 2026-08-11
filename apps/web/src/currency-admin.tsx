@@ -1,11 +1,12 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useRef, useState, type FormEvent } from 'react';
 import {
   accountTypeLabel,
   betStatusLabel,
   poolTypeLabel,
   referenceTypeLabel,
 } from './admin-labels.js';
+import { AdminDialog } from './admin-dialog.js';
 import { apiRequest } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
@@ -28,12 +29,16 @@ interface AdjustmentDraft {
   readonly idempotencyKey: string;
 }
 
+type CurrencySection = 'overview' | 'bets' | 'settlements' | 'profit-loss' | 'ledger';
+
 export function CurrencyAdmin() {
   const [economy, setEconomy] = useState<EconomyOperations>();
   const [ledger, setLedger] = useState<readonly OperationRow[]>([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [adjustmentDraft, setAdjustmentDraft] = useState<AdjustmentDraft>();
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [section, setSection] = useState<CurrencySection>('overview');
   const adjustmentForm = useRef<HTMLFormElement>(null);
 
   const refresh = useCallback(async () => {
@@ -60,6 +65,7 @@ export function CurrencyAdmin() {
       reason: String(form.get('reason')),
       idempotencyKey: `admin-adjustment:${crypto.randomUUID()}`,
     });
+    setAdjustmentOpen(false);
   }
 
   async function confirmAdjustment(draft: AdjustmentDraft): Promise<void> {
@@ -98,51 +104,201 @@ export function CurrencyAdmin() {
   }
 
   return (
-    <div className="system-layout">
-      <TerminalPanel heading="管理者補正" status="複式台帳">
-        {refreshError === undefined ? null : (
-          <p className="field-error" role="alert">
-            {refreshError} 通貨データを更新できません。
-          </p>
+    <div className="admin-page">
+      <div className="admin-page__toolbar">
+        <h2>通貨管理</h2>
+        <button type="button" onClick={() => setAdjustmentOpen(true)}>
+          残高を補正
+        </button>
+      </div>
+      <nav className="admin-subnav" aria-label="通貨管理メニュー" role="tablist">
+        {(
+          [
+            ['overview', '概要'],
+            ['bets', '馬券'],
+            ['settlements', '精算・給付'],
+            ['profit-loss', '損益'],
+            ['ledger', '台帳'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            id={`currency-tab-${value}`}
+            type="button"
+            role="tab"
+            aria-selected={section === value}
+            aria-controls="currency-panel"
+            onClick={() => setSection(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {refreshError === undefined ? null : (
+        <p className="field-error" role="alert">
+          {refreshError} 通貨データを更新できません。
+        </p>
+      )}
+      {message === '' ? null : (
+        <p className="admin-message" role="status">
+          {message}
+        </p>
+      )}
+      <div
+        id="currency-panel"
+        role="tabpanel"
+        aria-labelledby={`currency-tab-${section}`}
+        tabIndex={0}
+      >
+        {section === 'overview' ? (
+          <div className="admin-surface-grid">
+            <OperationTable
+              heading="口座残高"
+              rows={economy.accounts}
+              columns={[
+                ['displayName', '名義'],
+                ['accountType', '種別'],
+                ['amount', '残高'],
+                ['id', '口座ID'],
+              ]}
+              moneyColumns={new Set(['amount'])}
+            />
+            <TerminalPanel heading="三連単キャリーオーバー">
+              {economy.carryover === null ? (
+                <p>キャリーオーバー口座がありません。</p>
+              ) : (
+                <dl className="metric-list">
+                  <div>
+                    <dt>予測残高</dt>
+                    <dd>{formatMoney(economy.carryover.amountProjection)}</dd>
+                  </div>
+                  <div>
+                    <dt>口座残高</dt>
+                    <dd>{formatMoney(economy.carryover.accountBalance)}</dd>
+                  </div>
+                  <div>
+                    <dt>更新日時</dt>
+                    <dd>{formatTimestamp(economy.carryover.updatedAt)}</dd>
+                  </div>
+                </dl>
+              )}
+            </TerminalPanel>
+          </div>
+        ) : section === 'bets' ? (
+          <OperationTable
+            heading="馬券履歴"
+            rows={economy.bets}
+            columns={[
+              ['raceDate', '開催日'],
+              ['raceName', 'レース'],
+              ['displayName', '購入者'],
+              ['poolType', '券種'],
+              ['selectionCode', '買い目'],
+              ['stake', '賭け金'],
+              ['status', '状態'],
+              ['payout', '払戻'],
+            ]}
+            moneyColumns={new Set(['stake', 'payout'])}
+          />
+        ) : section === 'settlements' ? (
+          <div className="admin-surface-grid">
+            <OperationTable
+              heading="精算・返金履歴"
+              rows={economy.settlements}
+              columns={[
+                ['createdAt', '記録時刻'],
+                ['kind', '種別'],
+                ['referenceType', '参照'],
+                ['referenceId', '参照ID'],
+                ['description', '説明'],
+              ]}
+            />
+            <OperationTable
+              heading="救済給付"
+              rows={economy.relief}
+              columns={[
+                ['createdAt', '記録時刻'],
+                ['displayName', '受給者'],
+                ['amount', '給付額'],
+                ['transactionId', '取引ID'],
+              ]}
+              moneyColumns={new Set(['amount'])}
+            />
+          </div>
+        ) : section === 'profit-loss' ? (
+          <OperationTable
+            heading="初期流動性の損益"
+            rows={economy.seedPositions}
+            columns={[
+              ['raceDate', '開催日'],
+              ['raceName', 'レース'],
+              ['poolType', '券種'],
+              ['selectionCode', '買い目'],
+              ['stake', '初期資金'],
+              ['payout', '払戻'],
+              ['profitLoss', '損益'],
+            ]}
+            moneyColumns={new Set(['stake', 'payout', 'profitLoss'])}
+          />
+        ) : (
+          <OperationTable
+            heading="台帳明細"
+            rows={ledger}
+            columns={[
+              ['createdAt', '記録時刻'],
+              ['kind', '種別'],
+              ['accountId', '口座ID'],
+              ['amount', '増減'],
+              ['transactionId', '取引ID'],
+            ]}
+            moneyColumns={new Set(['amount'])}
+          />
         )}
-        <form ref={adjustmentForm} className="terminal-form" onSubmit={adjust}>
-          <label>
-            対象口座
-            <select name="accountId" required defaultValue="">
-              <option value="" disabled>
-                口座を選択
-              </option>
-              {economy.accounts.map((account) => (
-                <option key={String(account.id)} value={String(account.id)}>
-                  {String(account.displayName ?? account.ownerKey)} /{' '}
-                  {accountTypeLabel(String(account.accountType))} / {formatMoney(account.amount)}
+      </div>
+      {adjustmentOpen ? (
+        <AdminDialog title="残高を補正" onCancel={() => setAdjustmentOpen(false)}>
+          <form ref={adjustmentForm} className="terminal-form" onSubmit={adjust}>
+            <label>
+              対象口座
+              <select name="accountId" required defaultValue="">
+                <option value="" disabled>
+                  口座を選択
                 </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            補正額
-            <input name="amount" type="number" step={1} required />
-            <span className="field-hint">正の値は加算、負の値は減算です。</span>
-          </label>
-          <label>
-            理由
-            <textarea name="reason" minLength={3} maxLength={300} required />
-          </label>
-          {error === '' ? null : (
-            <p className="field-error" role="alert">
-              {error}
-            </p>
-          )}
-          <button type="submit">補正取引を記録</button>
-        </form>
-        {message === '' ? null : (
-          <p className="admin-message" role="status">
-            {message}
-          </p>
-        )}
-      </TerminalPanel>
-
+                {economy.accounts.map((account) => (
+                  <option key={String(account.id)} value={String(account.id)}>
+                    {String(account.displayName ?? account.ownerKey)} /{' '}
+                    {accountTypeLabel(String(account.accountType))} / {formatMoney(account.amount)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              補正額
+              <input name="amount" type="number" step={1} required />
+              <span className="field-hint">正の値は加算、負の値は減算です。</span>
+            </label>
+            <label>
+              理由
+              <textarea name="reason" minLength={3} maxLength={300} required />
+            </label>
+            {error === '' ? null : (
+              <p className="field-error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="form-actions">
+              <button type="submit">確認する</button>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => setAdjustmentOpen(false)}
+              >
+                キャンセル
+              </button>
+            </div>
+          </form>
+        </AdminDialog>
+      ) : null}
       {adjustmentDraft === undefined ? null : (
         <AdjustmentReviewDialog
           draft={adjustmentDraft}
@@ -150,101 +306,6 @@ export function CurrencyAdmin() {
           onConfirm={confirmAdjustment}
         />
       )}
-
-      <OperationTable
-        heading="口座残高"
-        rows={economy.accounts}
-        columns={[
-          ['displayName', '名義'],
-          ['accountType', '種別'],
-          ['amount', '残高'],
-          ['id', '口座ID'],
-        ]}
-        moneyColumns={new Set(['amount'])}
-      />
-      <OperationTable
-        heading="馬券履歴"
-        rows={economy.bets}
-        columns={[
-          ['raceDate', '開催日'],
-          ['raceName', 'レース'],
-          ['displayName', '購入者'],
-          ['poolType', '券種'],
-          ['selectionCode', '買い目'],
-          ['stake', '賭け金'],
-          ['status', '状態'],
-          ['payout', '払戻'],
-        ]}
-        moneyColumns={new Set(['stake', 'payout'])}
-      />
-      <OperationTable
-        heading="精算・返金履歴"
-        rows={economy.settlements}
-        columns={[
-          ['createdAt', '記録時刻'],
-          ['kind', '種別'],
-          ['referenceType', '参照'],
-          ['referenceId', '参照ID'],
-          ['description', '説明'],
-        ]}
-      />
-      <TerminalPanel heading="三連単キャリーオーバー">
-        {economy.carryover === null ? (
-          <p>キャリーオーバー口座がありません。</p>
-        ) : (
-          <dl className="metric-list">
-            <div>
-              <dt>予測残高</dt>
-              <dd>{formatMoney(economy.carryover.amountProjection)}</dd>
-            </div>
-            <div>
-              <dt>口座残高</dt>
-              <dd>{formatMoney(economy.carryover.accountBalance)}</dd>
-            </div>
-            <div>
-              <dt>更新日時</dt>
-              <dd>{formatTimestamp(economy.carryover.updatedAt)}</dd>
-            </div>
-          </dl>
-        )}
-      </TerminalPanel>
-      <OperationTable
-        heading="初期流動性の損益"
-        rows={economy.seedPositions}
-        columns={[
-          ['raceDate', '開催日'],
-          ['raceName', 'レース'],
-          ['poolType', '券種'],
-          ['selectionCode', '買い目'],
-          ['stake', '初期資金'],
-          ['payout', '払戻'],
-          ['profitLoss', '損益'],
-        ]}
-        moneyColumns={new Set(['stake', 'payout', 'profitLoss'])}
-      />
-      <OperationTable
-        heading="救済給付"
-        rows={economy.relief}
-        columns={[
-          ['createdAt', '記録時刻'],
-          ['displayName', '受給者'],
-          ['amount', '給付額'],
-          ['transactionId', '取引ID'],
-        ]}
-        moneyColumns={new Set(['amount'])}
-      />
-      <OperationTable
-        heading="台帳明細"
-        rows={ledger}
-        columns={[
-          ['createdAt', '記録時刻'],
-          ['kind', '種別'],
-          ['accountId', '口座ID'],
-          ['amount', '増減'],
-          ['transactionId', '取引ID'],
-        ]}
-        moneyColumns={new Set(['amount'])}
-      />
     </div>
   );
 }
@@ -258,24 +319,16 @@ function AdjustmentReviewDialog({
   readonly onClose: () => void;
   readonly onConfirm: (draft: AdjustmentDraft) => Promise<void>;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    dialog.current?.showModal();
-    return () => dialog.current?.close();
-  }, []);
-
   return (
-    <dialog
-      ref={dialog}
-      className="confirmation-dialog"
-      aria-labelledby="adjustment-review-title"
-      onCancel={(event) => {
-        event.preventDefault();
+    <AdminDialog
+      title="残高補正を記録しますか"
+      onCancel={() => {
         if (!isSubmitting) onClose();
       }}
+      canCancel={!isSubmitting}
     >
       <form
         onSubmit={(event) => {
@@ -289,7 +342,6 @@ function AdjustmentReviewDialog({
             .finally(() => setIsSubmitting(false));
         }}
       >
-        <h2 id="adjustment-review-title">残高補正を記録しますか</h2>
         <dl className="metric-list">
           <div>
             <dt>対象口座</dt>
@@ -324,7 +376,7 @@ function AdjustmentReviewDialog({
           </button>
         </div>
       </form>
-    </dialog>
+    </AdminDialog>
   );
 }
 

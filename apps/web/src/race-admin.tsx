@@ -7,6 +7,7 @@ import {
   raceStatusLabel,
   raceStatusTone,
 } from './admin-labels.js';
+import { AdminDialog } from './admin-dialog.js';
 import { apiAbsoluteUrl, apiRequest, getPublicSettings } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
@@ -60,10 +61,7 @@ const DEFAULT_SCHEDULE: ScheduleSettings = {
   startTime: '22:00:00',
 };
 
-const DISTANCE_OPTIONS = [
-  800, 1_000, 1_200, 1_400, 1_600, 1_800, 2_000, 2_200, 2_400, 2_600, 2_800, 3_000, 3_200, 3_600,
-  4_000, 5_000,
-] as const;
+const DISTANCE_OPTIONS = [1_200, 1_600, 1_800, 2_000, 2_400] as const;
 
 export function RaceAdmin() {
   const [races, setRaces] = useState<readonly AdminRace[]>([]);
@@ -73,6 +71,8 @@ export function RaceAdmin() {
   const [cancelling, setCancelling] = useState<AdminRace>();
   const [rehearsing, setRehearsing] = useState<AdminRace>();
   const [editing, setEditing] = useState<AdminRace>();
+  const [raceFormOpen, setRaceFormOpen] = useState(false);
+  const raceFormReturnFocus = useRef<HTMLElement | null>(null);
   const [revealing, setRevealing] = useState<AdminRace>();
   const [message, setMessage] = useState('');
   const [formOptionsError, setFormOptionsError] = useState('');
@@ -217,9 +217,23 @@ export function RaceAdmin() {
     }
   }
 
+  function openRaceForm(race: AdminRace | undefined, trigger: HTMLElement): void {
+    setEditing(race);
+    raceFormReturnFocus.current = trigger;
+    setRaceFormOpen(true);
+  }
+
   return (
-    <div className="admin-workspace">
-      <TerminalPanel heading="開催一覧">
+    <div className="admin-page">
+      <div className="admin-page__toolbar">
+        <div>
+          <h2>レース管理</h2>
+        </div>
+        <button type="button" onClick={(event) => openRaceForm(undefined, event.currentTarget)}>
+          レースを作成
+        </button>
+      </div>
+      <TerminalPanel heading="開催一覧" status={`${String(races.length)}件`}>
         {refreshError === undefined ? null : (
           <p className="field-error" role="alert">
             {refreshError}
@@ -267,25 +281,25 @@ export function RaceAdmin() {
                   </span>
                 </header>
                 <div className="race-admin-card__body">
-                  <dl className="race-operation-metrics">
+                  <dl className="race-admin-card__facts">
                     <div>
-                      <dt>正式シミュレーション</dt>
+                      <dt>正式</dt>
                       <dd>{processStatusLabel(race.officialSimulationStatus)}</dd>
                     </div>
                     <div>
-                      <dt>オッズシミュレーション</dt>
+                      <dt>オッズ</dt>
                       <dd>{processStatusLabel(race.oddsSimulationStatus)}</dd>
                     </div>
                     <div>
-                      <dt>基準オッズ</dt>
+                      <dt>基準</dt>
                       <dd>{formatOddsRange(race)}</dd>
                     </div>
                     <div>
-                      <dt>初期流動性</dt>
+                      <dt>流動性</dt>
                       <dd>{formatSeedLiquidity(race)}</dd>
                     </div>
                     <div>
-                      <dt>観戦データ</dt>
+                      <dt>観戦</dt>
                       <dd>{race.timelineObjectKey === null ? '未保存' : '保存済み'}</dd>
                     </div>
                   </dl>
@@ -306,7 +320,7 @@ export function RaceAdmin() {
                     <button
                       type="button"
                       className="button-secondary"
-                      onClick={() => setEditing(race)}
+                      onClick={(event) => openRaceForm(race, event.currentTarget)}
                       disabled={pendingOperation !== undefined}
                       aria-label={`${race.name}の下書きを編集`}
                     >
@@ -404,20 +418,27 @@ export function RaceAdmin() {
         )}
       </TerminalPanel>
 
-      <RaceForm
-        key={editing?.id ?? 'new-race'}
-        horses={horses}
-        schedule={schedule}
-        {...(editing === undefined ? {} : { race: editing })}
-        onSaved={async () => {
-          setMessage(
-            editing === undefined ? 'レースを下書き保存しました。' : '下書きを更新しました。',
-          );
-          setEditing(undefined);
-          await refresh();
-        }}
-        onCancel={() => setEditing(undefined)}
-      />
+      {raceFormOpen ? (
+        <RaceForm
+          key={editing?.id ?? 'new-race'}
+          horses={horses}
+          schedule={schedule}
+          returnFocusRef={raceFormReturnFocus}
+          {...(editing === undefined ? {} : { race: editing })}
+          onSaved={async () => {
+            setMessage(
+              editing === undefined ? 'レースを下書き保存しました。' : '下書きを更新しました。',
+            );
+            setEditing(undefined);
+            setRaceFormOpen(false);
+            await refresh();
+          }}
+          onCancel={() => {
+            setEditing(undefined);
+            setRaceFormOpen(false);
+          }}
+        />
+      ) : null}
       {message === '' ? null : (
         <p className="admin-message" role="status">
           {message}
@@ -451,12 +472,14 @@ function RaceForm({
   race,
   onSaved,
   onCancel,
+  returnFocusRef,
 }: {
   readonly horses: readonly HorseOption[];
   readonly schedule: ScheduleSettings;
   readonly race?: AdminRace;
   readonly onSaved: () => Promise<void>;
   readonly onCancel: () => void;
+  readonly returnFocusRef: { readonly current: HTMLElement | null };
 }) {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -553,8 +576,17 @@ function RaceForm({
     ]),
   ).sort((left, right) => left - right);
   return (
-    <TerminalPanel heading={race === undefined ? 'レースを作成' : '下書きを編集'}>
-      <form className="terminal-form" onSubmit={(event) => void submit(event)}>
+    <AdminDialog
+      title={race === undefined ? 'レースを作成' : '下書きを編集'}
+      onCancel={onCancel}
+      returnFocusRef={returnFocusRef}
+      canCancel={!isSubmitting}
+    >
+      <form
+        className="terminal-form"
+        aria-busy={isSubmitting}
+        onSubmit={(event) => void submit(event)}
+      >
         <div className="form-row">
           <label>
             開催日
@@ -648,19 +680,17 @@ function RaceForm({
           <button type="submit" disabled={activeHorseCount < 8 || isSubmitting}>
             {isSubmitting ? '保存中…' : race === undefined ? '下書きを保存' : '変更を保存'}
           </button>
-          {race === undefined ? null : (
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={onCancel}
-              disabled={isSubmitting}
-            >
-              編集をやめる
-            </button>
-          )}
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            キャンセル
+          </button>
         </div>
       </form>
-    </TerminalPanel>
+    </AdminDialog>
   );
 }
 
@@ -709,7 +739,7 @@ function CancellationDialog({
         if (!isSubmitting) onClose();
       }}
     >
-      <form method="dialog" onSubmit={(event) => void submit(event)}>
+      <form onSubmit={(event) => void submit(event)}>
         <h2 id="cancel-race-title">「{race.name}」を中止しますか</h2>
         <p>販売済み馬券は全額返金され、中止理由と実行者が監査ログへ残ります。</p>
         <label>
@@ -935,7 +965,7 @@ function formatOddsRange(race: AdminRace): string {
   const minimum = Number(race.minimumBaseOdds);
   const maximum = Number(race.maximumBaseOdds);
   if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return '未生成';
-  return `${minimum.toFixed(1)}–${maximum.toFixed(1)}倍 (${race.oddsSelectionCount}通り)`;
+  return `${minimum.toFixed(1)}–${maximum.toFixed(1)}倍 / ${race.oddsSelectionCount}通り`;
 }
 
 function formatRupees(value: string): string {
@@ -943,19 +973,11 @@ function formatRupees(value: string): string {
 }
 
 function formatSeedLiquidity(race: AdminRace): string {
-  if (race.seedLiquidityDiagnosticsJson === null) {
-    return formatRupees(race.seedLiquidity);
-  }
+  if (race.seedLiquidityDiagnosticsJson === null) return formatRupees(race.seedLiquidity);
   try {
     const diagnostics = JSON.parse(race.seedLiquidityDiagnosticsJson) as Record<string, unknown>;
     const applied = Number(diagnostics.appliedWin ?? 0) + Number(diagnostics.appliedTrifecta ?? 0);
-    const automatic =
-      Number(diagnostics.automaticWin ?? 0) + Number(diagnostics.automaticTrifecta ?? 0);
-    const medians =
-      diagnostics.winMedian === null
-        ? '初期値'
-        : `中央値 ${formatRupees(String(diagnostics.winMedian))} / ${formatRupees(String(diagnostics.trifectaMedian))}`;
-    return `適用 ${formatRupees(String(applied))} / 自動 ${formatRupees(String(automatic))} / ${medians}`;
+    return formatRupees(String(applied));
   } catch {
     return formatRupees(race.seedLiquidity);
   }

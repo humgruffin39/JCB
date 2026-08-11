@@ -80,16 +80,25 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   await expect(page.locator('.condition-readout')).toContainText('1番 絶好調');
   await expect(page.locator('.condition-readout')).not.toContainText('excellent');
 
-  await expect(page.getByRole('combobox', { name: '距離' })).toHaveValue('1200');
-  await expect(
-    page.getByRole('combobox', { name: '距離' }).locator('option[value="1200"]'),
-  ).toHaveText('1200m');
+  await page.getByRole('button', { name: 'レースを作成' }).click();
+  const createDialog = page.getByRole('dialog', { name: 'レースを作成' });
+  await expect(createDialog).toBeVisible();
+  await expect(createDialog.getByLabel('開催日')).toBeFocused();
+  const distance = createDialog.getByRole('combobox', { name: '距離' });
+  await expect(distance).toHaveValue('1200');
+  await expect(distance.locator('option[value="1200"]')).toHaveText('1200m');
+  await expect(distance.locator('option')).toHaveCount(5);
+  await createDialog.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(createDialog).toBeHidden();
+  await expect(page.getByRole('button', { name: 'レースを作成' })).toBeFocused();
 
   await page.getByRole('button', { name: 'テスト記念の下書きを編集' }).click();
-  await expect(page.getByRole('combobox', { name: '1番' })).toHaveValue('horse-1');
-  await expect(page.getByRole('combobox', { name: '8番' })).toHaveValue('horse-8');
+  const editDialog = page.getByRole('dialog', { name: '下書きを編集' });
+  await expect(editDialog).toBeVisible();
+  await expect(editDialog.getByRole('combobox', { name: '1番' })).toHaveValue('horse-1');
+  await expect(editDialog.getByRole('combobox', { name: '8番' })).toHaveValue('horse-8');
   await expect(
-    page.getByRole('combobox', { name: '2番' }).locator('option[value="horse-1"]'),
+    editDialog.getByRole('combobox', { name: '2番' }).locator('option[value="horse-1"]'),
   ).toHaveCount(0);
 
   await expect(page.getByText('確定済み', { exact: true })).toBeVisible({ timeout: 8_000 });

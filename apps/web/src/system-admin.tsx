@@ -13,6 +13,8 @@ import { SettingsAdmin } from './settings-admin.js';
 import { AdministratorAdmin } from './administrator-admin.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
+type SystemSection = 'status' | 'jobs' | 'objects' | 'settings' | 'administrators' | 'audit';
+
 export function SystemAdmin() {
   const [health, setHealth] = useState<Record<string, unknown>>({});
   const [jobs, setJobs] = useState<readonly Record<string, string | null>[]>([]);
@@ -23,6 +25,7 @@ export function SystemAdmin() {
   }>({ discordMessages: [], timelineObjects: [] });
   const [operationError, setOperationError] = useState('');
   const [retryingJob, setRetryingJob] = useState<string>();
+  const [section, setSection] = useState<SystemSection>('status');
   const refresh = useCallback(async () => {
     const [nextHealth, nextJobs, nextAudit, nextObjects] = await Promise.all([
       apiRequest<unknown>('/api/v1/admin/health'),
@@ -66,159 +69,286 @@ export function SystemAdmin() {
     })();
   };
 
+  const sections = [
+    ['status', '状態'],
+    ['jobs', '自動処理'],
+    ['objects', '公開データ'],
+    ['settings', '運用設定'],
+    ['administrators', '管理者'],
+    ['audit', '監査ログ'],
+  ] as const;
+
   return (
-    <div className="system-layout">
-      <SettingsAdmin />
-      <AdministratorAdmin />
-      <TerminalPanel
-        heading="システム状態"
-        status={isInitialLoading ? '読み込み中' : systemNominal ? '正常' : '要確認'}
-      >
-        {refreshError === undefined ? null : (
-          <p className="field-error" role="alert">
-            {refreshError} システム情報を更新できません。
-          </p>
-        )}
-        {operationError === '' ? null : (
-          <p className="field-error" role="alert">
-            {operationError}
-          </p>
-        )}
-        {isInitialLoading ? (
-          <p role="status" aria-live="polite">
-            システム情報を読み込んでいます。
-          </p>
-        ) : (
-          <dl className="metric-list">
-            {Object.entries(health).map(([key, value]) => (
-              <div key={key}>
-                <dt>{HEALTH_LABELS[key] ?? key}</dt>
-                <dd>{formatHealthValue(key, value)}</dd>
+    <div className="admin-page">
+      <div className="admin-page__toolbar">
+        <h2>システム</h2>
+      </div>
+      <nav className="admin-subnav admin-subnav--wide" aria-label="システムメニュー" role="tablist">
+        {sections.map(([value, label]) => (
+          <button
+            key={value}
+            id={`system-tab-${value}`}
+            type="button"
+            role="tab"
+            aria-selected={section === value}
+            aria-controls="system-panel"
+            onClick={() => setSection(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {refreshError === undefined ? null : (
+        <p className="field-error" role="alert">
+          {refreshError} システム情報を更新できません。
+        </p>
+      )}
+      {operationError === '' ? null : (
+        <p className="field-error" role="alert">
+          {operationError}
+        </p>
+      )}
+      <div id="system-panel" role="tabpanel" aria-labelledby={`system-tab-${section}`} tabIndex={0}>
+        {section === 'settings' ? (
+          <SettingsAdmin />
+        ) : section === 'administrators' ? (
+          <AdministratorAdmin />
+        ) : section === 'status' ? (
+          <TerminalPanel
+            heading="システム状態"
+            status={isInitialLoading ? '読み込み中' : systemNominal ? '正常' : '要確認'}
+          >
+            {isInitialLoading ? (
+              <p role="status" aria-live="polite">
+                システム情報を読み込んでいます。
+              </p>
+            ) : (
+              <HealthReadout health={health} />
+            )}
+          </TerminalPanel>
+        ) : section === 'objects' ? (
+          <div className="admin-surface-grid">
+            <TerminalPanel
+              heading="Discord固定メッセージ"
+              status={`${String(objects.discordMessages.length)}件`}
+            >
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <caption className="visually-hidden">Discord固定メッセージ</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">用途</th>
+                      <th scope="col">レース</th>
+                      <th scope="col">チャンネルID</th>
+                      <th scope="col">メッセージID</th>
+                      <th scope="col">更新</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {objects.discordMessages.map((row) => (
+                      <tr key={String(row.id)}>
+                        <td>{discordPurposeLabel(String(row.purpose))}</td>
+                        <td>{String(row.raceName ?? 'ランキング')}</td>
+                        <td>{String(row.channelId)}</td>
+                        <td>{String(row.messageId)}</td>
+                        <td>{formatTimestamp(row.updatedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </dl>
-        )}
-      </TerminalPanel>
-      <TerminalPanel
-        heading="Discord固定メッセージ"
-        status={`${String(objects.discordMessages.length)}件`}
-      >
-        <div className="data-table-wrap">
-          <table className="data-table">
-            <caption className="visually-hidden">Discord固定メッセージ</caption>
-            <thead>
-              <tr>
-                <th scope="col">用途</th>
-                <th scope="col">レース</th>
-                <th scope="col">チャンネルID</th>
-                <th scope="col">メッセージID</th>
-                <th scope="col">更新</th>
-              </tr>
-            </thead>
-            <tbody>
-              {objects.discordMessages.map((row) => (
-                <tr key={String(row.id)}>
-                  <td>{discordPurposeLabel(String(row.purpose))}</td>
-                  <td>{String(row.raceName ?? 'ランキング')}</td>
-                  <td>{String(row.channelId)}</td>
-                  <td>{String(row.messageId)}</td>
-                  <td>{formatTimestamp(row.updatedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </TerminalPanel>
-      <TerminalPanel heading="観戦データ" status={`${String(objects.timelineObjects.length)}件`}>
-        <div className="data-table-wrap">
-          <table className="data-table">
-            <caption className="visually-hidden">観戦データ</caption>
-            <thead>
-              <tr>
-                <th scope="col">レース</th>
-                <th scope="col">版</th>
-                <th scope="col">状態</th>
-                <th scope="col">保存キー</th>
-                <th scope="col">整合性ハッシュ</th>
-                <th scope="col">完了</th>
-              </tr>
-            </thead>
-            <tbody>
-              {objects.timelineObjects.map((row, index) => (
-                <tr key={`${String(row.raceId)}-${String(row.raceVersion)}-${String(index)}`}>
-                  <td>{String(row.raceName)}</td>
-                  <td>{String(row.raceVersion)}</td>
-                  <td>{processStatusLabel(typeof row.status === 'string' ? row.status : null)}</td>
-                  <td>{String(row.objectKey)}</td>
-                  <td>{String(row.sha256)}</td>
-                  <td>{formatTimestamp(row.completedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </TerminalPanel>
-      <TerminalPanel heading="ジョブキュー" status={`${String(jobs.length)}件`}>
-        <div className="data-table-wrap">
-          <table className="data-table">
-            <caption className="visually-hidden">ジョブキュー</caption>
-            <thead>
-              <tr>
-                <th scope="col">種別</th>
-                <th scope="col">状態</th>
-                <th scope="col">試行</th>
-                <th scope="col">エラー</th>
-                <th scope="col">
-                  <span className="visually-hidden">操作</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((job) => {
-                const jobId = job.id;
-                return (
-                  <tr key={jobId}>
-                    <td>{jobTypeLabel(job.jobType ?? '')}</td>
-                    <td>{processStatusLabel(job.status)}</td>
-                    <td>{job.attemptCount}</td>
-                    <td>{job.lastErrorCode ?? '—'}</td>
-                    <td>
-                      {typeof jobId === 'string' &&
-                      (job.status === 'dead_letter' || job.status === 'retry_wait') ? (
-                        <button
-                          type="button"
-                          className="text-button"
-                          onClick={() => retryJob(jobId)}
-                          disabled={retryingJob !== undefined}
-                        >
-                          {retryingJob === jobId ? '再試行中…' : '再試行する'}
-                        </button>
-                      ) : null}
-                    </td>
+            </TerminalPanel>
+            <TerminalPanel
+              heading="観戦データ"
+              status={`${String(objects.timelineObjects.length)}件`}
+            >
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <caption className="visually-hidden">観戦データ</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">レース</th>
+                      <th scope="col">版</th>
+                      <th scope="col">状態</th>
+                      <th scope="col">保存キー</th>
+                      <th scope="col">整合性ハッシュ</th>
+                      <th scope="col">完了</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {objects.timelineObjects.map((row, index) => (
+                      <tr key={`${String(row.raceId)}-${String(row.raceVersion)}-${String(index)}`}>
+                        <td>{String(row.raceName)}</td>
+                        <td>{String(row.raceVersion)}</td>
+                        <td>
+                          {processStatusLabel(typeof row.status === 'string' ? row.status : null)}
+                        </td>
+                        <td>{String(row.objectKey)}</td>
+                        <td>{String(row.sha256)}</td>
+                        <td>{formatTimestamp(row.completedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </TerminalPanel>
+          </div>
+        ) : section === 'jobs' ? (
+          <TerminalPanel heading="ジョブキュー" status={`${String(jobs.length)}件`}>
+            <div className="data-table-wrap">
+              <table className="data-table">
+                <caption className="visually-hidden">ジョブキュー</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">種別</th>
+                    <th scope="col">状態</th>
+                    <th scope="col">試行</th>
+                    <th scope="col">エラー</th>
+                    <th scope="col">
+                      <span className="visually-hidden">操作</span>
+                    </th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </TerminalPanel>
-      <TerminalPanel heading="監査ログ" status="追記専用">
-        <ul className="audit-list">
-          {audit.slice(0, 100).map((row) => (
-            <li key={row.id}>
-              <time>{row.createdAt}</time>
-              <strong>{auditActionLabel(String(row.action))}</strong>
-              <span>
-                {auditTargetLabel(String(row.targetType))}：{row.targetId}
-              </span>
-              <small>{row.reason ?? ''}</small>
-            </li>
-          ))}
-        </ul>
-      </TerminalPanel>
+                </thead>
+                <tbody>
+                  {jobs.map((job) => {
+                    const jobId = job.id;
+                    return (
+                      <tr key={jobId}>
+                        <td>{jobTypeLabel(job.jobType ?? '')}</td>
+                        <td>{processStatusLabel(job.status)}</td>
+                        <td>{job.attemptCount}</td>
+                        <td>{job.lastErrorCode ?? '—'}</td>
+                        <td>
+                          {typeof jobId === 'string' &&
+                          (job.status === 'dead_letter' || job.status === 'retry_wait') ? (
+                            <button
+                              type="button"
+                              className="text-button"
+                              onClick={() => retryJob(jobId)}
+                              disabled={retryingJob !== undefined}
+                            >
+                              {retryingJob === jobId ? '再試行中…' : '再試行する'}
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </TerminalPanel>
+        ) : (
+          <TerminalPanel heading="監査ログ" status="追記専用">
+            <ul className="audit-list">
+              {audit.slice(0, 100).map((row) => (
+                <li key={row.id}>
+                  <time>{row.createdAt}</time>
+                  <strong>{auditActionLabel(String(row.action))}</strong>
+                  <span>
+                    {auditTargetLabel(String(row.targetType))}：{row.targetId}
+                  </span>
+                  <small>{row.reason ?? ''}</small>
+                </li>
+              ))}
+            </ul>
+          </TerminalPanel>
+        )}
+      </div>
     </div>
   );
 }
+
+function HealthReadout({ health }: { readonly health: Record<string, unknown> }) {
+  const shownKeys = new Set<string>();
+  return (
+    <div className="health-groups">
+      {HEALTH_GROUPS.map(({ heading, keys }) => {
+        const entries = keys
+          .filter((key) => Object.hasOwn(health, key))
+          .map((key) => {
+            shownKeys.add(key);
+            return [key, health[key]] as const;
+          });
+        if (entries.length === 0) return null;
+        return (
+          <section key={heading} className="health-group" aria-labelledby={`health-${heading}`}>
+            <h3 id={`health-${heading}`}>{heading}</h3>
+            <dl className="metric-list">
+              {entries.map(([key, value]) => (
+                <div key={key}>
+                  <dt>{HEALTH_LABELS[key] ?? key}</dt>
+                  <dd>{formatHealthValue(key, value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        );
+      })}
+      {Object.entries(health).some(([key]) => !shownKeys.has(key)) ? (
+        <section className="health-group" aria-labelledby="health-other">
+          <h3 id="health-other">その他</h3>
+          <dl className="metric-list">
+            {Object.entries(health)
+              .filter(([key]) => !shownKeys.has(key))
+              .map(([key, value]) => (
+                <div key={key}>
+                  <dt>{HEALTH_LABELS[key] ?? key}</dt>
+                  <dd>{formatHealthValue(key, value)}</dd>
+                </div>
+              ))}
+          </dl>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+const HEALTH_GROUPS = [
+  {
+    heading: '接続・稼働',
+    keys: [
+      'databaseReadWrite',
+      'discordGatewayConnected',
+      'schedulerStatus',
+      'r2AccessStatus',
+      'memoryStatus',
+    ],
+  },
+  {
+    heading: '台帳・残高',
+    keys: [
+      'ledgerProjectionValid',
+      'centralBankBalance',
+      'allAccountBalanceTotal',
+      'userBalanceTotal',
+      'poolBalanceTotal',
+      'carryoverBalance',
+      'seedLiquidityProfitLoss',
+      'reliefGrantedTotal',
+      'medianUserPoolByRaceKind',
+      'topTwentyPercentShareBasisPoints',
+      'thirtyDayMovementTotal',
+    ],
+  },
+  {
+    heading: 'バックアップ・保存',
+    keys: ['lastBackupSuccessAt', 'lastRestoreDrillAt', 'schedulerHeartbeatAt', 'r2LastAccessAt'],
+  },
+  {
+    heading: 'アプリケーション',
+    keys: [
+      'pendingJobs',
+      'deadJobs',
+      'discordMessageCount',
+      'timelineObjectCount',
+      'applicationVersion',
+      'simulationVersion',
+      'oddsVersion',
+      'residentSetBytes',
+    ],
+  },
+] as const;
 
 function formatHealthValue(key: string, value: unknown): string {
   if (value === null || value === undefined) return '未記録';

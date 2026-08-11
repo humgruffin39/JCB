@@ -1,7 +1,8 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useRef, useState, type FormEvent } from 'react';
 import { conditionLabel, horseStatusLabel } from './admin-labels.js';
 import { AbilitySlider } from './ability-slider.js';
+import { AdminDialog } from './admin-dialog.js';
 import { apiRequest } from './api.js';
 import { PreferenceSlider } from './preference-slider.js';
 import { useAdminPolling } from './use-admin-polling.js';
@@ -61,6 +62,8 @@ const COAT_LABELS: Readonly<Record<Horse['coatColor'], string>> = {
 export function HorseAdmin() {
   const [horses, setHorses] = useState<readonly Horse[]>([]);
   const [editing, setEditing] = useState<Horse>();
+  const [horseFormOpen, setHorseFormOpen] = useState(false);
+  const horseFormReturnFocus = useRef<HTMLElement | null>(null);
   const [performance, setPerformance] = useState<{
     readonly horse: Horse;
     readonly record: HorsePerformance;
@@ -71,9 +74,23 @@ export function HorseAdmin() {
   }, []);
   const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 10_000);
 
+  function openHorseForm(horse: Horse | undefined, trigger: HTMLElement): void {
+    setEditing(horse);
+    horseFormReturnFocus.current = trigger;
+    setHorseFormOpen(true);
+  }
+
   return (
-    <div className="admin-workspace">
-      <TerminalPanel heading="登録済みの馬">
+    <div className="admin-page">
+      <div className="admin-page__toolbar">
+        <div>
+          <h2>馬管理</h2>
+        </div>
+        <button type="button" onClick={(event) => openHorseForm(undefined, event.currentTarget)}>
+          馬を登録
+        </button>
+      </div>
+      <TerminalPanel heading="登録済みの馬" status={`${String(horses.length)}頭`}>
         {refreshError === undefined ? null : (
           <p className="field-error" role="alert">
             {refreshError} 馬の一覧を更新できません。
@@ -86,7 +103,7 @@ export function HorseAdmin() {
         ) : horses.length === 0 ? (
           <div className="empty-copy" role="status">
             <strong>馬が登録されていません</strong>
-            <span>右側のフォームから馬を登録できます。</span>
+            <span>上の「馬を登録」から追加できます。</span>
           </div>
         ) : (
           <div className="data-table-wrap">
@@ -123,7 +140,7 @@ export function HorseAdmin() {
                         <button
                           type="button"
                           className="text-button"
-                          onClick={() => setEditing(horse)}
+                          onClick={(event) => openHorseForm(horse, event.currentTarget)}
                         >
                           編集する
                         </button>
@@ -147,16 +164,23 @@ export function HorseAdmin() {
           </div>
         )}
       </TerminalPanel>
-      <HorseForm
-        key={editing?.id ?? 'new-horse'}
-        {...(editing === undefined ? {} : { horse: editing })}
-        onSaved={async (savedMessage) => {
-          setEditing(undefined);
-          setMessage(savedMessage);
-          await refreshNow();
-        }}
-        onCancel={() => setEditing(undefined)}
-      />
+      {horseFormOpen ? (
+        <HorseForm
+          key={editing?.id ?? 'new-horse'}
+          returnFocusRef={horseFormReturnFocus}
+          {...(editing === undefined ? {} : { horse: editing })}
+          onSaved={async (savedMessage) => {
+            setEditing(undefined);
+            setHorseFormOpen(false);
+            setMessage(savedMessage);
+            await refreshNow();
+          }}
+          onCancel={() => {
+            setEditing(undefined);
+            setHorseFormOpen(false);
+          }}
+        />
+      ) : null}
       {message === '' ? null : (
         <p className="admin-message" role="status">
           {message}
@@ -183,10 +207,7 @@ function HorsePerformancePanel({
   readonly onClose: () => void;
 }) {
   return (
-    <TerminalPanel
-      heading={`${horse.name}の戦績・出走履歴`}
-      status={`${String(record.starts)}戦 ${String(record.wins)}勝`}
-    >
+    <AdminDialog title={`${horse.name}の戦績・出走履歴`} onCancel={onClose}>
       <p>
         3着以内 {String(record.topThreeFinishes)}回
         {record.starts === 0
@@ -229,7 +250,7 @@ function HorsePerformancePanel({
       <button type="button" className="button-secondary" onClick={onClose}>
         閉じる
       </button>
-    </TerminalPanel>
+    </AdminDialog>
   );
 }
 
@@ -237,15 +258,20 @@ function HorseForm({
   horse,
   onSaved,
   onCancel,
+  returnFocusRef,
 }: {
   readonly horse?: Horse;
   readonly onSaved: (message: string) => Promise<void>;
   readonly onCancel: () => void;
+  readonly returnFocusRef: { readonly current: HTMLElement | null };
 }) {
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (isSubmitting) return;
     setError('');
+    setIsSubmitting(true);
     const form = new FormData(event.currentTarget);
     const payload = {
       name: String(form.get('name')),
@@ -270,11 +296,22 @@ function HorseForm({
       setError(
         caught instanceof Error ? caught.message : '保存できません。入力内容を確認してください。',
       );
+    } finally {
+      setIsSubmitting(false);
     }
   }
   return (
-    <TerminalPanel heading={horse === undefined ? '馬を登録' : '馬を編集'}>
-      <form className="terminal-form" onSubmit={(event) => void submit(event)}>
+    <AdminDialog
+      title={horse === undefined ? '馬を登録' : '馬を編集'}
+      onCancel={onCancel}
+      returnFocusRef={returnFocusRef}
+      canCancel={!isSubmitting}
+    >
+      <form
+        className="terminal-form"
+        aria-busy={isSubmitting}
+        onSubmit={(event) => void submit(event)}
+      >
         <div className="form-row">
           <label>
             馬名
@@ -318,12 +355,12 @@ function HorseForm({
           <div className="preference-grid">
             <PreferenceSlider
               name="distancePreference"
-              label="距離"
+              label="距離適性"
               initialValue={horse?.distancePreference ?? 0}
             />
             <PreferenceSlider
               name="surfacePreference"
-              label="コース"
+              label="コース適性"
               initialValue={horse?.surfacePreference ?? 0}
             />
           </div>
@@ -334,15 +371,20 @@ function HorseForm({
           </p>
         )}
         <div className="form-actions">
-          <button type="submit">{horse === undefined ? '馬を登録' : '変更を保存'}</button>
-          {horse === undefined ? null : (
-            <button type="button" className="button-secondary" onClick={onCancel}>
-              編集をやめる
-            </button>
-          )}
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? '保存中…' : horse === undefined ? '馬を登録' : '変更を保存'}
+          </button>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            キャンセル
+          </button>
         </div>
       </form>
-    </TerminalPanel>
+    </AdminDialog>
   );
 }
 

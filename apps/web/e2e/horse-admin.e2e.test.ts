@@ -26,9 +26,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('edits all abilities with accessible sliders and uses turf or dirt courses', async ({
-  page,
-}) => {
+test('opens compact forms and edits abilities with accessible number inputs', async ({ page }) => {
   await page.goto('/admin');
   await expect(page.locator('.app-shell--admin .masthead')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '運用コンソール' })).toHaveCount(0);
@@ -38,52 +36,63 @@ test('edits all abilities with accessible sliders and uses turf or dirt courses'
   await expect(page.locator('.app-shell--admin')).toHaveCSS('background-color', 'rgb(8, 8, 8)');
   expect((await page.locator('main').boundingBox())?.width).toBeLessThanOrEqual(1_152);
 
-  const course = page.getByLabel('コース');
+  await page.getByRole('button', { name: 'レースを作成' }).click();
+  const raceDialog = page.getByRole('dialog', { name: 'レースを作成' });
+  const course = raceDialog.getByLabel('コース');
   await expect(course).toHaveValue('turf');
   await expect(course.locator('option')).toHaveText(['芝', 'ダート']);
+  await raceDialog.getByRole('button', { name: 'キャンセル' }).click();
 
   await page.getByRole('tab', { name: '馬管理' }).click();
-  await expect(page.getByRole('group', { name: '基本能力' })).toBeVisible();
-  await expect(page.getByRole('group', { name: '適性' })).toBeVisible();
-  await expect(page.getByText('ノビ', { exact: true })).toBeVisible();
-  await expect(page.getByText('末脚', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('各能力を0〜100で設定します。')).toHaveCount(0);
+  await page.getByRole('button', { name: '馬を登録' }).click();
+  const horseDialog = page.getByRole('dialog', { name: '馬を登録' });
+  await expect(horseDialog).toBeVisible();
+  await expect(horseDialog.getByLabel('馬名')).toBeFocused();
+
+  await expect(horseDialog.getByRole('group', { name: '基本能力' })).toBeVisible();
+  await expect(horseDialog.getByRole('group', { name: '適性' })).toBeVisible();
+  await expect(horseDialog.getByText('ノビ', { exact: true })).toBeVisible();
+  await expect(horseDialog.getByText('末脚', { exact: true })).toHaveCount(0);
+  await expect(horseDialog.getByText('各能力を0〜100で設定します。')).toHaveCount(0);
   await expect(
-    page.getByText('中央は補正なし。片側へ寄せると、反対側では同じ分だけ不利になります。'),
+    horseDialog.getByText('中央は補正なし。片側へ寄せると、反対側では同じ分だけ不利になります。'),
   ).toHaveCount(0);
-  await expect(page.getByText('中立', { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('毛色')).toHaveValue('chestnut');
-  await expect(page.getByLabel('毛色').locator('option')).toHaveText([
+  await expect(horseDialog.getByText('中立', { exact: true })).toHaveCount(0);
+  await expect(horseDialog.getByLabel('毛色')).toHaveValue('chestnut');
+  await expect(horseDialog.getByLabel('毛色').locator('option')).toHaveText([
     '黒',
     '栗毛',
     'グレー',
     'クリーム',
   ]);
-  await expect(page.getByRole('slider')).toHaveCount(8);
-  await expect(page.locator('.preference-slider__scale')).toHaveCount(0);
+  await expect(horseDialog.getByRole('spinbutton')).toHaveCount(8);
+  await expect(horseDialog.locator('.preference-slider__scale')).toHaveCount(0);
 
-  const distance = page.getByRole('slider', { name: '距離' });
-  await distance.focus();
-  await distance.press('ArrowRight');
-  await expect(distance).toHaveValue('1');
-  await expect(page.locator('output').filter({ hasText: /^1$/ })).toBeVisible();
+  const distance = horseDialog.getByRole('spinbutton', { name: '距離適性' });
+  await distance.fill('-50');
+  await distance.blur();
+  await expect(distance).toHaveValue('-50');
+  await expect(horseDialog.locator('output').filter({ hasText: /^-50$/ })).toBeVisible();
 
-  const preference = page.getByRole('slider', { name: 'コース' });
-  await preference.press('Home');
+  const preference = horseDialog.getByRole('spinbutton', { name: 'コース適性' });
+  await preference.fill('-100');
+  await preference.blur();
   await expect(preference).toHaveValue('-100');
-  await expect(page.locator('output').filter({ hasText: /^-100$/ })).toBeVisible();
-  await preference.press('End');
+  await expect(horseDialog.locator('output').filter({ hasText: /^-100$/ })).toBeVisible();
+  await preference.fill('100');
+  await preference.blur();
   await expect(preference).toHaveValue('100');
-  await expect(page.locator('output').filter({ hasText: /^100$/ })).toBeVisible();
+  await expect(horseDialog.locator('output').filter({ hasText: /^100$/ })).toBeVisible();
+  await expect(horseDialog.getByRole('spinbutton', { name: 'スピード' })).toHaveValue('50');
 
   const outputFont = await page
     .locator('.ability-slider output')
     .first()
     .evaluate((element) => getComputedStyle(element).fontFamily);
   expect(outputFont).toContain('Noto Sans JP Variable');
-  await expect(page.locator('.preference-slider input').first()).toHaveCSS(
-    'accent-color',
-    'rgb(240, 240, 240)',
+  await expect(horseDialog.locator('.preference-slider > input').first()).toHaveCSS(
+    'border-left-color',
+    'rgb(98, 98, 98)',
   );
   const coloredAdminValues = await page.locator('.app-shell--admin').evaluate((root) => {
     const elements = [root, ...root.querySelectorAll('*')];

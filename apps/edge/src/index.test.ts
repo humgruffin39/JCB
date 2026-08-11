@@ -1,5 +1,5 @@
 import { createEdgeAccessToken, signReleaseManifest } from '@jcb/application';
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleEdgeRequest, type Bindings } from './index.js';
 
@@ -7,6 +7,8 @@ const now = 1_800_000_000_000;
 const guildId = '123456789';
 const raceId = 'race-edge-test';
 const webOrigin = 'https://racing.example.test';
+const timelineBody = new Uint8Array([1, 2, 3, 4]);
+const timelineSha256 = createHash('sha256').update(timelineBody).digest('hex');
 const tokenKeys = generateKeyPairSync('ed25519');
 const manifestKeys = generateKeyPairSync('ed25519');
 const tokenPrivateKey = tokenKeys.privateKey.export({
@@ -97,13 +99,41 @@ describe('Cloudflare release edge', () => {
       validToken(),
       environment(signedManifest(now - 1_000), {
         raceid: raceId,
-        sha256: 'a'.repeat(64),
+        sha256: timelineSha256,
         codecversion: 'json-gzip-v1',
       }),
     );
     expect(response.status).toBe(200);
     const body = (await response.json()) as { result: { scheduledStart: number } };
     expect(body.result.scheduledStart).toBe(now - 1_000);
+  });
+
+  it('serves timeline bytes after verifying their SHA-256', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const response = await requestTimeline(validToken(), environment(signedManifest(now - 1_000)));
+
+    expect(response.status).toBe(200);
+    await expect(response.arrayBuffer()).resolves.toEqual(timelineBody.buffer);
+  });
+
+  it('rejects a timeline whose body does not match the signed SHA-256', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const response = await requestTimeline(
+      validToken(),
+      environment(
+        signedManifest(now - 1_000),
+        {
+          raceid: raceId,
+          sha256: timelineSha256,
+        },
+        new Uint8Array([9, 8, 7, 6]),
+      ),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'TIMELINE_INTEGRITY_INVALID' },
+    });
   });
 
   it('rejects a release whose timeline metadata is invalid', async () => {
@@ -125,6 +155,18 @@ describe('Cloudflare release edge', () => {
 function requestRelease(token: string, bindings: Bindings): Promise<Response> {
   return handleEdgeRequest(
     new Request(`https://edge.example.test/edge/v1/races/${raceId}/release`, {
+      headers: {
+        origin: webOrigin,
+        authorization: `Bearer ${token}`,
+      },
+    }),
+    bindings,
+  );
+}
+
+function requestTimeline(token: string, bindings: Bindings): Promise<Response> {
+  return handleEdgeRequest(
+    new Request(`https://edge.example.test/edge/v1/races/${raceId}/timeline`, {
       headers: {
         origin: webOrigin,
         authorization: `Bearer ${token}`,
@@ -156,7 +198,7 @@ function signedManifest(scheduledStart: number) {
       scheduledStart,
       timelineDuration: 60_000,
       ciphertextObjectKey: `race-timelines/${raceId}/1.bin`,
-      ciphertextSha256: 'a'.repeat(64),
+      ciphertextSha256: timelineSha256,
       codecVersion: 'json-gzip-v1',
       simulationVersion: 'sim-v1',
       iv: Buffer.alloc(12, 1).toString('base64'),
@@ -168,8 +210,11 @@ function signedManifest(scheduledStart: number) {
 
 function environment(
   manifest: ReturnType<typeof signedManifest>,
-  timelineMetadata: Record<string, string> = { raceid: raceId, sha256: 'a'.repeat(64) },
+  timelineMetadata: Record<string, string> = { raceid: raceId, sha256: timelineSha256 },
+  body: Uint8Array = timelineBody,
 ): Bindings {
+  const bodyBuffer = new ArrayBuffer(body.byteLength);
+  new Uint8Array(bodyBuffer).set(body);
   return {
     TIMELINE_BUCKET: {
       async get(key) {
@@ -183,7 +228,7 @@ function environment(
         }
         if (key === manifest.manifest.ciphertextObjectKey) {
           return {
-            body: new Blob([new Uint8Array(32)]).stream(),
+            body: new Blob([bodyBuffer]).stream(),
             customMetadata: timelineMetadata,
             async json() {
               return {};

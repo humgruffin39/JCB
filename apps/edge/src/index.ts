@@ -109,9 +109,13 @@ export async function handleEdgeRequest(
     const headers = corsHeaders(environment.WEB_ORIGIN);
     headers.set('cache-control', 'private, max-age=60');
     if (match[2] === 'timeline') {
+      const timelineBytes = await new Response(timelineObject.body).arrayBuffer();
+      if ((await sha256Hex(timelineBytes)) !== manifest.ciphertextSha256) {
+        return errorResponse(409, 'TIMELINE_INTEGRITY_INVALID', environment.WEB_ORIGIN);
+      }
       headers.set('content-type', 'application/octet-stream');
       headers.set('x-content-type-options', 'nosniff');
-      return new Response(timelineObject.body, { status: 200, headers });
+      return new Response(timelineBytes, { status: 200, headers });
     }
     const timelineKey = await deriveTimelineKey(
       environment.TIMELINE_MASTER_SECRET,
@@ -292,6 +296,11 @@ function bytesToBase64(value: Uint8Array): string {
   let binary = '';
   for (const byte of value) binary += String.fromCharCode(byte);
   return btoa(binary);
+}
+
+async function sha256Hex(value: ArrayBuffer): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', value));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function webBuffer(value: Uint8Array): ArrayBuffer {

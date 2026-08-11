@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HorseAdmin } from './horse-admin.js';
 import { RaceAdmin } from './race-admin.js';
 import { SystemAdmin } from './system-admin.js';
@@ -26,6 +26,14 @@ export function AdminTerminal() {
     setSection(nextSection);
     tabRefs.current[nextSection]?.focus();
   };
+  useEffect(() => {
+    const handleAuthExpired = (): void => {
+      sessionStorage.removeItem('jcb.csrf');
+      window.location.assign('/admin');
+    };
+    window.addEventListener('jcb:auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('jcb:auth-expired', handleAuthExpired);
+  }, []);
   return (
     <div className="admin-terminal">
       <h1 className="visually-hidden">管理</h1>

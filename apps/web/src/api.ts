@@ -68,11 +68,25 @@ async function apiRequestInternal<Result>(
       if (sessionStorage.getItem('jcb.csrf') === csrfToken) await refreshCsrfToken();
       return apiRequestInternal<Result>(path, init, false);
     }
-    throw new ApiRequestError(
+    const requestError = new ApiRequestError(
       error.success ? error.data.error.message : `API error ${String(response.status)}`,
       response.status,
       error.success ? error.data.error.code : undefined,
     );
+    if (
+      typeof window !== 'undefined' &&
+      requestError.code !== undefined &&
+      [
+        'AUTH_REQUIRED',
+        'ADMIN_REQUIRED',
+        'GUILD_MEMBERSHIP_REQUIRED',
+        'CSRF_TOKEN_INVALID',
+        'CSRF_TOKEN_REQUIRED',
+      ].includes(requestError.code)
+    ) {
+      window.dispatchEvent(new Event('jcb:auth-expired'));
+    }
+    throw requestError;
   }
   if (
     typeof body !== 'object' ||

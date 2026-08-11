@@ -224,16 +224,23 @@ async function confirmPurchase(
   session: PurchaseSession,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
-  requireStep(session, 'confirm');
+  if (session.step !== 'confirm' && session.step !== 'completed') {
+    throw new Error('Purchase session step is stale.');
+  }
   await interaction.deferUpdate();
-  const currentVersion = await dependencies.gateway.currentRaceVersion(session.raceId);
-  if (currentVersion !== session.raceVersion) throw new Error('Race version changed.');
+  if (session.step === 'confirm') {
+    const currentVersion = await dependencies.gateway.currentRaceVersion(session.raceId);
+    if (currentVersion !== session.raceVersion) throw new Error('Race version changed.');
+  }
   const poolType = parsePoolType(session.payload.poolType);
   const stake = session.payload.stake;
   const selectionCode = session.payload.selectionCode;
   if (stake === undefined || selectionCode === undefined)
     throw new Error('Purchase is incomplete.');
-  dependencies.sessions.update(session.id, 'confirm', 'processing', session.payload);
+  const needsProcessingTransition = session.step === 'confirm';
+  if (needsProcessingTransition) {
+    dependencies.sessions.update(session.id, 'confirm', 'processing', session.payload);
+  }
   let receipt: PurchaseReceipt;
   try {
     receipt = await dependencies.gateway.purchase({
@@ -246,15 +253,19 @@ async function confirmPurchase(
       interactionId: interaction.id,
       operationId: session.id,
     });
-    dependencies.sessions.update(session.id, 'processing', 'completed', {
-      ...session.payload,
-      betId: receipt.betId,
-    });
+    if (needsProcessingTransition) {
+      dependencies.sessions.update(session.id, 'processing', 'completed', {
+        ...session.payload,
+        betId: receipt.betId,
+      });
+    }
   } catch (error) {
-    try {
-      dependencies.sessions.update(session.id, 'processing', 'confirm', session.payload);
-    } catch {
-      // Preserve the original purchase error if the session changed concurrently.
+    if (needsProcessingTransition) {
+      try {
+        dependencies.sessions.update(session.id, 'processing', 'confirm', session.payload);
+      } catch {
+        // Preserve the original purchase error if the session changed concurrently.
+      }
     }
     throw error;
   }

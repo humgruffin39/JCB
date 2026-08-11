@@ -80,9 +80,6 @@ export function SystemAdmin() {
 
   return (
     <div className="admin-page">
-      <div className="admin-page__toolbar">
-        <h2>システム</h2>
-      </div>
       <nav className="admin-subnav admin-subnav--wide" aria-label="システムメニュー" role="tablist">
         {sections.map(([value, label]) => (
           <button

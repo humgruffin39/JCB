@@ -1,5 +1,5 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   accountTypeLabel,
   betStatusLabel,
@@ -90,27 +90,29 @@ export function CurrencyAdmin() {
 
   if (economy === undefined) {
     return (
-      <TerminalPanel heading="通貨管理" status="読み込み中">
-        {refreshError === undefined ? null : (
-          <p className="field-error" role="alert">
-            {refreshError} 通貨データを取得できません。時間をおいて再確認してください。
+      <div className="admin-page">
+        <TerminalPanel heading="通貨データ" status="読み込み中">
+          {refreshError === undefined ? null : (
+            <p className="field-error" role="alert">
+              {refreshError} 通貨データを取得できません。時間をおいて再確認してください。
+            </p>
+          )}
+          <p role="status" aria-live="polite">
+            {isInitialLoading ? '通貨データを読み込んでいます。' : '通貨データを表示できません。'}
           </p>
-        )}
-        <p role="status" aria-live="polite">
-          {isInitialLoading ? '通貨データを読み込んでいます。' : '通貨データを表示できません。'}
-        </p>
-      </TerminalPanel>
+        </TerminalPanel>
+      </div>
     );
   }
 
+  const adjustmentAction: ReactNode = (
+    <button type="button" onClick={() => setAdjustmentOpen(true)}>
+      残高を補正
+    </button>
+  );
+
   return (
     <div className="admin-page">
-      <div className="admin-page__toolbar">
-        <h2>通貨管理</h2>
-        <button type="button" onClick={() => setAdjustmentOpen(true)}>
-          残高を補正
-        </button>
-      </div>
       <nav className="admin-subnav" aria-label="通貨管理メニュー" role="tablist">
         {(
           [
@@ -154,6 +156,7 @@ export function CurrencyAdmin() {
           <div className="admin-surface-grid">
             <OperationTable
               heading="口座残高"
+              headerAction={adjustmentAction}
               rows={economy.accounts}
               columns={[
                 ['displayName', '名義'],
@@ -187,6 +190,7 @@ export function CurrencyAdmin() {
         ) : section === 'bets' ? (
           <OperationTable
             heading="馬券履歴"
+            headerAction={adjustmentAction}
             rows={economy.bets}
             columns={[
               ['raceDate', '開催日'],
@@ -204,6 +208,7 @@ export function CurrencyAdmin() {
           <div className="admin-surface-grid">
             <OperationTable
               heading="精算・返金履歴"
+              headerAction={adjustmentAction}
               rows={economy.settlements}
               columns={[
                 ['createdAt', '記録時刻'],
@@ -228,6 +233,7 @@ export function CurrencyAdmin() {
         ) : section === 'profit-loss' ? (
           <OperationTable
             heading="初期流動性の損益"
+            headerAction={adjustmentAction}
             rows={economy.seedPositions}
             columns={[
               ['raceDate', '開催日'],
@@ -243,6 +249,7 @@ export function CurrencyAdmin() {
         ) : (
           <OperationTable
             heading="台帳明細"
+            headerAction={adjustmentAction}
             rows={ledger}
             columns={[
               ['createdAt', '記録時刻'],
@@ -382,17 +389,23 @@ function AdjustmentReviewDialog({
 
 function OperationTable({
   heading,
+  headerAction,
   rows,
   columns,
   moneyColumns = new Set<string>(),
 }: {
   readonly heading: string;
+  readonly headerAction?: ReactNode;
   readonly rows: readonly OperationRow[];
   readonly columns: readonly (readonly [string, string])[];
   readonly moneyColumns?: ReadonlySet<string>;
 }) {
   return (
-    <TerminalPanel heading={heading} status={`${String(rows.length)}件`}>
+    <TerminalPanel
+      heading={heading}
+      status={`${String(rows.length)}件`}
+      headerAction={headerAction}
+    >
       <div className="data-table-wrap">
         <table className="data-table">
           <caption className="visually-hidden">{heading}</caption>

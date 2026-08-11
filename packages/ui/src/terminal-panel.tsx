@@ -20,12 +20,12 @@ export function TerminalPanel({
   return (
     <Element className={`terminal-panel ${className}`.trim()} {...properties}>
       <header className="terminal-panel__header">
-        <h2>{heading}</h2>
-        {headerAction === undefined && status === undefined ? null : (
-          <div className="terminal-panel__header-actions">
-            {headerAction}
-            {status === undefined ? null : <span className="status-readout">{status}</span>}
-          </div>
+        <div className="terminal-panel__heading">
+          <h2>{heading}</h2>
+          {status === undefined ? null : <span className="status-readout">{status}</span>}
+        </div>
+        {headerAction === undefined ? null : (
+          <div className="terminal-panel__header-actions">{headerAction}</div>
         )}
       </header>
       <div className="terminal-panel__body">{children}</div>

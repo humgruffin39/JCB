@@ -471,6 +471,13 @@ main {
   font: 650 0.95rem/1.3 var(--font-display);
 }
 
+.terminal-panel__heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
 .terminal-panel__header-actions {
   display: flex;
   min-width: 0;
@@ -503,6 +510,7 @@ main {
 .status-readout {
   color: var(--muted);
   font: 500 0.75rem/1 var(--font-display);
+  white-space: nowrap;
 }
 
 .horse-list,
@@ -712,25 +720,6 @@ main {
   display: grid;
   min-width: 0;
   gap: var(--space-2);
-}
-
-.admin-page__toolbar {
-  display: flex;
-  min-height: 2.5rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
-.admin-page__toolbar h2 {
-  margin: 0;
-  font: 650 1rem/1.2 var(--font-display);
-}
-
-.admin-page__toolbar p {
-  margin: 0.15rem 0 0;
-  color: var(--muted);
-  font-size: 0.72rem;
 }
 
 .admin-subnav {
@@ -1411,14 +1400,6 @@ main {
   .form-row,
   .entry-selects {
     grid-template-columns: 1fr;
-  }
-
-  .admin-page__toolbar {
-    align-items: flex-start;
-  }
-
-  .admin-page__toolbar h2 {
-    font-size: 0.92rem;
   }
 
   .admin-dialog {

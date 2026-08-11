@@ -243,6 +243,13 @@ export class SqliteAdminStore {
       )
       .get() as { id: string } | undefined;
     if (bank === undefined) throw new Error('Central bank account is missing.');
+    const target = this.database
+      .prepare('SELECT account_type AS accountType FROM accounts WHERE id = ?')
+      .get(input.targetAccountId) as { accountType: string } | undefined;
+    if (target === undefined) throw new Error('Target account is missing.');
+    if (target.accountType !== 'user') {
+      throw new Error('Only user accounts can receive administrative balance adjustments.');
+    }
     const magnitude = money(input.signedAmount < 0n ? -input.signedAmount : input.signedAmount);
     const entries =
       input.signedAmount > 0n

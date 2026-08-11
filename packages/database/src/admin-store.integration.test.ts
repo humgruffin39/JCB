@@ -101,6 +101,18 @@ describe('admin operational store', () => {
     expect(() => admin.adjustBalance({ ...adjustment, signedAmount: 500n })).toThrow(
       /different ledger transaction/i,
     );
+    const centralBank = database
+      .prepare(
+        "SELECT id FROM accounts WHERE account_type = 'central_bank' AND owner_key = 'global'",
+      )
+      .get() as { id: string };
+    expect(() =>
+      admin.adjustBalance({
+        ...adjustment,
+        targetAccountId: centralBank.id,
+        idempotencyKey: 'admin-adjustment:central-bank',
+      }),
+    ).toThrow(/only user accounts/i);
     database.close();
   });
 

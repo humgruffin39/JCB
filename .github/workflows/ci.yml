@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       skip_verify:
-        description: 'CSS・文言など、検証省略を確認済みの変更だけ有効化'
+        description: Skip Verify
         required: false
         default: false
         type: boolean

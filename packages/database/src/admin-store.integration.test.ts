@@ -5,6 +5,7 @@ import { timestamp } from '@jcb/domain';
 import { SqliteAdminStore } from './admin-store.js';
 import { openDatabase } from './connection.js';
 import { SqliteGameStore, type HorseWrite } from './game-store.js';
+import { SqliteJobStore } from './job-store.js';
 import { applyMigrations } from './migrations.js';
 
 const horseBase: Omit<HorseWrite, 'name'> = {
@@ -120,6 +121,41 @@ describe('admin operational store', () => {
         reason: 'test final administrator protection',
       }),
     ).toThrow(/final administrator/i);
+    database.close();
+  });
+
+  it('resets attempts when a dead-letter job is manually retried', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    const jobs = new SqliteJobStore(database, () => 0.5);
+    const admin = new SqliteAdminStore(database, () => 1);
+    const queued = jobs.enqueue({
+      jobType: 'simulate_race',
+      deduplicationKey: 'simulate:manual-retry',
+      payload: { raceId: 'race-1' },
+      runAt: timestamp(100),
+    });
+    database
+      .prepare(
+        `UPDATE scheduled_jobs SET status = 'dead_letter', attempt_count = 3,
+         last_error_code = 'TEST', last_error_redacted = 'redacted' WHERE id = ?`,
+      )
+      .run(queued.id);
+
+    admin.retryJob(queued.id, timestamp(200));
+
+    expect(jobs.getByDeduplicationKey(queued.deduplicationKey)).toMatchObject({
+      status: 'pending',
+      attemptCount: 0,
+      runAt: timestamp(200),
+    });
+    const retried = jobs.claimDue(timestamp(200), 'worker');
+    expect(retried?.attemptCount).toBe(1);
+    expect(jobs.fail(retried!.id, 'worker', timestamp(200), 'TEST', 'redacted')).toBe('retry_wait');
     database.close();
   });
 });

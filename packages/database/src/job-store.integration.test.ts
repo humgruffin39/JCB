@@ -101,7 +101,57 @@ describe('SQLite job store', () => {
     expect(first).toBeDefined();
     expect(store.claimDue(timestamp(100), 'worker-b')).toBeUndefined();
     expect(store.reclaimStale(timestamp(10_000), 5_000)).toBe(1);
-    expect(store.claimDue(timestamp(10_000), 'worker-b')?.id).toBe(first?.id);
+    const resumed = store.claimDue(timestamp(10_000), 'worker-b');
+    expect(resumed?.id).toBe(first?.id);
+    expect(() => store.complete(first!.id, 'worker-a', timestamp(10_001))).toThrow(
+      /lost its lock/i,
+    );
+    expect(() => store.fail(first!.id, 'worker-a', timestamp(10_001), 'STALE', 'stale')).toThrow(
+      /lost its lock/i,
+    );
+    expect(
+      database
+        .prepare('SELECT status, locked_by AS lockedBy FROM scheduled_jobs WHERE id = ?')
+        .get(first!.id),
+    ).toEqual({ status: 'running', lockedBy: 'worker-b' });
+    database.close();
+  });
+
+  it('reports failure when the lease is lost before the failure update', () => {
+    let leaseRevoked = false;
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    const store = new SqliteJobStore(database, () => {
+      leaseRevoked = true;
+      database
+        .prepare(
+          `UPDATE scheduled_jobs SET status = 'retry_wait', locked_at = NULL, locked_by = NULL
+           WHERE deduplication_key = 'simulate:failure-race'`,
+        )
+        .run();
+      return 0.5;
+    });
+    const queued = store.enqueue({
+      jobType: 'simulate_race',
+      deduplicationKey: 'simulate:failure-race',
+      payload: { raceId: 'race-1' },
+      runAt: timestamp(100),
+    });
+    const jobId = store.claimDue(timestamp(100), 'worker')?.id;
+    expect(jobId).toBe(queued.id);
+    expect(() => store.fail(jobId!, 'worker', timestamp(100), 'TEST', 'redacted')).toThrow(
+      /lost its lock/i,
+    );
+    expect(leaseRevoked).toBe(true);
+    expect(
+      database
+        .prepare('SELECT status, locked_by AS lockedBy FROM scheduled_jobs WHERE id = ?')
+        .get(jobId),
+    ).toEqual({ status: 'running', lockedBy: 'worker' });
     database.close();
   });
 

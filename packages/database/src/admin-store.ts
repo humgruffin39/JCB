@@ -288,7 +288,9 @@ export class SqliteAdminStore {
     const result = this.database
       .prepare(
         `UPDATE scheduled_jobs SET status = 'pending', run_at = ?, locked_at = NULL,
-         locked_by = NULL, last_error_code = NULL, last_error_redacted = NULL, updated_at = ?
+         locked_by = NULL,
+         attempt_count = CASE WHEN status = 'dead_letter' THEN 0 ELSE attempt_count END,
+         last_error_code = NULL, last_error_redacted = NULL, updated_at = ?
          WHERE id = ? AND status IN ('retry_wait', 'dead_letter')`,
       )
       .run(BigInt(at), BigInt(at), jobId);

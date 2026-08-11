@@ -138,38 +138,42 @@ export class SqliteJobStore implements JobStore {
     errorCode: string,
     redactedMessage: string,
   ): JobStatus {
-    const row = this.database
-      .prepare(
-        `SELECT id, job_type AS jobType, deduplication_key AS deduplicationKey,
-                payload_json AS payloadJson, run_at AS runAt, status,
-                attempt_count AS attemptCount
-         FROM scheduled_jobs WHERE id = ? AND status = 'running' AND locked_by = ?`,
-      )
-      .get(jobId, workerId) as JobRow | undefined;
-    if (row === undefined) throw new Error('Job failure lost its lock.');
-    const jobType = parseJobType(row.jobType);
-    const isDeadLetter = Number(row.attemptCount) >= MAX_ATTEMPTS[jobType];
-    const status: JobStatus = isDeadLetter ? 'dead_letter' : 'retry_wait';
-    const exponent = Math.min(Number(row.attemptCount) - 1, 10);
-    const backoff = Math.round(1_000 * 2 ** exponent * (0.75 + this.jitter() * 0.5));
-    const nextRunAt = isDeadLetter ? now : timestamp(now + backoff);
-    this.database
-      .prepare(
-        `UPDATE scheduled_jobs
-         SET status = ?, run_at = ?, locked_at = NULL, locked_by = NULL,
-             last_error_code = ?, last_error_redacted = ?, updated_at = ?
-         WHERE id = ? AND status = 'running' AND locked_by = ?`,
-      )
-      .run(
-        status,
-        BigInt(nextRunAt),
-        errorCode.slice(0, 80),
-        redactedMessage.slice(0, 300),
-        BigInt(now),
-        jobId,
-        workerId,
-      );
-    return status;
+    const fail = this.database.transaction(() => {
+      const row = this.database
+        .prepare(
+          `SELECT id, job_type AS jobType, deduplication_key AS deduplicationKey,
+                  payload_json AS payloadJson, run_at AS runAt, status,
+                  attempt_count AS attemptCount
+           FROM scheduled_jobs WHERE id = ? AND status = 'running' AND locked_by = ?`,
+        )
+        .get(jobId, workerId) as JobRow | undefined;
+      if (row === undefined) throw new Error('Job failure lost its lock.');
+      const jobType = parseJobType(row.jobType);
+      const isDeadLetter = Number(row.attemptCount) >= MAX_ATTEMPTS[jobType];
+      const status: JobStatus = isDeadLetter ? 'dead_letter' : 'retry_wait';
+      const exponent = Math.min(Number(row.attemptCount) - 1, 10);
+      const backoff = Math.round(1_000 * 2 ** exponent * (0.75 + this.jitter() * 0.5));
+      const nextRunAt = isDeadLetter ? now : timestamp(now + backoff);
+      const result = this.database
+        .prepare(
+          `UPDATE scheduled_jobs
+           SET status = ?, run_at = ?, locked_at = NULL, locked_by = NULL,
+               last_error_code = ?, last_error_redacted = ?, updated_at = ?
+           WHERE id = ? AND status = 'running' AND locked_by = ?`,
+        )
+        .run(
+          status,
+          BigInt(nextRunAt),
+          errorCode.slice(0, 80),
+          redactedMessage.slice(0, 300),
+          BigInt(now),
+          jobId,
+          workerId,
+        );
+      if (result.changes !== 1) throw new Error('Job failure lost its lock.');
+      return status;
+    });
+    return fail.immediate();
   }
 
   public reclaimStale(now: Timestamp, staleAfterMilliseconds: number): number {

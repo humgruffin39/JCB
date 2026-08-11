@@ -15,9 +15,10 @@ import {
   SqliteRaceLifecycleStore,
   SqliteRacePreparationRepository,
   publishPendingObjects,
+  type RaceRecord,
   type SqliteDatabase,
 } from '@jcb/database';
-import { timestamp, toJstDateKey, type Clock } from '@jcb/domain';
+import { timestamp, toJstDateKey, type Clock, type Timestamp } from '@jcb/domain';
 import type { Client } from 'discord.js';
 import type { BackupProbe } from './backup-probe.js';
 import { publishRaceMessage } from './discord-gateway.js';
@@ -176,115 +177,87 @@ function createHandlers(
   return {
     async simulate_race(job) {
       const id = raceId(job);
-      const seedPlan = gameStore.planSeedLiquidity(id);
-      await sendAdminNotice(dependencies, {
-        level: 'info',
-        title: 'レースのシミュレーションを開始しました',
-        fields: [{ name: 'レースID', value: id }],
-      });
-      let completion;
-      try {
-        completion = await prepareRace(id, {
-          repository: new SqliteRacePreparationRepository(
-            dependencies.database,
-            () => dependencies.clock.now(),
+      const raceBeforePreparation = gameStore.getRace(id);
+      const prepared = loadPreparedRaceTiming(
+        dependencies.database,
+        id,
+        raceBeforePreparation.version,
+      );
+      let timelineDurationMs: number;
+      if (prepared !== undefined) {
+        timelineDurationMs = prepared.timelineDurationMs;
+      } else {
+        const seedPlan = gameStore.planSeedLiquidity(id);
+        await sendAdminNotice(dependencies, {
+          level: 'info',
+          title: 'レースのシミュレーションを開始しました',
+          fields: [{ name: 'レースID', value: id }],
+        });
+        let completion;
+        try {
+          completion = await prepareRace(id, {
+            repository: new SqliteRacePreparationRepository(
+              dependencies.database,
+              () => dependencies.clock.now(),
+              resultMasterSecret,
+            ),
+            timelineStore: dependencies.timelineStore,
+            probabilityGenerator: new WorkerProbabilityGenerator(),
+            timelineMasterSecret,
             resultMasterSecret,
-          ),
-          timelineStore: dependencies.timelineStore,
-          probabilityGenerator: new WorkerProbabilityGenerator(),
-          timelineMasterSecret,
-          resultMasterSecret,
-          manifestPrivateKey,
-          seedLiquidity: seedPlan.liquidity,
-        });
-      } catch (error) {
+            manifestPrivateKey,
+            seedLiquidity: seedPlan.liquidity,
+          });
+        } catch (error) {
+          await sendAdminNotice(dependencies, {
+            level: 'error',
+            title: 'レースのシミュレーションに失敗しました',
+            description: 'エラー内容を確認してください。',
+            fields: [
+              { name: 'レースID', value: id },
+              {
+                name: 'エラー内容',
+                value:
+                  error instanceof Error
+                    ? error.message.slice(0, 160)
+                    : '原因を特定できませんでした。',
+              },
+            ],
+          });
+          throw error;
+        }
         await sendAdminNotice(dependencies, {
-          level: 'error',
-          title: 'レースのシミュレーションに失敗しました',
-          description: 'エラー内容を確認してください。',
+          level: 'success',
+          title: 'レースのシミュレーションが完了しました',
+          description: '観戦用データを保存しました。',
           fields: [
             { name: 'レースID', value: id },
-            {
-              name: 'エラー内容',
-              value:
-                error instanceof Error
-                  ? error.message.slice(0, 160)
-                  : '原因を特定できませんでした。',
-            },
+            { name: '保存先', value: 'R2', inline: true },
           ],
         });
-        throw error;
+        const residentSetBytes = process.memoryUsage().rss;
+        if (residentSetBytes >= 430 * 1_024 * 1_024) {
+          await sendAdminNotice(dependencies, {
+            level: 'warning',
+            title: 'サーバーのメモリ使用量が高くなっています',
+            description: 'シミュレーション後の使用量が警告水準を超えました。',
+            fields: [
+              { name: 'レースID', value: id },
+              {
+                name: '使用量',
+                value: `約 ${String(Math.round(residentSetBytes / 1_024 / 1_024))} MiB`,
+              },
+            ],
+          });
+        }
+        timelineDurationMs = completion.official.timelineDurationMs;
       }
-      await sendAdminNotice(dependencies, {
-        level: 'success',
-        title: 'レースのシミュレーションが完了しました',
-        description: '観戦用データを保存しました。',
-        fields: [
-          { name: 'レースID', value: id },
-          { name: '保存先', value: 'R2', inline: true },
-        ],
-      });
-      const residentSetBytes = process.memoryUsage().rss;
-      if (residentSetBytes >= 430 * 1_024 * 1_024) {
-        await sendAdminNotice(dependencies, {
-          level: 'warning',
-          title: 'サーバーのメモリ使用量が高くなっています',
-          description: 'シミュレーション後の使用量が警告水準を超えました。',
-          fields: [
-            { name: 'レースID', value: id },
-            {
-              name: '使用量',
-              value: `約 ${String(Math.round(residentSetBytes / 1_024 / 1_024))} MiB`,
-            },
-          ],
-        });
-      }
-      const race = gameStore.getRace(id);
-      const jobs = [
-        {
-          jobType: 'publish_race' as const,
-          key: `publish:${id}:${String(race.version)}`,
-          runAt: dependencies.clock.now(),
-        },
-        {
-          jobType: 'grant_relief' as const,
-          key: `relief:${race.raceDate}`,
-          runAt: dependencies.clock.now(),
-        },
-        {
-          jobType: 'open_viewer' as const,
-          key: `open-viewer:${id}:${String(race.version)}`,
-          runAt: race.viewerOpensAt,
-        },
-        {
-          jobType: 'close_betting' as const,
-          key: `close:${id}:${String(race.version)}`,
-          runAt: race.bettingClosesAt,
-        },
-        {
-          jobType: 'mark_running' as const,
-          key: `running:${id}:${String(race.version)}`,
-          runAt: race.scheduledAt,
-        },
-        {
-          jobType: 'mark_finished' as const,
-          key: `finished:${id}:${String(race.version)}`,
-          runAt: timestamp(race.scheduledAt + completion.official.timelineDurationMs),
-        },
-        {
-          jobType: 'settle_race' as const,
-          key: `settle:${id}:${String(race.version)}`,
-          runAt: timestamp(race.scheduledAt + completion.official.timelineDurationMs + 3_000),
-        },
-      ];
-      for (const scheduled of jobs) {
-        jobStore.enqueue({
-          jobType: scheduled.jobType,
-          deduplicationKey: scheduled.key,
-          payload: { raceId: id },
-          runAt: scheduled.runAt,
-        });
-      }
+      enqueueRaceFollowUpJobs(
+        jobStore,
+        gameStore.getRace(id),
+        timelineDurationMs,
+        dependencies.clock.now(),
+      );
     },
     publish_race: publish,
     refresh_race_message: publish,
@@ -421,6 +394,103 @@ function createHandlers(
       }
     },
   };
+}
+
+interface PreparedRaceTiming {
+  readonly timelineDurationMs: number;
+}
+
+interface PreparedRaceTimingRow {
+  readonly timelineDurationMs: bigint | null;
+  readonly officialStatus: string | null;
+  readonly oddsStatus: string | null;
+}
+
+function loadPreparedRaceTiming(
+  database: SqliteDatabase,
+  raceId: string,
+  raceVersion: number,
+): PreparedRaceTiming | undefined {
+  const row = database
+    .prepare(
+      `SELECT r.timeline_duration_ms AS timelineDurationMs,
+              (SELECT status FROM race_simulations
+               WHERE race_id = r.id AND race_version = r.version AND kind = 'official')
+                AS officialStatus,
+              (SELECT status FROM race_simulations
+               WHERE race_id = r.id AND race_version = r.version AND kind = 'odds')
+                AS oddsStatus
+       FROM races r
+       WHERE r.id = ? AND r.version = ?`,
+    )
+    .get(raceId, raceVersion) as PreparedRaceTimingRow | undefined;
+  if (
+    row === undefined ||
+    row.timelineDurationMs === null ||
+    row.officialStatus !== 'completed' ||
+    row.oddsStatus !== 'completed'
+  ) {
+    return undefined;
+  }
+  const timelineDurationMs = Number(row.timelineDurationMs);
+  if (!Number.isSafeInteger(timelineDurationMs) || timelineDurationMs <= 0) {
+    throw new Error('Prepared race timeline duration is invalid.');
+  }
+  return { timelineDurationMs };
+}
+
+function enqueueRaceFollowUpJobs(
+  jobStore: SqliteJobStore,
+  race: RaceRecord,
+  timelineDurationMs: number,
+  runAt: Timestamp,
+): void {
+  const jobs = [
+    {
+      jobType: 'publish_race' as const,
+      deduplicationKey: `publish:${race.id}:${String(race.version)}`,
+      runAt,
+    },
+    {
+      jobType: 'grant_relief' as const,
+      deduplicationKey: `relief:${race.raceDate}`,
+      runAt,
+    },
+    {
+      jobType: 'open_viewer' as const,
+      deduplicationKey: `open-viewer:${race.id}:${String(race.version)}`,
+      runAt: race.viewerOpensAt,
+    },
+    {
+      jobType: 'close_betting' as const,
+      deduplicationKey: `close:${race.id}:${String(race.version)}`,
+      runAt: race.bettingClosesAt,
+    },
+    {
+      jobType: 'mark_running' as const,
+      deduplicationKey: `running:${race.id}:${String(race.version)}`,
+      runAt: race.scheduledAt,
+    },
+    {
+      jobType: 'mark_finished' as const,
+      deduplicationKey: `finished:${race.id}:${String(race.version)}`,
+      runAt: timestamp(race.scheduledAt + timelineDurationMs),
+    },
+    {
+      jobType: 'settle_race' as const,
+      deduplicationKey: `settle:${race.id}:${String(race.version)}`,
+      runAt: timestamp(race.scheduledAt + timelineDurationMs + 3_000),
+    },
+  ];
+  for (const job of jobs) {
+    const existing = jobStore.getByDeduplicationKey(job.deduplicationKey);
+    jobStore.enqueue({
+      jobType: job.jobType,
+      deduplicationKey: job.deduplicationKey,
+      payload: { raceId: race.id },
+      runAt: existing?.runAt ?? job.runAt,
+    });
+  }
 }
 
 export async function verifyBackupProbe(

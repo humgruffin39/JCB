@@ -372,21 +372,30 @@ export class SqliteAdminStore {
     readonly actorUserId: string;
     readonly reason: string;
   }): void {
-    const count = this.database.prepare('SELECT COUNT(*) AS count FROM admin_allowlist').get() as {
-      count: bigint;
-    };
-    if (count.count <= 1n) throw new Error('The final administrator cannot be removed.');
-    const result = this.database
-      .prepare('DELETE FROM admin_allowlist WHERE discord_user_id = ?')
-      .run(input.discordUserId);
-    if (result.changes !== 1) throw new Error('Administrator was not found.');
-    this.recordAudit({
-      actorUserId: input.actorUserId,
-      action: 'administrator.removed',
-      targetType: 'discord_user',
-      targetId: input.discordUserId,
-      reason: input.reason,
+    const run = this.database.transaction(() => {
+      const result = this.database
+        .prepare(
+          `DELETE FROM admin_allowlist
+           WHERE discord_user_id = ?
+             AND (SELECT COUNT(*) FROM admin_allowlist) > 1`,
+        )
+        .run(input.discordUserId);
+      if (result.changes !== 1) {
+        const count = this.database
+          .prepare('SELECT COUNT(*) AS count FROM admin_allowlist')
+          .get() as { count: bigint };
+        if (count.count <= 1n) throw new Error('The final administrator cannot be removed.');
+        throw new Error('Administrator was not found.');
+      }
+      this.recordAudit({
+        actorUserId: input.actorUserId,
+        action: 'administrator.removed',
+        targetType: 'discord_user',
+        targetId: input.discordUserId,
+        reason: input.reason,
+      });
     });
+    run.immediate();
   }
 
   public recordAudit(input: {

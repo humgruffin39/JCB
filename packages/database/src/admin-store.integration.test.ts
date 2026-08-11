@@ -1,3 +1,5 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_GAME_SETTINGS, gameSettingsSchema } from '@jcb/config';
@@ -135,6 +137,90 @@ describe('admin operational store', () => {
       }),
     ).toThrow(/final administrator/i);
     database.close();
+  });
+
+  it('does not allow concurrent removals to remove every administrator', () => {
+    const temporaryDirectory = mkdtempSync(join(tmpdir(), 'jcb-admin-store-'));
+    const databasePath = join(temporaryDirectory, 'database.sqlite');
+    const firstDatabase = openDatabase(databasePath);
+    const secondDatabase = openDatabase(databasePath);
+    secondDatabase.pragma('busy_timeout = 1');
+
+    try {
+      applyMigrations(
+        firstDatabase,
+        join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+        1,
+      );
+      const game = new SqliteGameStore(firstDatabase, () => 1);
+      game.initializeEconomy(['123456', '654321']);
+      const actor = game.registerUser('999999', 'Test actor', true);
+      const secondAdmin = new SqliteAdminStore(secondDatabase, () => 1);
+
+      let interceptDelete = true;
+      const firstDatabaseWithRace = new Proxy(firstDatabase, {
+        get(target, property) {
+          if (property === 'prepare') {
+            return (sql: string) => {
+              const statement = target.prepare(sql);
+              if (!interceptDelete || !sql.includes('DELETE FROM admin_allowlist')) {
+                return statement;
+              }
+              interceptDelete = false;
+              return new Proxy(statement, {
+                get(_statementTarget, statementProperty) {
+                  if (statementProperty === 'run') {
+                    return (...parameters: Parameters<typeof statement.run>) => {
+                      try {
+                        secondAdmin.removeAdministrator({
+                          discordUserId: '654321',
+                          actorUserId: actor.id,
+                          reason: 'concurrent removal attempt',
+                        });
+                      } catch {
+                        // The transaction-level protection may hold the write lock here.
+                      }
+                      return statement.run(...parameters);
+                    };
+                  }
+                  throw new Error(`Unexpected statement property: ${String(statementProperty)}`);
+                },
+              });
+            };
+          }
+          if (property === 'transaction') return target.transaction.bind(target);
+          throw new Error(`Unexpected database property: ${String(property)}`);
+        },
+      });
+      const firstAdmin = new SqliteAdminStore(firstDatabaseWithRace, () => 1);
+
+      try {
+        firstAdmin.removeAdministrator({
+          discordUserId: '123456',
+          actorUserId: actor.id,
+          reason: 'concurrent removal attempt',
+        });
+      } catch {
+        // A single-statement implementation may lose the interleaving and report final-admin.
+      }
+
+      expect(firstAdmin.listAdministrators()).toEqual([
+        { discordUserId: '654321', createdAt: '1' },
+      ]);
+      expect(
+        (
+          firstDatabase
+            .prepare(
+              "SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'administrator.removed'",
+            )
+            .get() as { count: bigint }
+        ).count,
+      ).toBe(1n);
+    } finally {
+      firstDatabase.close();
+      secondDatabase.close();
+      rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
   });
 
   it('resets attempts when a dead-letter job is manually retried', () => {

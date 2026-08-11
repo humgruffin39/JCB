@@ -6,8 +6,13 @@ import {
   selectBroadcastCameraShot,
   type BroadcastShotId,
 } from './race-camera-director.js';
-import { COURSE_LENGTH, raceProgressToCourseProgress, sampleCourse } from './race-course.js';
-import { RaceEnvironment } from './race-environment.js';
+import {
+  COURSE_LENGTH,
+  courseLengthForDistance,
+  raceProgressToCourseProgress,
+  sampleCourse,
+} from './race-course.js';
+import { RaceEnvironment, type RaceSurface } from './race-environment.js';
 import {
   createHorseRig,
   loadHorseAssets,
@@ -61,6 +66,8 @@ export class RaceWorld {
   private readonly sunTarget = new THREE.Object3D();
   private readonly cameraTarget = new THREE.Vector3();
   private readonly raycaster = new THREE.Raycaster();
+  private readonly courseLength: number;
+  private readonly finishRootProgress: number;
   private cameraInitialized = false;
   private cameraMode: RaceCameraMode = 'follow';
   private readonly trackedFocus = new THREE.Vector3();
@@ -79,11 +86,14 @@ export class RaceWorld {
     renderer: THREE.WebGLRenderer,
     environment: RaceEnvironment,
     rigs: readonly HorseRig[],
+    private readonly distanceM: number,
     private readonly onCameraModeChange?: (mode: RaceCameraMode) => void,
     private readonly onTrackedHorseChange?: (horseNumber: number | undefined) => void,
   ) {
     this.renderer = renderer;
     this.environment = environment;
+    this.courseLength = courseLengthForDistance(distanceM);
+    this.finishRootProgress = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET, distanceM);
     this.horses = rigs.map((rig) => ({
       rig,
       initialized: false,
@@ -140,6 +150,8 @@ export class RaceWorld {
   static async create(
     canvas: HTMLCanvasElement,
     horseCoats: ReadonlyMap<number, HorseCoatColor>,
+    distanceM: number,
+    surface: RaceSurface,
     onCameraModeChange?: (mode: RaceCameraMode) => void,
     onTrackedHorseChange?: (horseNumber: number | undefined) => void,
   ): Promise<RaceWorld> {
@@ -162,8 +174,9 @@ export class RaceWorld {
     );
     return new RaceWorld(
       renderer,
-      new RaceEnvironment(renderer),
+      new RaceEnvironment(renderer, distanceM, surface),
       rigs,
+      distanceM,
       onCameraModeChange,
       onTrackedHorseChange,
     );
@@ -249,6 +262,7 @@ export class RaceWorld {
       const frameCourseProgress = raceProgressToCourseProgress(
         frameHorse.progress,
         HORSE_NOSE_OFFSET,
+        this.distanceM,
       );
       if (
         horse.previousFrameCourseProgress !== undefined &&
@@ -258,7 +272,7 @@ export class RaceWorld {
       ) {
         const elapsedSeconds = (state.positionMs - horse.previousFramePositionMs) / 1_000;
         const measuredSpeedMps =
-          ((frameCourseProgress - horse.previousFrameCourseProgress) * COURSE_LENGTH) /
+          ((frameCourseProgress - horse.previousFrameCourseProgress) * this.courseLength) /
           elapsedSeconds;
         if (Number.isFinite(measuredSpeedMps) && measuredSpeedMps > 0) {
           horse.visualCourseSpeedMps =
@@ -286,16 +300,18 @@ export class RaceWorld {
       if (state.isPhoto && finish !== undefined) {
         const winnerTime = state.finishOrder[0]?.finishTimeMs ?? finish.finishTimeMs;
         targetProgress =
-          FINISH_ROOT_PROGRESS -
-          Math.min(13, ((finish.finishTimeMs - winnerTime) / 1_000) * 12.5) / COURSE_LENGTH;
+          this.finishRootProgress -
+          Math.min(13, ((finish.finishTimeMs - winnerTime) / 1_000) * 12.5) / this.courseLength;
       } else if (horse.visualFinishTimeMs !== undefined) {
         targetProgress = postFinishCourseProgress(
           state.positionMs,
           horse.visualFinishTimeMs,
           horse.visualFinishSpeedMps ?? 8.5,
+          this.finishRootProgress,
+          this.courseLength,
         );
       }
-      const targetLateralOffset = racingLineOffset(frameHorse, state.frame.horses);
+      const targetLateralOffset = racingLineOffset(frameHorse, state.frame.horses, this.distanceM);
       const poseState =
         frameHorse.animationState === 'waiting' ? 'waiting' : state.isPhoto ? 'photo' : 'running';
 
@@ -319,7 +335,7 @@ export class RaceWorld {
         );
         horse.y = THREE.MathUtils.damp(horse.y, 0.025, 20, deltaSeconds);
       }
-      const courseSample = sampleCourse(horse.courseProgress, horse.lateralOffset);
+      const courseSample = sampleCourse(horse.courseProgress, horse.lateralOffset, this.distanceM);
       horse.rig.root.position.copy(courseSample.position);
       horse.rig.root.position.y = horse.y;
       horse.rig.root.rotation.y = courseSample.heading;
@@ -383,10 +399,22 @@ export class RaceWorld {
       : selectBroadcastCameraShot(focusRaceProgress, isPhoto);
     const shotChanged = shot.id !== this.broadcastShotId;
     this.broadcastShotId = shot.id;
-    const focus = sampleCourse(raceProgressToCourseProgress(focusRaceProgress, HORSE_NOSE_OFFSET));
+    const focus = sampleCourse(
+      raceProgressToCourseProgress(focusRaceProgress, HORSE_NOSE_OFFSET, this.distanceM),
+      0,
+      this.distanceM,
+    );
     const cameraOrigin =
       shot.movement === 'fixed'
-        ? sampleCourse(raceProgressToCourseProgress(shot.anchorRaceProgress ?? focusRaceProgress))
+        ? sampleCourse(
+            raceProgressToCourseProgress(
+              shot.anchorRaceProgress ?? focusRaceProgress,
+              0,
+              this.distanceM,
+            ),
+            0,
+            this.distanceM,
+          )
         : focus;
     const targetCamera = cameraOrigin.position
       .clone()
@@ -500,7 +528,7 @@ export class RaceWorld {
       const gapMetres =
         rival === undefined
           ? Number.POSITIVE_INFINITY
-          : Math.abs(rival.progress - overtaker.progress) * COURSE_LENGTH;
+          : Math.abs(rival.progress - overtaker.progress) * this.courseLength;
       if (rival !== undefined && gapMetres <= 6.5) {
         this.battleHorseNumbers = [overtaker.horseNumber, rival.horseNumber];
         this.battleUntilMs = state.positionMs + 3_200;
@@ -607,11 +635,12 @@ export function postFinishCourseProgress(
   positionMs: number,
   visualFinishTimeMs: number,
   finishSpeedMps = 18,
+  finishRootProgress = FINISH_ROOT_PROGRESS,
+  courseLength = COURSE_LENGTH,
 ): number {
   const elapsedSeconds = Math.max(0, positionMs - visualFinishTimeMs) / 1_000;
   return (
-    FINISH_ROOT_PROGRESS +
-    Math.min(32, elapsedSeconds * Math.max(0, finishSpeedMps)) / COURSE_LENGTH
+    finishRootProgress + Math.min(32, elapsedSeconds * Math.max(0, finishSpeedMps)) / courseLength
   );
 }
 

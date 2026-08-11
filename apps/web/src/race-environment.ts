@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
-  COURSE_RADIUS_X,
   COURSE_RADIUS_Z,
+  courseRadiusXForDistance,
   createOffsetCourseCurve,
   RACE_START_COURSE_PROGRESS,
   sampleCourse,
@@ -10,28 +10,30 @@ import {
 
 const WHITE = 0xe8e7df;
 const DARK_METAL = 0x26322c;
+export type RaceSurface = 'turf' | 'dirt';
 
 export class RaceEnvironment {
   readonly group = new THREE.Group();
   private readonly gateDoors: readonly THREE.Group[];
   private readonly ownedTextures: readonly THREE.Texture[];
 
-  constructor(renderer: THREE.WebGLRenderer) {
-    const grassTexture = createGrassTexture(renderer);
+  constructor(renderer: THREE.WebGLRenderer, distanceM = 1_200, surface: RaceSurface = 'turf') {
+    const groundTexture = createGroundTexture(renderer, surface);
+    const trackTexture = createTrackTexture(renderer, surface);
     const finishTexture = createFinishTexture(renderer);
-    this.ownedTextures = [grassTexture, finishTexture];
+    this.ownedTextures = [groundTexture, trackTexture, finishTexture];
     this.group.add(
-      createTrack(grassTexture),
-      createRails(),
+      createTrack(groundTexture, trackTexture, distanceM),
+      createRails(distanceM),
       createInfield(),
-      createHorizon(),
-      createClouds(),
+      createHorizon(distanceM),
+      createClouds(distanceM),
     );
     const gate = createStartingGate();
-    placeOnCourse(gate.group, RACE_START_COURSE_PROGRESS, 1.15);
+    placeOnCourse(gate.group, RACE_START_COURSE_PROGRESS, 1.15, distanceM);
     this.gateDoors = gate.doors;
     const finish = createFinishStructure(finishTexture);
-    placeOnCourse(finish, 0);
+    placeOnCourse(finish, 0, 0, distanceM);
     this.group.add(gate.group, finish);
   }
 
@@ -61,11 +63,16 @@ export class RaceEnvironment {
   }
 }
 
-function createTrack(texture: THREE.Texture): THREE.Group {
+function createTrack(
+  groundTexture: THREE.Texture,
+  trackTexture: THREE.Texture,
+  distanceM: number,
+): THREE.Group {
   const group = new THREE.Group();
+  const courseRadiusX = courseRadiusXForDistance(distanceM);
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(COURSE_RADIUS_X * 2 + 150, COURSE_RADIUS_Z * 2 + 150),
-    new THREE.MeshStandardMaterial({ map: texture, color: 0x668644, roughness: 1 }),
+    new THREE.PlaneGeometry(courseRadiusX * 2 + 150, COURSE_RADIUS_Z * 2 + 150),
+    new THREE.MeshStandardMaterial({ map: groundTexture, color: 0xffffff, roughness: 1 }),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.06;
@@ -73,13 +80,13 @@ function createTrack(texture: THREE.Texture): THREE.Group {
   group.add(ground);
 
   const trackMaterial = new THREE.MeshStandardMaterial({
-    map: texture,
+    map: trackTexture,
     color: 0xffffff,
     roughness: 0.96,
     metalness: 0,
     side: THREE.DoubleSide,
   });
-  const track = new THREE.Mesh(createCourseRibbonGeometry(), trackMaterial);
+  const track = new THREE.Mesh(createCourseRibbonGeometry(distanceM), trackMaterial);
   track.receiveShadow = true;
   group.add(track);
 
@@ -87,14 +94,14 @@ function createTrack(texture: THREE.Texture): THREE.Group {
     new THREE.BoxGeometry(0.38, 0.025, TRACK_HALF_WIDTH * 2),
     new THREE.MeshStandardMaterial({ color: 0xf3f1e9, roughness: 0.84 }),
   );
-  placeOnCourse(finishLine, 0);
+  placeOnCourse(finishLine, 0, 0, distanceM);
   finishLine.position.y = 0.018;
   finishLine.receiveShadow = true;
   group.add(finishLine);
   return group;
 }
 
-function createCourseRibbonGeometry(): THREE.BufferGeometry {
+function createCourseRibbonGeometry(distanceM: number): THREE.BufferGeometry {
   const segments = 512;
   const positions: number[] = [];
   const normals: number[] = [];
@@ -103,7 +110,7 @@ function createCourseRibbonGeometry(): THREE.BufferGeometry {
   for (let index = 0; index <= segments; index += 1) {
     const progress = index / segments;
     for (const side of [-TRACK_HALF_WIDTH, TRACK_HALF_WIDTH]) {
-      const sample = sampleCourse(progress, side);
+      const sample = sampleCourse(progress, side, distanceM);
       positions.push(sample.position.x, 0, sample.position.z);
       normals.push(0, 1, 0);
       uvs.push(progress * 96, side < 0 ? 0 : 3);
@@ -122,7 +129,7 @@ function createCourseRibbonGeometry(): THREE.BufferGeometry {
   return geometry;
 }
 
-function createRails(): THREE.Group {
+function createRails(distanceM: number): THREE.Group {
   const group = new THREE.Group();
   const railMaterial = new THREE.MeshStandardMaterial({
     color: WHITE,
@@ -132,7 +139,7 @@ function createRails(): THREE.Group {
   for (const offset of [-TRACK_HALF_WIDTH, TRACK_HALF_WIDTH]) {
     for (const y of [0.72, 1.12]) {
       const rail = new THREE.Mesh(
-        new THREE.TubeGeometry(createOffsetCourseCurve(offset, y), 512, 0.055, 8, true),
+        new THREE.TubeGeometry(createOffsetCourseCurve(offset, y, distanceM), 512, 0.055, 8, true),
         railMaterial,
       );
       rail.castShadow = true;
@@ -148,7 +155,7 @@ function createRails(): THREE.Group {
   let cursor = 0;
   for (const offset of [-TRACK_HALF_WIDTH, TRACK_HALF_WIDTH]) {
     for (let index = 0; index < postsPerRail; index += 1) {
-      const position = sampleCourse(index / postsPerRail, offset).position;
+      const position = sampleCourse(index / postsPerRail, offset, distanceM).position;
       matrix.makeTranslation(position.x, 0.58, position.z);
       posts.setMatrixAt(cursor, matrix);
       cursor += 1;
@@ -284,8 +291,9 @@ function createInfield(): THREE.Group {
   return group;
 }
 
-function createHorizon(): THREE.Group {
+function createHorizon(distanceM: number): THREE.Group {
   const group = new THREE.Group();
+  const courseRadiusX = courseRadiusXForDistance(distanceM);
   const hillGeometry = new THREE.SphereGeometry(7, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
   const hillMaterial = new THREE.MeshStandardMaterial({ color: 0x456c34, roughness: 1 });
   const hillCount = 44;
@@ -297,7 +305,7 @@ function createHorizon(): THREE.Group {
   for (let index = 0; index < hillCount; index += 1) {
     const angle = (index / hillCount) * Math.PI * 2;
     position.set(
-      Math.cos(angle) * (COURSE_RADIUS_X + 52 + (index % 3) * 7),
+      Math.cos(angle) * (courseRadiusX + 52 + (index % 3) * 7),
       -5.4,
       Math.sin(angle) * (COURSE_RADIUS_Z + 42 + (index % 4) * 5),
     );
@@ -317,7 +325,7 @@ function createHorizon(): THREE.Group {
   const trees = new THREE.InstancedMesh(treeGeometry, treeMaterial, treeCount);
   for (let index = 0; index < treeCount; index += 1) {
     const progress = index / treeCount;
-    const sceneryPosition = outerCoursePosition(progress, 16 + (index % 4) * 2.4);
+    const sceneryPosition = outerCoursePosition(progress, 16 + (index % 4) * 2.4, distanceM);
     const x = sceneryPosition.x;
     const z = sceneryPosition.z;
     const height = 0.72 + ((index * 13) % 9) / 20;
@@ -340,12 +348,15 @@ function createHorizon(): THREE.Group {
 export function outerCoursePosition(
   progress: number,
   distanceFromOuterRail: number,
+  distanceM = 1_200,
 ): THREE.Vector3 {
-  return sampleCourse(progress, -(TRACK_HALF_WIDTH + Math.max(0, distanceFromOuterRail))).position;
+  return sampleCourse(progress, -(TRACK_HALF_WIDTH + Math.max(0, distanceFromOuterRail)), distanceM)
+    .position;
 }
 
-function createClouds(): THREE.Group {
+function createClouds(distanceM: number): THREE.Group {
   const group = new THREE.Group();
+  const courseRadiusX = courseRadiusXForDistance(distanceM);
   const geometry = new THREE.IcosahedronGeometry(1, 2);
   const material = new THREE.MeshBasicMaterial({
     color: 0xf5f6f1,
@@ -363,7 +374,7 @@ function createClouds(): THREE.Group {
   let instance = 0;
   for (let cluster = 0; cluster < clusterCount; cluster += 1) {
     const angle = (cluster / clusterCount) * Math.PI * 2;
-    const clusterX = Math.cos(angle) * (COURSE_RADIUS_X + 85);
+    const clusterX = Math.cos(angle) * (courseRadiusX + 85);
     const clusterY = 18 + (cluster % 4) * 2.7;
     const clusterZ = Math.sin(angle) * (COURSE_RADIUS_Z + 80);
     for (let puff = 0; puff < 3; puff += 1) {
@@ -378,15 +389,40 @@ function createClouds(): THREE.Group {
   return group;
 }
 
-function createGrassTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
+function createGroundTexture(
+  renderer: THREE.WebGLRenderer,
+  surface: RaceSurface,
+): THREE.CanvasTexture {
+  return createSurfaceTexture(renderer, surface, 'ground');
+}
+
+function createTrackTexture(
+  renderer: THREE.WebGLRenderer,
+  surface: RaceSurface,
+): THREE.CanvasTexture {
+  return createSurfaceTexture(renderer, surface, 'track');
+}
+
+function createSurfaceTexture(
+  renderer: THREE.WebGLRenderer,
+  surface: RaceSurface,
+  area: 'ground' | 'track',
+): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
   const context = canvas.getContext('2d');
-  if (context === null) throw new Error('芝テクスチャを作成できません');
-  context.fillStyle = '#769a4d';
+  if (context === null) throw new Error('馬場テクスチャを作成できません');
+  const dirt = surface === 'dirt';
+  context.fillStyle = dirt
+    ? area === 'ground'
+      ? '#59452e'
+      : '#9a7045'
+    : area === 'ground'
+      ? '#4f6d31'
+      : '#769a4d';
   context.fillRect(0, 0, 512, 512);
-  let seed = 0x7f4a7c15;
+  let seed = dirt ? (area === 'ground' ? 0x2a6d4e91 : 0x4d3a9c17) : 0x7f4a7c15;
   const random = () => {
     seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
     return seed / 0xffff_ffff;
@@ -395,13 +431,17 @@ function createGrassTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture 
   for (let index = 0; index < 13_000; index += 1) {
     const x = random() * 512;
     const y = random() * 512;
-    const light = Math.floor(92 + random() * 42);
-    context.strokeStyle = `rgb(${String(Math.floor(light * 0.72))} ${String(light)} ${String(
-      Math.floor(light * 0.42),
-    )} / ${String(0.16 + random() * 0.24)})`;
+    const light = Math.floor((dirt ? 66 : 92) + random() * (dirt ? 38 : 42));
+    const red = dirt ? Math.floor(light * 1.08) : Math.floor(light * 0.72);
+    const green = dirt ? Math.floor(light * 0.78) : light;
+    const blue = dirt ? Math.floor(light * 0.48) : Math.floor(light * 0.42);
+    context.strokeStyle = `rgb(${String(red)} ${String(green)} ${String(blue)} / ${String(
+      0.16 + random() * 0.24,
+    )})`;
     context.beginPath();
     context.moveTo(x, y);
-    context.lineTo(x + (random() - 0.5) * 2, y - 2 - random() * 4);
+    const length = dirt ? 1.2 + random() * 2.4 : 2 + random() * 4;
+    context.lineTo(x + (random() - 0.5) * length, y - length);
     context.stroke();
   }
   const texture = new THREE.CanvasTexture(canvas);
@@ -413,8 +453,13 @@ function createGrassTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture 
   return texture;
 }
 
-function placeOnCourse(object: THREE.Object3D, courseProgress: number, forwardOffset = 0): void {
-  const sample = sampleCourse(courseProgress);
+function placeOnCourse(
+  object: THREE.Object3D,
+  courseProgress: number,
+  forwardOffset = 0,
+  distanceM = 1_200,
+): void {
+  const sample = sampleCourse(courseProgress, 0, distanceM);
   object.position.copy(sample.position).addScaledVector(sample.tangent, forwardOffset);
   object.rotation.y = sample.heading;
 }

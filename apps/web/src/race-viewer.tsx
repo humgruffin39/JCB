@@ -313,6 +313,7 @@ export function RaceViewer({
       {viewer.state === 'ready' ? (
         <>
           <RaceScene3D
+            key={`${race.id}:${String(race.distanceM)}:${race.surface}`}
             frame={currentFrame ?? viewer.frames[0]!}
             positionMs={position}
             finishOrder={finalOrder}
@@ -323,6 +324,8 @@ export function RaceViewer({
               horseNumber: entry.horseNumber,
               coatColor: entry.coatColor,
             }))}
+            distanceM={race.distanceM}
+            surface={race.surface}
             onTrackHorse={setTrackedHorseNumber}
             onCameraModeChange={setCameraMode}
             onReady={() => {

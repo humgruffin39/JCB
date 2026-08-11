@@ -21,6 +21,7 @@ export interface RacingLineHorse {
 export function racingLineOffset(
   horse: RacingLineHorse,
   field: readonly RacingLineHorse[],
+  distanceM = 1_200,
 ): number {
   const startLane = START_LANE_ORIGIN + horse.laneIndex * START_LANE_WIDTH;
   const merge = smootherstep(normalize(horse.progress, 0.018, 0.17));
@@ -43,8 +44,8 @@ export function racingLineOffset(
   const blocked = smootherstep(1 - normalize(gapAhead, 0.004, 0.019));
 
   const preferred = PREFERRED_LINES[horse.horseNumber - 1] ?? 2.2;
-  const courseProgress = raceProgressToCourseProgress(horse.progress);
-  const turnBias = courseTurnAmount(courseProgress) * 0.68;
+  const courseProgress = raceProgressToCourseProgress(horse.progress, 0, distanceM);
+  const turnBias = courseTurnAmount(courseProgress, distanceM) * 0.68;
   const flowingDrift =
     Math.sin((horse.progress * 2.4 + horse.horseNumber * 0.173) * Math.PI * 2) * 0.32;
   const outsideMove =

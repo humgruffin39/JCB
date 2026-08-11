@@ -3,6 +3,7 @@ import {
   COURSE_LENGTH,
   COURSE_STRAIGHT_HALF_LENGTH,
   COURSE_TURN_RADIUS,
+  courseLengthForDistance,
   RACE_FINISH_COURSE_PROGRESS,
   RACE_START_COURSE_PROGRESS,
   courseTurnAmount,
@@ -64,5 +65,18 @@ describe('stadium oval race course', () => {
       RACE_FINISH_COURSE_PROGRESS - correction,
       6,
     );
+  });
+
+  it('stretches the 3D course for longer races without changing lane width', () => {
+    const shortStraight = sampleCourse(0.25);
+    const longStraight = sampleCourse(0.25, 0, 2_400);
+    const longLane = sampleCourse(0.25, 4.25, 2_400);
+    const displacement = longLane.position.clone().sub(longStraight.position);
+
+    expect(longStraight.position.x).toBeCloseTo(shortStraight.position.x * 2, 5);
+    expect(longStraight.position.z).toBeCloseTo(shortStraight.position.z, 5);
+    expect(displacement.length()).toBeCloseTo(4.25, 3);
+    expect(Math.abs(displacement.dot(longStraight.tangent))).toBeLessThan(0.001);
+    expect(courseLengthForDistance(2_400)).toBeCloseTo(COURSE_LENGTH * 2, 5);
   });
 });

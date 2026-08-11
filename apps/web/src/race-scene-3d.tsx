@@ -7,6 +7,7 @@ import {
   type RaceWorldState,
 } from './race-world.js';
 import type { HorseCoatColor } from './race-horse-model.js';
+import type { RaceSurface } from './race-environment.js';
 
 export function RaceScene3D({
   frame,
@@ -18,6 +19,8 @@ export function RaceScene3D({
   onTrackHorse,
   onCameraModeChange,
   horseCoats,
+  distanceM,
+  surface,
   onReady,
 }: {
   readonly frame: TimelineFrameContract;
@@ -32,6 +35,8 @@ export function RaceScene3D({
     readonly horseNumber: number;
     readonly coatColor: HorseCoatColor;
   }[];
+  readonly distanceM: number;
+  readonly surface: RaceSurface;
   readonly onReady?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -74,6 +79,8 @@ export function RaceScene3D({
     void RaceWorld.create(
       canvas,
       new Map(horseCoats.map((horse) => [horse.horseNumber, horse.coatColor])),
+      distanceM,
+      surface,
       (mode) => onCameraModeChangeRef.current(mode),
       (horseNumber) => {
         onTrackHorseRef.current?.(horseNumber);
@@ -114,7 +121,7 @@ export function RaceScene3D({
       worldRef.current = undefined;
       world?.dispose();
     };
-  }, []);
+  }, [distanceM, surface]);
 
   return (
     <div className="race-scene-3d" aria-busy={status === 'loading'}>

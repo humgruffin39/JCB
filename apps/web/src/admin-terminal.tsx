@@ -15,7 +15,12 @@ const sections: readonly { id: AdminSection; label: string }[] = [
 
 export function AdminTerminal() {
   const [section, setSection] = useState<AdminSection>('races');
-  const tabRefs = useRef<Partial<Record<AdminSection, HTMLButtonElement>>>({});
+  const tabRefs = useRef<Record<AdminSection, HTMLButtonElement | null>>({
+    races: null,
+    horses: null,
+    currency: null,
+    system: null,
+  });
   const moveTab = (index: number): void => {
     const nextSection = sections[(index + sections.length) % sections.length]!.id;
     setSection(nextSection);
@@ -29,7 +34,7 @@ export function AdminTerminal() {
           <button
             key={tab.id}
             ref={(element) => {
-              tabRefs.current[tab.id] = element ?? undefined;
+              tabRefs.current[tab.id] = element;
             }}
             type="button"
             id={`admin-tab-${tab.id}`}

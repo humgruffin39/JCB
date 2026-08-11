@@ -1,6 +1,8 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { kindLabel, processStatusLabel, raceStatusLabel, raceStatusTone } from './admin-labels.js';
 import { apiAbsoluteUrl, apiRequest, getPublicSettings } from './api.js';
+import { useAdminPolling } from './use-admin-polling.js';
 
 interface HorseOption {
   readonly id: string;
@@ -13,9 +15,9 @@ interface AdminRace {
   readonly raceDate: string;
   readonly name: string;
   readonly status: string;
-  readonly version: number;
+  readonly version: number | string;
   readonly kind: 'regular' | 'midweek' | 'saturday_night';
-  readonly distanceM: number;
+  readonly distanceM: number | string;
   readonly surface: 'turf' | 'dirt';
   readonly scheduledAt: string;
   readonly bettingOpensAt: string;
@@ -25,8 +27,8 @@ interface AdminRace {
   readonly officialSimulationStatus: string | null;
   readonly oddsSimulationStatus: string | null;
   readonly oddsSelectionCount: string;
-  readonly minimumBaseOdds: number | null;
-  readonly maximumBaseOdds: number | null;
+  readonly minimumBaseOdds: number | string | null;
+  readonly maximumBaseOdds: number | string | null;
   readonly seedLiquidity: string;
   readonly seedLiquidityDiagnosticsJson: string | null;
   readonly timelineObjectKey: string | null;
@@ -52,116 +54,244 @@ const DEFAULT_SCHEDULE: ScheduleSettings = {
   startTime: '22:00:00',
 };
 
+const DISTANCE_OPTIONS = [
+  800, 1_000, 1_200, 1_400, 1_600, 1_800, 2_000, 2_200, 2_400, 2_600, 2_800, 3_000, 3_200, 3_600,
+  4_000, 5_000,
+] as const;
+
 export function RaceAdmin() {
   const [races, setRaces] = useState<readonly AdminRace[]>([]);
   const [horses, setHorses] = useState<readonly HorseOption[]>([]);
   const [schedule, setSchedule] = useState<ScheduleSettings>(DEFAULT_SCHEDULE);
   const [cancelling, setCancelling] = useState<AdminRace>();
+  const [rehearsing, setRehearsing] = useState<AdminRace>();
   const [editing, setEditing] = useState<AdminRace>();
   const [revealing, setRevealing] = useState<AdminRace>();
   const [message, setMessage] = useState('');
+  const [formOptionsError, setFormOptionsError] = useState('');
+  const [operationError, setOperationError] = useState('');
+  const [pendingOperation, setPendingOperation] = useState<string>();
 
-  const refresh = useCallback(async () => {
-    const [raceRows, horseRows, publicSettings] = await Promise.all([
-      apiRequest<readonly AdminRace[]>('/api/v1/admin/races'),
-      apiRequest<readonly HorseOption[]>('/api/v1/admin/horses'),
-      getPublicSettings(),
-    ]);
-    setRaces(raceRows);
-    setHorses(horseRows.filter((horse) => horse.status !== 'retired'));
-    setSchedule({
-      recommendedLockTime: publicSettings.recommendedLockTime,
-      viewerOpenTime: publicSettings.viewerOpenTime,
-      bettingCloseTime: publicSettings.bettingCloseTime,
-      startTime: publicSettings.startTime,
-    });
+  const refreshRaces = useCallback(async () => {
+    setRaces(
+      await apiRequest<readonly AdminRace[]>('/api/v1/admin/races', {
+        cache: 'no-store',
+      }),
+    );
   }, []);
 
-  useEffect(() => void refresh(), [refresh]);
+  const refreshFormOptions = useCallback(async () => {
+    try {
+      const [horseRows, publicSettings] = await Promise.all([
+        apiRequest<readonly HorseOption[]>('/api/v1/admin/horses'),
+        getPublicSettings(),
+      ]);
+      setHorses(horseRows);
+      setSchedule({
+        recommendedLockTime: publicSettings.recommendedLockTime,
+        viewerOpenTime: publicSettings.viewerOpenTime,
+        bettingCloseTime: publicSettings.bettingCloseTime,
+        startTime: publicSettings.startTime,
+      });
+      setFormOptionsError('');
+    } catch (caught) {
+      setFormOptionsError(caught instanceof Error ? caught.message : '入力候補を取得できません。');
+      throw caught;
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await refreshRaces();
+    try {
+      await refreshFormOptions();
+    } catch {
+      // The race list is still usable when only the form options are unavailable.
+    }
+  }, [refreshFormOptions, refreshRaces]);
+
+  const {
+    isInitialLoading,
+    isRefreshing,
+    lastUpdatedAt,
+    error: refreshError,
+  } = useAdminPolling(refreshRaces, 3_000);
+  useEffect(() => {
+    void refreshFormOptions().catch(() => undefined);
+  }, [refreshFormOptions]);
+
+  async function runRaceOperation(
+    race: AdminRace,
+    operation: string,
+    action: () => Promise<void>,
+    successMessage: string,
+  ): Promise<boolean> {
+    if (pendingOperation !== undefined) return false;
+    setPendingOperation(`${race.id}:${operation}`);
+    setOperationError('');
+    try {
+      await action();
+      setMessage(successMessage);
+      await refresh();
+      return true;
+    } catch (caught) {
+      setOperationError(caught instanceof Error ? caught.message : '操作を完了できません。');
+      return false;
+    } finally {
+      setPendingOperation(undefined);
+    }
+  }
 
   async function transition(race: AdminRace, operation: 'lock' | 'unlock'): Promise<void> {
-    await apiRequest(`/api/v1/admin/races/${race.id}/${operation}`, {
-      method: 'POST',
-      body: '{}',
-    });
-    setMessage(
+    await runRaceOperation(
+      race,
+      operation,
+      async () => {
+        await apiRequest(`/api/v1/admin/races/${race.id}/${operation}`, {
+          method: 'POST',
+          body: '{}',
+        });
+      },
       operation === 'lock'
         ? 'レースを確定し、シミュレーションを予約しました。'
         : 'レースを下書きへ戻しました。',
     );
-    await refresh();
   }
 
   async function retry(race: AdminRace, operation: 'simulation' | 'settlement'): Promise<void> {
-    await apiRequest(`/api/v1/admin/races/${race.id}/retry-${operation}`, {
-      method: 'POST',
-      body: '{}',
-    });
-    setMessage(
+    await runRaceOperation(
+      race,
+      `retry-${operation}`,
+      async () => {
+        await apiRequest(`/api/v1/admin/races/${race.id}/retry-${operation}`, {
+          method: 'POST',
+          body: '{}',
+        });
+      },
       operation === 'simulation'
         ? 'シミュレーションの再試行を予約しました。'
         : '精算の再試行を予約しました。',
     );
-    await refresh();
   }
 
   async function rehearseNow(race: AdminRace): Promise<void> {
-    await apiRequest(`/api/v1/admin/races/${race.id}/rehearse-now`, {
-      method: 'POST',
-      body: '{}',
-    });
-    setMessage('リハーサルを精算まで進めました。');
-    await refresh();
+    const succeeded = await runRaceOperation(
+      race,
+      'rehearse-now',
+      async () => {
+        await apiRequest(`/api/v1/admin/races/${race.id}/rehearse-now`, {
+          method: 'POST',
+          body: '{}',
+        });
+      },
+      'リハーサルを精算まで進めました。',
+    );
+    if (succeeded) {
+      setRehearsing(undefined);
+    } else {
+      throw new Error('操作を完了できません。画面のエラーを確認してください。');
+    }
   }
 
   async function cancelRace(race: AdminRace, reason: string): Promise<void> {
-    await apiRequest(`/api/v1/admin/races/${race.id}/cancel`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-    setCancelling(undefined);
-    setMessage('レースを中止し、購入済み馬券を全額返金しました。');
-    await refresh();
+    const succeeded = await runRaceOperation(
+      race,
+      'cancel',
+      async () => {
+        await apiRequest(`/api/v1/admin/races/${race.id}/cancel`, {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        });
+      },
+      'レースを中止し、購入済み馬券を全額返金しました。',
+    );
+    if (succeeded) {
+      setCancelling(undefined);
+    } else {
+      throw new Error('操作を完了できません。画面のエラーを確認してください。');
+    }
   }
 
   return (
     <div className="admin-workspace">
       <TerminalPanel heading="開催一覧" status={`${String(races.length)}件`}>
-        {races.length === 0 ? (
-          <div className="empty-copy">
+        <div className="admin-live-status" aria-label="レース一覧の更新状態">
+          <span
+            className={`live-dot${isRefreshing ? ' live-dot--active' : ''}`}
+            aria-hidden="true"
+          />
+          {isRefreshing
+            ? '更新中'
+            : lastUpdatedAt === undefined
+              ? '自動更新中'
+              : `自動更新中 ・ 最終更新 ${formatClock(lastUpdatedAt)}`}
+        </div>
+        {refreshError === undefined ? null : (
+          <p className="field-error" role="alert">
+            {refreshError} レース一覧を再読み込みできません。時間をおいて再確認してください。
+          </p>
+        )}
+        {formOptionsError === '' ? null : (
+          <p className="field-error" role="alert">
+            {formOptionsError} 入力候補を更新できません。
+          </p>
+        )}
+        {operationError === '' ? null : (
+          <p className="field-error" role="alert">
+            {operationError} 操作を完了できませんでした。状態を確認して、もう一度お試しください。
+          </p>
+        )}
+        {isInitialLoading ? (
+          <div className="empty-copy" role="status" aria-live="polite">
+            <strong>レース一覧を読み込んでいます</strong>
+          </div>
+        ) : races.length === 0 ? (
+          <div className="empty-copy" role="status">
             <strong>レースがありません</strong>
+            <span>右側のフォームから、最初の下書きを作成できます。</span>
           </div>
         ) : (
           <div className="race-admin-list">
             {races.map((race) => (
-              <article key={race.id}>
-                <div>
-                  <small>
-                    {race.raceDate} / v{String(race.version)}
-                  </small>
-                  <h3>{race.name}</h3>
-                  <p>
-                    {String(race.distanceM)}m / {surfaceLabel(race.surface)} / {race.kind}
-                  </p>
+              <article
+                key={race.id}
+                className={`race-admin-card race-admin-card--${raceStatusTone(race.status)}`}
+              >
+                <header className="race-admin-card__header">
+                  <div>
+                    <p className="race-admin-card__eyebrow">
+                      <time dateTime={race.raceDate}>{race.raceDate}</time> ・ v
+                      {String(race.version)}
+                    </p>
+                    <h3>{race.name}</h3>
+                    <p className="race-admin-card__meta">
+                      {String(race.distanceM)}m ・ {surfaceLabel(race.surface)} ・{' '}
+                      {kindLabel(race.kind)}
+                    </p>
+                  </div>
+                  <span className={`status-badge status-badge--${raceStatusTone(race.status)}`}>
+                    {raceStatusLabel(race.status)}
+                  </span>
+                </header>
+                <div className="race-admin-card__body">
                   <dl className="race-operation-metrics">
                     <div>
-                      <dt>正式simulation</dt>
-                      <dd>{race.officialSimulationStatus ?? '未作成'}</dd>
+                      <dt>正式シミュレーション</dt>
+                      <dd>{processStatusLabel(race.officialSimulationStatus)}</dd>
                     </div>
                     <div>
-                      <dt>オッズsimulation</dt>
-                      <dd>{race.oddsSimulationStatus ?? '未作成'}</dd>
+                      <dt>オッズシミュレーション</dt>
+                      <dd>{processStatusLabel(race.oddsSimulationStatus)}</dd>
                     </div>
                     <div>
                       <dt>基準オッズ</dt>
                       <dd>{formatOddsRange(race)}</dd>
                     </div>
                     <div>
-                      <dt>seed liquidity</dt>
+                      <dt>初期流動性</dt>
                       <dd>{formatSeedLiquidity(race)}</dd>
                     </div>
                     <div>
-                      <dt>R2 timeline</dt>
+                      <dt>観戦データ</dt>
                       <dd>{race.timelineObjectKey === null ? '未保存' : '保存済み'}</dd>
                     </div>
                   </dl>
@@ -177,19 +307,25 @@ export function RaceAdmin() {
                     </p>
                   ) : null}
                 </div>
-                <strong className="status-readout">{race.status}</strong>
-                <div className="inline-actions">
+                <div className="inline-actions race-admin-card__actions">
                   {race.status === 'draft' ? (
                     <button
                       type="button"
                       className="button-secondary"
                       onClick={() => setEditing(race)}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}の下書きを編集`}
                     >
                       下書きを編集
                     </button>
                   ) : null}
                   {race.status === 'draft' ? (
-                    <button type="button" onClick={() => void transition(race, 'lock')}>
+                    <button
+                      type="button"
+                      onClick={() => void transition(race, 'lock')}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}を確定`}
+                    >
                       レースを確定
                     </button>
                   ) : null}
@@ -198,17 +334,21 @@ export function RaceAdmin() {
                       type="button"
                       className="button-secondary"
                       onClick={() => void transition(race, 'unlock')}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}を下書きへ戻す`}
                     >
                       下書きへ戻す
                     </button>
                   ) : null}
-                  {['failed', 'locked', 'simulating'].includes(race.status) ? (
+                  {['failed', 'locked'].includes(race.status) ? (
                     <button
                       type="button"
                       className="button-secondary"
                       onClick={() => void retry(race, 'simulation')}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}のシミュレーションを再試行`}
                     >
-                      simulation再試行
+                      シミュレーションを再試行
                     </button>
                   ) : null}
                   {['finished', 'settling', 'failed'].includes(race.status) ? (
@@ -216,6 +356,8 @@ export function RaceAdmin() {
                       type="button"
                       className="button-secondary"
                       onClick={() => void retry(race, 'settlement')}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}の精算を再試行`}
                     >
                       精算再試行
                     </button>
@@ -224,7 +366,9 @@ export function RaceAdmin() {
                     <button
                       type="button"
                       className="button-secondary"
-                      onClick={() => void rehearseNow(race)}
+                      onClick={() => setRehearsing(race)}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}を今すぐ進行`}
                     >
                       今すぐ進行
                     </button>
@@ -235,17 +379,26 @@ export function RaceAdmin() {
                       type="button"
                       className="button-danger"
                       onClick={() => setRevealing(race)}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}の正式結果を緊急閲覧`}
                     >
                       緊急結果閲覧
                     </button>
                   ) : null}
-                  {!['settled', 'cancelled', 'running', 'finished', 'settling'].includes(
-                    race.status,
-                  ) ? (
+                  {[
+                    'draft',
+                    'locked',
+                    'betting_open',
+                    'betting_closed',
+                    'ready',
+                    'failed',
+                  ].includes(race.status) ? (
                     <button
                       type="button"
                       className="button-danger"
                       onClick={() => setCancelling(race)}
+                      disabled={pendingOperation !== undefined}
+                      aria-label={`${race.name}を中止`}
                     >
                       レースを中止
                     </button>
@@ -258,6 +411,7 @@ export function RaceAdmin() {
       </TerminalPanel>
 
       <RaceForm
+        key={editing?.id ?? 'new-race'}
         horses={horses}
         schedule={schedule}
         {...(editing === undefined ? {} : { race: editing })}
@@ -283,6 +437,13 @@ export function RaceAdmin() {
           onConfirm={cancelRace}
         />
       )}
+      {rehearsing === undefined ? null : (
+        <RehearsalDialog
+          race={rehearsing}
+          onClose={() => setRehearsing(undefined)}
+          onConfirm={rehearseNow}
+        />
+      )}
       {revealing === undefined ? null : (
         <EmergencyRevealDialog race={revealing} onClose={() => setRevealing(undefined)} />
       )}
@@ -304,19 +465,42 @@ function RaceForm({
   readonly onCancel: () => void;
 }) {
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const selectedEntries = entriesFor(race);
+  const selectedEntriesByNumber = new Map(
+    selectedEntries.map((entry) => [entry.horseNumber, entry] as const),
+  );
+  const [selectedHorseIds, setSelectedHorseIds] = useState<readonly string[]>(() =>
+    Array.from({ length: 8 }, (_, index) => selectedEntriesByNumber.get(index + 1)?.horseId ?? ''),
+  );
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    if (isSubmitting) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const raceDate = String(form.get('raceDate'));
-    const entries = Array.from({ length: 8 }, (_, index) => ({
-      horseId: String(form.get(`horse-${String(index + 1)}`)),
+    const entries = selectedHorseIds.map((horseId, index) => ({
+      horseId,
       horseNumber: index + 1,
     }));
-    if (new Set(entries.map((entry) => entry.horseId)).size !== 8) {
+    if (
+      entries.some((entry) => entry.horseId === '') ||
+      new Set(entries.map((entry) => entry.horseId)).size !== 8
+    ) {
       setError('8頭すべてに異なる馬を選んでください。');
       return;
     }
+    if (
+      entries.some(
+        (entry) => horses.find((horse) => horse.id === entry.horseId)?.status === 'retired',
+      )
+    ) {
+      setError('引退した馬は出走馬にできません。別の馬へ交換してください。');
+      return;
+    }
+    setIsSubmitting(true);
+    setError('');
     try {
       await apiRequest(
         race === undefined ? '/api/v1/admin/races' : `/api/v1/admin/races/${race.id}`,
@@ -352,17 +536,28 @@ function RaceForm({
           }),
         },
       );
-      event.currentTarget.reset();
+      formElement.reset();
+      setSelectedHorseIds(Array.from({ length: 8 }, () => ''));
       setError('');
       await onSaved();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : '保存できません。入力内容を確認してください。',
       );
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
-  const selectedEntries = entriesFor(race);
+  const activeHorseCount = horses.filter((horse) => horse.status !== 'retired').length;
+  const distanceCandidate = Number(race?.distanceM ?? 1_200);
+  const currentDistance = Number.isInteger(distanceCandidate) ? distanceCandidate : 1_200;
+  const distanceOptions = Array.from(
+    new Set([
+      ...DISTANCE_OPTIONS,
+      ...(race !== undefined && Number.isInteger(currentDistance) ? [currentDistance] : []),
+    ]),
+  ).sort((left, right) => left - right);
   return (
     <TerminalPanel heading={race === undefined ? 'レースを作成' : '下書きを編集'}>
       <form className="terminal-form" onSubmit={(event) => void submit(event)}>
@@ -386,14 +581,13 @@ function RaceForm({
           </label>
           <label>
             距離
-            <input
-              name="distanceM"
-              type="number"
-              min={800}
-              max={5000}
-              defaultValue={race?.distanceM ?? 1200}
-              required
-            />
+            <select name="distanceM" defaultValue={String(currentDistance)} required>
+              {distanceOptions.map((distance) => (
+                <option key={distance} value={distance}>
+                  {String(distance)}m
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             コース
@@ -404,28 +598,52 @@ function RaceForm({
           </label>
         </div>
         <fieldset className="entry-selects">
-          <legend>出走馬8頭</legend>
-          {Array.from({ length: 8 }, (_, index) => (
-            <label key={index}>
-              {String(index + 1)}番
-              <select
-                name={`horse-${String(index + 1)}`}
-                required
-                defaultValue={selectedEntries[index]?.horseId ?? ''}
-              >
-                <option value="" disabled>
-                  馬を選択
-                </option>
-                {horses.map((horse) => (
-                  <option key={horse.id} value={horse.id}>
-                    {horse.name}
+          <legend>出走馬（8頭）</legend>
+          <p className="field-hint">選択済みの馬は、ほかの枠には表示されません。</p>
+          {Array.from({ length: 8 }, (_, index) => {
+            const selectedHorseId = selectedHorseIds[index] ?? '';
+            return (
+              <label key={index}>
+                {String(index + 1)}番
+                <select
+                  name={`horse-${String(index + 1)}`}
+                  required
+                  value={selectedHorseId}
+                  onChange={(event) => {
+                    const nextHorseId = event.currentTarget.value;
+                    setSelectedHorseIds((current) =>
+                      current.map((horseId, horseIndex) =>
+                        horseIndex === index ? nextHorseId : horseId,
+                      ),
+                    );
+                    setError('');
+                  }}
+                >
+                  <option value="" disabled>
+                    馬を選択
                   </option>
-                ))}
-              </select>
-            </label>
-          ))}
+                  {horses
+                    .filter((horse) => horse.status !== 'retired' || horse.id === selectedHorseId)
+                    .filter(
+                      (horse) =>
+                        !selectedHorseIds.some(
+                          (selectedHorseIdAtOtherPosition, selectedIndex) =>
+                            selectedIndex !== index && selectedHorseIdAtOtherPosition === horse.id,
+                        ),
+                    )
+                    .map((horse) => (
+                      <option key={horse.id} value={horse.id}>
+                        {horse.status === 'retired'
+                          ? `${horse.name}（引退・交換してください）`
+                          : horse.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            );
+          })}
         </fieldset>
-        {horses.length < 8 ? (
+        {activeHorseCount < 8 ? (
           <p className="field-error">レース作成には、引退していない馬が8頭必要です。</p>
         ) : null}
         {error === '' ? null : (
@@ -434,11 +652,16 @@ function RaceForm({
           </p>
         )}
         <div className="form-actions">
-          <button type="submit" disabled={horses.length < 8}>
-            {race === undefined ? '下書きを保存' : '変更を保存'}
+          <button type="submit" disabled={activeHorseCount < 8 || isSubmitting}>
+            {isSubmitting ? '保存中…' : race === undefined ? '下書きを保存' : '変更を保存'}
           </button>
           {race === undefined ? null : (
-            <button type="button" className="button-secondary" onClick={onCancel}>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={onCancel}
+              disabled={isSubmitting}
+            >
               編集をやめる
             </button>
           )}
@@ -478,6 +701,7 @@ function CancellationDialog({
       await onConfirm(race, reason.trim());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'レースを中止できません。');
+    } finally {
       setIsSubmitting(false);
     }
   }
@@ -514,6 +738,73 @@ function CancellationDialog({
         <div className="inline-actions">
           <button type="submit" className="button-danger" disabled={isSubmitting}>
             {isSubmitting ? '処理中' : '中止して返金する'}
+          </button>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            戻る
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function RehearsalDialog({
+  race,
+  onClose,
+  onConfirm,
+}: {
+  readonly race: AdminRace;
+  readonly onClose: () => void;
+  readonly onConfirm: (race: AdminRace) => Promise<void>;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    dialog.current?.showModal();
+    return () => dialog.current?.close();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialog}
+      className="confirmation-dialog"
+      aria-labelledby="rehearse-race-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!isSubmitting) onClose();
+      }}
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          setIsSubmitting(true);
+          setError('');
+          void onConfirm(race)
+            .catch((caught: unknown) => {
+              setError(caught instanceof Error ? caught.message : 'リハーサルを実行できません。');
+            })
+            .finally(() => setIsSubmitting(false));
+        }}
+      >
+        <h2 id="rehearse-race-title">「{race.name}」を今すぐ進行しますか</h2>
+        <p>
+          投票受付を締め切り、発走・レース終了・精算・観戦データ公開まで進めます。リハーサル用の操作です。
+        </p>
+        {error === '' ? null : (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="inline-actions">
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? '処理中…' : 'リハーサルを実行'}
           </button>
           <button
             type="button"
@@ -572,7 +863,7 @@ function EmergencyRevealDialog({
       aria-labelledby="reveal-title"
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        if (!isSubmitting) onClose();
       }}
     >
       <form onSubmit={(event) => void reveal(event)}>
@@ -609,7 +900,12 @@ function EmergencyRevealDialog({
           <button type="submit" className="button-danger" disabled={isSubmitting}>
             {isSubmitting ? '復号中' : '警告を理解して閲覧'}
           </button>
-          <button type="button" className="button-secondary" onClick={onClose}>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
             閉じる
           </button>
         </div>
@@ -623,11 +919,19 @@ function entriesFor(race: AdminRace | undefined): readonly RaceEntrySelection[] 
   try {
     const parsed: unknown = JSON.parse(race.entriesJson);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry: unknown): entry is RaceEntrySelection => {
-      if (typeof entry !== 'object' || entry === null) return false;
-      const record = entry as Record<string, unknown>;
-      return typeof record.horseId === 'string' && typeof record.horseNumber === 'number';
-    });
+    return parsed
+      .filter((entry: unknown): entry is RaceEntrySelection => {
+        if (typeof entry !== 'object' || entry === null) return false;
+        const record = entry as Record<string, unknown>;
+        return (
+          typeof record.horseId === 'string' &&
+          typeof record.horseNumber === 'number' &&
+          Number.isInteger(record.horseNumber) &&
+          record.horseNumber >= 1 &&
+          record.horseNumber <= 8
+        );
+      })
+      .sort((left, right) => left.horseNumber - right.horseNumber);
   } catch {
     return [];
   }
@@ -635,7 +939,10 @@ function entriesFor(race: AdminRace | undefined): readonly RaceEntrySelection[] 
 
 function formatOddsRange(race: AdminRace): string {
   if (race.minimumBaseOdds === null || race.maximumBaseOdds === null) return '未生成';
-  return `${race.minimumBaseOdds.toFixed(1)}–${race.maximumBaseOdds.toFixed(1)}倍 (${race.oddsSelectionCount}通り)`;
+  const minimum = Number(race.minimumBaseOdds);
+  const maximum = Number(race.maximumBaseOdds);
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return '未生成';
+  return `${minimum.toFixed(1)}–${maximum.toFixed(1)}倍 (${race.oddsSelectionCount}通り)`;
 }
 
 function formatRupees(value: string): string {
@@ -675,4 +982,13 @@ function moveTimestampToJstDate(timestampValue: string, raceDate: string): numbe
 function raceKindForDate(raceDate: string): 'regular' | 'midweek' | 'saturday_night' {
   const day = new Date(`${raceDate}T12:00:00+09:00`).getUTCDay();
   return day === 3 ? 'midweek' : day === 6 ? 'saturday_night' : 'regular';
+}
+
+function formatClock(timestamp: number): string {
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(timestamp);
 }

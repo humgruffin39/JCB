@@ -33,7 +33,7 @@ export function App() {
     >
       {isRace ? null : (
         <header className="masthead">
-          <h1>{isAdmin ? '競馬BOT 管理' : 'ジョサン中央銀行 競馬'}</h1>
+          <h1>{isAdmin ? 'ジョサン中央銀行' : 'ジョサン中央銀行 競馬'}</h1>
         </header>
       )}
       <main id="main">

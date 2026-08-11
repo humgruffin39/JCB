@@ -1,8 +1,10 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
+import { horseStatusLabel } from './admin-labels.js';
 import { AbilitySlider } from './ability-slider.js';
 import { apiRequest } from './api.js';
 import { PreferenceSlider } from './preference-slider.js';
+import { useAdminPolling } from './use-admin-polling.js';
 
 interface Horse {
   readonly id: string;
@@ -67,26 +69,37 @@ export function HorseAdmin() {
   const refresh = useCallback(async () => {
     setHorses(await apiRequest<readonly Horse[]>('/api/v1/admin/horses'));
   }, []);
-  useEffect(() => void refresh(), [refresh]);
+  const { error: refreshError, isInitialLoading } = useAdminPolling(refresh, 10_000);
 
   return (
     <div className="admin-workspace">
       <TerminalPanel heading="登録済みの馬" status={`${String(horses.length)}頭`}>
-        {horses.length === 0 ? (
-          <div className="empty-copy">
+        {refreshError === undefined ? null : (
+          <p className="field-error" role="alert">
+            {refreshError} 馬の一覧を更新できません。
+          </p>
+        )}
+        {isInitialLoading ? (
+          <p className="empty-copy" role="status" aria-live="polite">
+            馬の一覧を読み込んでいます。
+          </p>
+        ) : horses.length === 0 ? (
+          <div className="empty-copy" role="status">
             <strong>馬が登録されていません</strong>
+            <span>右側のフォームから馬を登録できます。</span>
           </div>
         ) : (
           <div className="data-table-wrap">
             <table className="data-table">
+              <caption className="visually-hidden">登録済みの馬</caption>
               <thead>
                 <tr>
-                  <th>馬名</th>
-                  <th>状態</th>
-                  <th>脚質</th>
-                  <th>毛色</th>
-                  <th>速度</th>
-                  <th>
+                  <th scope="col">馬名</th>
+                  <th scope="col">状態</th>
+                  <th scope="col">脚質</th>
+                  <th scope="col">毛色</th>
+                  <th scope="col">速度</th>
+                  <th scope="col">
                     <span className="visually-hidden">操作</span>
                   </th>
                 </tr>
@@ -95,7 +108,13 @@ export function HorseAdmin() {
                 {horses.map((horse) => (
                   <tr key={horse.id}>
                     <td>{horse.name}</td>
-                    <td>{horse.status}</td>
+                    <td>
+                      <span
+                        className={`status-badge status-badge--${horse.status === 'active' ? 'success' : 'neutral'}`}
+                      >
+                        {horseStatusLabel(horse.status)}
+                      </span>
+                    </td>
                     <td>{horse.runningStyle === 'front_runner' ? '逃げ' : '差し'}</td>
                     <td>{COAT_LABELS[horse.coatColor]}</td>
                     <td>{String(horse.speed)}</td>
@@ -176,14 +195,15 @@ function HorsePerformancePanel({
       </p>
       <div className="data-table-wrap">
         <table className="data-table">
+          <caption className="visually-hidden">{horse.name}の出走履歴</caption>
           <thead>
             <tr>
-              <th>開催日</th>
-              <th>レース</th>
-              <th>馬番</th>
-              <th>調子</th>
-              <th>着順</th>
-              <th>タイム</th>
+              <th scope="col">開催日</th>
+              <th scope="col">レース</th>
+              <th scope="col">馬番</th>
+              <th scope="col">調子</th>
+              <th scope="col">着順</th>
+              <th scope="col">タイム</th>
             </tr>
           </thead>
           <tbody>
@@ -264,7 +284,7 @@ function HorseForm({
             状態
             <select name="status" defaultValue={horse?.status ?? 'active'}>
               <option value="active">出走可</option>
-              <option value="resting">休養</option>
+              <option value="resting">休養中</option>
               <option value="retired">引退</option>
             </select>
           </label>

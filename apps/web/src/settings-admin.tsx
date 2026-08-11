@@ -1,8 +1,9 @@
 import { gameSettingsSchema, type GameSettings } from '@jcb/config';
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { apiRequest } from './api.js';
+import { useAdminPolling } from './use-admin-polling.js';
 
 const responseSchema = z.object({
   gameSettings: gameSettingsSchema,
@@ -22,12 +23,15 @@ export function SettingsAdmin() {
   const [data, setData] = useState<SettingsResponse>();
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [formKey, setFormKey] = useState(0);
+  const formDirty = useRef(false);
   const refresh = useCallback(async () => {
     const parsed = responseSchema.parse(await apiRequest<unknown>('/api/v1/admin/settings'));
     setData(parsed);
+    if (!formDirty.current) setFormKey((current) => current + 1);
   }, []);
 
-  useEffect(() => void refresh(), [refresh]);
+  const { error: refreshError } = useAdminPolling(refresh, 10_000);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -42,6 +46,7 @@ export function SettingsAdmin() {
       });
       setError('');
       setMessage('設定を保存しました。以後に確定するレースと新しい更新周期へ反映されます。');
+      formDirty.current = false;
       formElement.reset();
       await refresh();
     } catch (caught) {
@@ -57,6 +62,11 @@ export function SettingsAdmin() {
   if (data === undefined) {
     return (
       <TerminalPanel heading="運用設定" status="読み込み中">
+        {refreshError === undefined ? null : (
+          <p className="field-error" role="alert">
+            {refreshError} 設定を更新できません。
+          </p>
+        )}
         <p aria-live="polite">設定履歴を読み込んでいます。</p>
       </TerminalPanel>
     );
@@ -64,10 +74,18 @@ export function SettingsAdmin() {
 
   const settings = data.gameSettings;
   return (
-    <TerminalPanel heading="運用設定" status="変更履歴あり">
+    <TerminalPanel heading="運用設定" status={`${String(data.history.length)}件の変更履歴`}>
+      {refreshError === undefined ? null : (
+        <p className="field-error" role="alert">
+          {refreshError} 設定履歴を更新できません。
+        </p>
+      )}
       <form
-        key={JSON.stringify(settings)}
+        key={formKey}
         className="terminal-form settings-form"
+        onInput={() => {
+          formDirty.current = true;
+        }}
         onSubmit={(event) => void submit(event)}
       >
         <fieldset>
@@ -122,14 +140,14 @@ export function SettingsAdmin() {
           <div className="form-row">
             <NumberField
               name="discordOddsUpdateMilliseconds"
-              label="Discord更新（秒）"
+              label="Discordのオッズ更新間隔（秒）"
               value={settings.discordOddsUpdateMilliseconds / 1_000}
               min={10}
               max={120}
             />
             <NumberField
               name="webOddsPollMilliseconds"
-              label="Web更新（秒）"
+              label="Webのオッズ更新間隔（秒）"
               value={settings.webOddsPollMilliseconds / 1_000}
               min={5}
               max={60}
@@ -182,7 +200,7 @@ export function SettingsAdmin() {
         </fieldset>
 
         <fieldset>
-          <legend>基準流動性clamp</legend>
+          <legend>初期流動性の範囲</legend>
           <div className="form-row">
             <NumberField
               name="seed.regular.winMinimum"
@@ -292,7 +310,7 @@ export function SettingsAdmin() {
               <li key={history.id}>
                 <time>{formatTimestamp(history.updatedAt)}</time>
                 <strong>運用設定を更新</strong>
-                <small>{history.updatedByUserId ?? 'SYSTEM'}</small>
+                <small>{history.updatedByUserId ?? 'システム'}</small>
               </li>
             ))}
           </ol>

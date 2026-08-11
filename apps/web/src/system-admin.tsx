@@ -1,9 +1,17 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { z } from 'zod';
+import {
+  auditActionLabel,
+  auditTargetLabel,
+  booleanLabel,
+  jobTypeLabel,
+  processStatusLabel,
+} from './admin-labels.js';
 import { apiRequest } from './api.js';
 import { SettingsAdmin } from './settings-admin.js';
 import { AdministratorAdmin } from './administrator-admin.js';
+import { useAdminPolling } from './use-admin-polling.js';
 
 export function SystemAdmin() {
   const [health, setHealth] = useState<Record<string, unknown>>({});
@@ -13,6 +21,8 @@ export function SystemAdmin() {
     readonly discordMessages: readonly Record<string, string | number | null>[];
     readonly timelineObjects: readonly Record<string, string | number | null>[];
   }>({ discordMessages: [], timelineObjects: [] });
+  const [operationError, setOperationError] = useState('');
+  const [retryingJob, setRetryingJob] = useState<string>();
   const refresh = useCallback(async () => {
     const [nextHealth, nextJobs, nextAudit, nextObjects] = await Promise.all([
       apiRequest<unknown>('/api/v1/admin/health'),
@@ -25,7 +35,7 @@ export function SystemAdmin() {
     setAudit(z.array(z.record(z.string(), z.string().nullable())).parse(nextAudit));
     setObjects(nextObjects);
   }, []);
-  useEffect(() => void refresh(), [refresh]);
+  const { error: refreshError, isInitialLoading } = useAdminPolling(refresh, 7_500);
   const systemNominal =
     health.ledgerProjectionValid === true &&
     health.databaseReadWrite === true &&
@@ -36,12 +46,23 @@ export function SystemAdmin() {
     Number(health.deadJobs ?? 0) === 0;
 
   const retryJob = (jobId: string): void => {
+    if (retryingJob !== undefined) return;
+    setRetryingJob(jobId);
+    setOperationError('');
     void (async () => {
-      await apiRequest(`/api/v1/admin/jobs/${encodeURIComponent(jobId)}/retry`, {
-        method: 'POST',
-        body: '{}',
-      });
-      await refresh();
+      try {
+        await apiRequest(`/api/v1/admin/jobs/${encodeURIComponent(jobId)}/retry`, {
+          method: 'POST',
+          body: '{}',
+        });
+        await refresh();
+      } catch (caught) {
+        setOperationError(
+          caught instanceof Error ? caught.message : '自動処理を再試行できません。',
+        );
+      } finally {
+        setRetryingJob(undefined);
+      }
     })();
   };
 
@@ -49,15 +70,34 @@ export function SystemAdmin() {
     <div className="system-layout">
       <SettingsAdmin />
       <AdministratorAdmin />
-      <TerminalPanel heading="システム状態" status={systemNominal ? '正常' : '要確認'}>
-        <dl className="metric-list">
-          {Object.entries(health).map(([key, value]) => (
-            <div key={key}>
-              <dt>{HEALTH_LABELS[key] ?? key}</dt>
-              <dd>{formatHealthValue(key, value)}</dd>
-            </div>
-          ))}
-        </dl>
+      <TerminalPanel
+        heading="システム状態"
+        status={isInitialLoading ? '読み込み中' : systemNominal ? '正常' : '要確認'}
+      >
+        {refreshError === undefined ? null : (
+          <p className="field-error" role="alert">
+            {refreshError} システム情報を更新できません。
+          </p>
+        )}
+        {operationError === '' ? null : (
+          <p className="field-error" role="alert">
+            {operationError}
+          </p>
+        )}
+        {isInitialLoading ? (
+          <p role="status" aria-live="polite">
+            システム情報を読み込んでいます。
+          </p>
+        ) : (
+          <dl className="metric-list">
+            {Object.entries(health).map(([key, value]) => (
+              <div key={key}>
+                <dt>{HEALTH_LABELS[key] ?? key}</dt>
+                <dd>{formatHealthValue(key, value)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </TerminalPanel>
       <TerminalPanel
         heading="Discord固定メッセージ"
@@ -65,19 +105,20 @@ export function SystemAdmin() {
       >
         <div className="data-table-wrap">
           <table className="data-table">
+            <caption className="visually-hidden">Discord固定メッセージ</caption>
             <thead>
               <tr>
-                <th>用途</th>
-                <th>レース</th>
-                <th>チャンネルID</th>
-                <th>メッセージID</th>
-                <th>更新</th>
+                <th scope="col">用途</th>
+                <th scope="col">レース</th>
+                <th scope="col">チャンネルID</th>
+                <th scope="col">メッセージID</th>
+                <th scope="col">更新</th>
               </tr>
             </thead>
             <tbody>
               {objects.discordMessages.map((row) => (
                 <tr key={String(row.id)}>
-                  <td>{String(row.purpose)}</td>
+                  <td>{discordPurposeLabel(String(row.purpose))}</td>
                   <td>{String(row.raceName ?? 'ランキング')}</td>
                   <td>{String(row.channelId)}</td>
                   <td>{String(row.messageId)}</td>
@@ -88,20 +129,18 @@ export function SystemAdmin() {
           </table>
         </div>
       </TerminalPanel>
-      <TerminalPanel
-        heading="R2 timeline objects"
-        status={`${String(objects.timelineObjects.length)}件`}
-      >
+      <TerminalPanel heading="観戦データ" status={`${String(objects.timelineObjects.length)}件`}>
         <div className="data-table-wrap">
           <table className="data-table">
+            <caption className="visually-hidden">観戦データ</caption>
             <thead>
               <tr>
-                <th>レース</th>
-                <th>version</th>
-                <th>状態</th>
-                <th>object key</th>
-                <th>SHA-256</th>
-                <th>完了</th>
+                <th scope="col">レース</th>
+                <th scope="col">版</th>
+                <th scope="col">状態</th>
+                <th scope="col">保存キー</th>
+                <th scope="col">整合性ハッシュ</th>
+                <th scope="col">完了</th>
               </tr>
             </thead>
             <tbody>
@@ -109,7 +148,7 @@ export function SystemAdmin() {
                 <tr key={`${String(row.raceId)}-${String(row.raceVersion)}-${String(index)}`}>
                   <td>{String(row.raceName)}</td>
                   <td>{String(row.raceVersion)}</td>
-                  <td>{String(row.status)}</td>
+                  <td>{processStatusLabel(typeof row.status === 'string' ? row.status : null)}</td>
                   <td>{String(row.objectKey)}</td>
                   <td>{String(row.sha256)}</td>
                   <td>{formatTimestamp(row.completedAt)}</td>
@@ -122,13 +161,14 @@ export function SystemAdmin() {
       <TerminalPanel heading="ジョブキュー" status={`${String(jobs.length)}件`}>
         <div className="data-table-wrap">
           <table className="data-table">
+            <caption className="visually-hidden">ジョブキュー</caption>
             <thead>
               <tr>
-                <th>種別</th>
-                <th>状態</th>
-                <th>試行</th>
-                <th>エラー</th>
-                <th>
+                <th scope="col">種別</th>
+                <th scope="col">状態</th>
+                <th scope="col">試行</th>
+                <th scope="col">エラー</th>
+                <th scope="col">
                   <span className="visually-hidden">操作</span>
                 </th>
               </tr>
@@ -138,8 +178,8 @@ export function SystemAdmin() {
                 const jobId = job.id;
                 return (
                   <tr key={jobId}>
-                    <td>{job.jobType}</td>
-                    <td>{job.status}</td>
+                    <td>{jobTypeLabel(job.jobType ?? '')}</td>
+                    <td>{processStatusLabel(job.status)}</td>
                     <td>{job.attemptCount}</td>
                     <td>{job.lastErrorCode ?? '—'}</td>
                     <td>
@@ -149,8 +189,9 @@ export function SystemAdmin() {
                           type="button"
                           className="text-button"
                           onClick={() => retryJob(jobId)}
+                          disabled={retryingJob !== undefined}
                         >
-                          再試行する
+                          {retryingJob === jobId ? '再試行中…' : '再試行する'}
                         </button>
                       ) : null}
                     </td>
@@ -166,9 +207,9 @@ export function SystemAdmin() {
           {audit.slice(0, 100).map((row) => (
             <li key={row.id}>
               <time>{row.createdAt}</time>
-              <strong>{row.action}</strong>
+              <strong>{auditActionLabel(String(row.action))}</strong>
               <span>
-                {row.targetType}:{row.targetId}
+                {auditTargetLabel(String(row.targetType))}：{row.targetId}
               </span>
               <small>{row.reason ?? ''}</small>
             </li>
@@ -181,6 +222,7 @@ export function SystemAdmin() {
 
 function formatHealthValue(key: string, value: unknown): string {
   if (value === null || value === undefined) return '未記録';
+  if (typeof value === 'boolean') return booleanLabel(value);
   if (
     [
       'centralBankBalance',
@@ -203,9 +245,12 @@ function formatHealthValue(key: string, value: unknown): string {
   if (key === 'residentSetBytes' && typeof value === 'number') {
     return `${(value / 1_024 / 1_024).toFixed(1)} MiB`;
   }
+  if (key === 'schedulerStatus' || key === 'r2AccessStatus') {
+    return value === 'nominal' ? '正常' : '異常';
+  }
   if (key === 'medianUserPoolByRaceKind' && typeof value === 'object' && value !== null) {
     return Object.entries(value)
-      .map(([kind, amount]) => `${kind}: ${formatRupees(String(amount))}`)
+      .map(([kind, amount]) => `${raceKindLabel(kind)}: ${formatRupees(String(amount))}`)
       .join(' / ');
   }
   if (key.toLowerCase().endsWith('at') && typeof value === 'string') {
@@ -216,34 +261,34 @@ function formatHealthValue(key: string, value: unknown): string {
 }
 
 const HEALTH_LABELS: Readonly<Record<string, string>> = {
-  databaseReadWrite: 'DB read/write',
-  ledgerProjectionValid: '台帳projection整合',
+  databaseReadWrite: 'データベース読み書き',
+  ledgerProjectionValid: '台帳の整合性',
   centralBankBalance: '中央銀行残高',
   allAccountBalanceTotal: '全口座残高合計',
   userBalanceTotal: 'ユーザー残高合計',
-  poolBalanceTotal: 'pool残高合計',
-  carryoverBalance: 'carryover残高',
-  seedLiquidityProfitLoss: 'seed liquidity損益',
+  poolBalanceTotal: '投票プール残高合計',
+  carryoverBalance: 'キャリーオーバー残高',
+  seedLiquidityProfitLoss: '初期流動性の損益',
   reliefGrantedTotal: '救済給付合計',
-  medianUserPoolByRaceKind: 'レース種別pool中央値',
+  medianUserPoolByRaceKind: 'レース種別ごとの投票プール中央値',
   topTwentyPercentShareBasisPoints: '上位20%残高占有率',
   thirtyDayMovementTotal: '30日間の通貨移動量',
-  lastBackupSuccessAt: '最終backup成功',
-  lastRestoreDrillAt: '最終restore drill',
-  schedulerHeartbeatAt: 'scheduler heartbeat',
-  schedulerStatus: 'scheduler状態',
-  r2LastAccessAt: '最終R2アクセス',
-  r2AccessStatus: 'R2アクセス状態',
+  lastBackupSuccessAt: '最終バックアップ成功',
+  lastRestoreDrillAt: '最終復旧訓練',
+  schedulerHeartbeatAt: '自動処理の最終応答',
+  schedulerStatus: '自動処理の状態',
+  r2LastAccessAt: '最終観戦データアクセス',
+  r2AccessStatus: '観戦データアクセス状態',
   discordMessageCount: 'Discord固定メッセージ数',
-  timelineObjectCount: 'timeline object数',
-  pendingJobs: '未処理job',
-  deadJobs: 'dead letter',
-  applicationVersion: 'application version',
-  simulationVersion: 'simulation version',
-  oddsVersion: 'odds version',
-  residentSetBytes: 'RSS',
+  timelineObjectCount: '観戦データ数',
+  pendingJobs: '未処理の自動処理',
+  deadJobs: '停止中の自動処理',
+  applicationVersion: 'アプリケーション版',
+  simulationVersion: 'シミュレーション版',
+  oddsVersion: 'オッズ版',
+  residentSetBytes: 'メモリ使用量',
   memoryStatus: 'メモリ状態',
-  discordGatewayConnected: 'Discord gateway接続',
+  discordGatewayConnected: 'Discord接続',
 };
 
 function formatRupees(value: string): string {
@@ -257,4 +302,14 @@ function formatTimestamp(value: unknown): string {
   return Number.isFinite(milliseconds) && milliseconds > 0
     ? new Date(milliseconds).toLocaleString('ja-JP')
     : '未記録';
+}
+
+function raceKindLabel(kind: string): string {
+  return kind === 'midweek' ? '平日' : kind === 'saturday_night' ? '土曜夜' : '通常';
+}
+
+function discordPurposeLabel(purpose: string): string {
+  if (purpose === 'race') return 'レース告知';
+  if (purpose.startsWith('ranking:')) return `ランキング ${purpose.slice('ranking:'.length)}`;
+  return 'その他';
 }

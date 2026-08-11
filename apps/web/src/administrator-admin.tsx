@@ -2,6 +2,7 @@ import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import { apiRequest } from './api.js';
+import { useAdminPolling } from './use-admin-polling.js';
 
 const administratorSchema = z.object({
   discordUserId: z.string().regex(/^\d{5,25}$/),
@@ -13,13 +14,14 @@ export function AdministratorAdmin() {
     readonly z.infer<typeof administratorSchema>[]
   >([]);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [removalTarget, setRemovalTarget] = useState<string>();
   const refresh = useCallback(async () => {
     setAdministrators(
       administratorSchema.array().parse(await apiRequest<unknown>('/api/v1/admin/administrators')),
     );
   }, []);
-  useEffect(() => void refresh(), [refresh]);
+  const { error: refreshError, isInitialLoading } = useAdminPolling(refresh, 15_000);
 
   async function add(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -35,6 +37,7 @@ export function AdministratorAdmin() {
       });
       element.reset();
       setError('');
+      setMessage('管理者を追加しました。');
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '管理者を追加できません。');
@@ -48,6 +51,7 @@ export function AdministratorAdmin() {
         body: JSON.stringify({ reason }),
       });
       setError('');
+      setMessage('管理者権限を外しました。');
       setRemovalTarget(undefined);
       await refresh();
     } catch (caught) {
@@ -57,26 +61,41 @@ export function AdministratorAdmin() {
 
   return (
     <TerminalPanel heading="管理者許可リスト" status={`${String(administrators.length)}人`}>
-      <ul className="ticket-list">
-        {administrators.map((administrator) => (
-          <li key={administrator.discordUserId}>
-            <span>{administrator.discordUserId}</span>
-            <small>{formatDate(administrator.createdAt)}</small>
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => setRemovalTarget(administrator.discordUserId)}
-              disabled={administrators.length <= 1}
-            >
-              許可を外す
-            </button>
-          </li>
-        ))}
-      </ul>
+      {refreshError === undefined ? null : (
+        <p className="field-error" role="alert">
+          {refreshError} 管理者一覧を更新できません。
+        </p>
+      )}
+      {isInitialLoading ? (
+        <p className="empty-copy" role="status" aria-live="polite">
+          管理者一覧を読み込んでいます。
+        </p>
+      ) : administrators.length === 0 ? (
+        <p className="empty-copy" role="status">
+          管理者が登録されていません。
+        </p>
+      ) : (
+        <ul className="ticket-list">
+          {administrators.map((administrator) => (
+            <li key={administrator.discordUserId}>
+              <span>{administrator.discordUserId}</span>
+              <small>登録日 {formatDate(administrator.createdAt)}</small>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setRemovalTarget(administrator.discordUserId)}
+                disabled={administrators.length <= 1}
+              >
+                権限を外す
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <form className="terminal-form" onSubmit={(event) => void add(event)}>
         <div className="form-row">
           <label>
-            Discord user ID
+            DiscordユーザーID
             <input name="discordUserId" inputMode="numeric" pattern="\d{5,25}" required />
           </label>
           <label>
@@ -87,6 +106,11 @@ export function AdministratorAdmin() {
         {error === '' ? null : (
           <p className="field-error" role="alert">
             {error}
+          </p>
+        )}
+        {message === '' ? null : (
+          <p className="admin-message" role="status">
+            {message}
           </p>
         )}
         <button type="submit">管理者を追加</button>

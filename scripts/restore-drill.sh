@@ -13,7 +13,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 litestream restore \
-  -config /etc/litestream.yml \
+  -config /tmp/litestream.yml \
   -integrity-check full \
   -o "$restored_database" \
   "$DATABASE_PATH"

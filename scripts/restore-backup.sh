@@ -24,7 +24,7 @@ fi
 
 if [ -n "$restore_timestamp" ]; then
   exec litestream restore \
-    -config /etc/litestream.yml \
+    -config /tmp/litestream.yml \
     -integrity-check full \
     -timestamp "$restore_timestamp" \
     -o "$target_path" \
@@ -32,7 +32,7 @@ if [ -n "$restore_timestamp" ]; then
 fi
 
 exec litestream restore \
-  -config /etc/litestream.yml \
+  -config /tmp/litestream.yml \
   -integrity-check full \
   -o "$target_path" \
   "$DATABASE_PATH"

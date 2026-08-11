@@ -206,6 +206,18 @@ export class SqliteAuthStore {
     };
   }
 
+  public rotateCsrfToken(sessionToken: string): string {
+    const csrfToken = createOpaqueToken();
+    const update = this.database
+      .prepare(
+        `UPDATE web_sessions SET csrf_token_hash = ?
+         WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?`,
+      )
+      .run(hashOpaqueToken(csrfToken), hashOpaqueToken(sessionToken), BigInt(this.now()));
+    if (update.changes !== 1) throw new Error('Web session is invalid or expired.');
+    return csrfToken;
+  }
+
   public markReauthenticated(
     sessionId: string,
     expectedDiscordUserId: string,

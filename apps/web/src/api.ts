@@ -23,7 +23,17 @@ export interface ApiEnvelope<Result> {
   readonly result: Result;
 }
 
+let csrfRefreshPromise: Promise<string> | undefined;
+
 export async function apiRequest<Result>(path: string, init: RequestInit = {}): Promise<Result> {
+  return apiRequestInternal<Result>(path, init, true);
+}
+
+async function apiRequestInternal<Result>(
+  path: string,
+  init: RequestInit,
+  allowCsrfRetry: boolean,
+): Promise<Result> {
   const headers = new Headers(init.headers);
   headers.set('accept', 'application/json');
   if (init.body !== undefined) headers.set('content-type', 'application/json');
@@ -37,6 +47,14 @@ export async function apiRequest<Result>(path: string, init: RequestInit = {}): 
   const body = (await response.json()) as unknown;
   if (!response.ok) {
     const error = apiErrorSchema.safeParse(body);
+    if (
+      allowCsrfRetry &&
+      error.success &&
+      ['CSRF_TOKEN_INVALID', 'CSRF_TOKEN_REQUIRED'].includes(error.data.error.code)
+    ) {
+      if (sessionStorage.getItem('jcb.csrf') === csrfToken) await refreshCsrfToken();
+      return apiRequestInternal<Result>(path, init, false);
+    }
     throw new Error(
       error.success ? error.data.error.message : `API error ${String(response.status)}`,
     );
@@ -51,6 +69,23 @@ export async function apiRequest<Result>(path: string, init: RequestInit = {}): 
     throw new Error('API response contract is invalid.');
   }
   return body.result as Result;
+}
+
+export async function refreshCsrfToken(): Promise<string> {
+  csrfRefreshPromise ??= fetch(`${API_ORIGIN}/api/v1/auth/csrf`, {
+    credentials: 'include',
+    headers: { accept: 'application/json' },
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error('Authentication required.');
+      const body = (await response.json()) as ApiEnvelope<{ csrfToken: string }>;
+      sessionStorage.setItem('jcb.csrf', body.result.csrfToken);
+      return body.result.csrfToken;
+    })
+    .finally(() => {
+      csrfRefreshPromise = undefined;
+    });
+  return csrfRefreshPromise;
 }
 
 export async function exchangeTicket(ticket: string): Promise<{

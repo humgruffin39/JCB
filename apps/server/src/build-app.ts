@@ -151,10 +151,19 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     if (sessionToken === undefined)
       throw httpError(401, 'AUTH_REQUIRED', 'Authentication required.');
     const csrfHeader = request.headers['x-csrf-token'];
-    const session = authStore.validateSession(
-      sessionToken,
-      options.csrf ? (Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader) : undefined,
-    );
+    const csrfToken = Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader;
+    if (options.csrf && csrfToken === undefined) {
+      throw httpError(403, 'CSRF_TOKEN_REQUIRED', 'CSRF token is required.');
+    }
+    let session: ReturnType<typeof authStore.validateSession>;
+    try {
+      session = authStore.validateSession(sessionToken, options.csrf ? csrfToken : undefined);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'CSRF token is invalid.') {
+        throw httpError(403, 'CSRF_TOKEN_INVALID', 'CSRF token is invalid.');
+      }
+      throw httpError(401, 'AUTH_REQUIRED', 'Authentication required.');
+    }
     if (now() - session.lastGuildCheckAt >= ONE_DAY_MILLISECONDS) {
       if (!(await dependencies.membership.isCurrentMember(session.discordUserId))) {
         authStore.revoke(sessionToken);
@@ -375,6 +384,12 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     authStore.revoke(token);
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return envelope({ loggedOut: true });
+  });
+
+  app.get('/api/v1/auth/csrf', async (request) => {
+    await authenticate(request);
+    const sessionToken = request.cookies[SESSION_COOKIE]!;
+    return envelope({ csrfToken: authStore.rotateCsrfToken(sessionToken) });
   });
 
   app.get('/api/v1/me', async (request) => {

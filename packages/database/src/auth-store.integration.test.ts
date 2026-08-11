@@ -27,6 +27,11 @@ describe('web authentication store', () => {
     );
     expect(store.validateSession(exchanged.sessionToken).authenticationMethod).toBe('ticket');
     expect(() => store.validateSession(exchanged.sessionToken, 'wrong')).toThrow();
+    const rotatedCsrfToken = store.rotateCsrfToken(exchanged.sessionToken);
+    expect(() => store.validateSession(exchanged.sessionToken, exchanged.csrfToken)).toThrow();
+    expect(store.validateSession(exchanged.sessionToken, rotatedCsrfToken).discordUserId).toBe(
+      '123456',
+    );
     store.revoke(exchanged.sessionToken);
     expect(() => store.validateSession(exchanged.sessionToken)).toThrow();
     now += 1;

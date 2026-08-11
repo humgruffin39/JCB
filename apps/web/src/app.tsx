@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminTerminal } from './admin-terminal.js';
-import { apiAbsoluteUrl, apiRequest, exchangeTicket, getRace } from './api.js';
+import { apiAbsoluteUrl, apiRequest, exchangeTicket, getRace, refreshCsrfToken } from './api.js';
 import { RaceTerminal } from './race-terminal.js';
 
 type AppState =
@@ -63,8 +63,12 @@ function AdminGate() {
       window.history.replaceState(null, '', '/admin');
     }
     void apiRequest<unknown>('/api/v1/admin/health')
+      .then(refreshCsrfToken)
       .then(() => setStatus('authorized'))
-      .catch(() => setStatus('login'));
+      .catch(() => {
+        sessionStorage.removeItem('jcb.csrf');
+        setStatus('login');
+      });
   }, []);
 
   if (status === 'authorized') return <AdminTerminal />;

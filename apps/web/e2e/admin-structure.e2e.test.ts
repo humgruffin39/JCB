@@ -14,7 +14,9 @@ test('separates currency and system operations into focused sections', async ({ 
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     let result: unknown = [];
-    if (path.endsWith('/settings/public')) {
+    if (path.endsWith('/auth/csrf')) {
+      result = { csrfToken: 'test-csrf-token' };
+    } else if (path.endsWith('/settings/public')) {
       result = publicSettings;
     } else if (path.endsWith('/admin/health')) {
       result = {

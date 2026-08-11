@@ -13,11 +13,13 @@ const publicSettings = {
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
-    const result = path.endsWith('/settings/public')
-      ? publicSettings
-      : path.endsWith('/admin/health')
-        ? { databaseReadWrite: true }
-        : [];
+    const result = path.endsWith('/auth/csrf')
+      ? { csrfToken: 'test-csrf-token' }
+      : path.endsWith('/settings/public')
+        ? publicSettings
+        : path.endsWith('/admin/health')
+          ? { databaseReadWrite: true }
+          : [];
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

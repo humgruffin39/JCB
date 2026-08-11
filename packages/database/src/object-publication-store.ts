@@ -2,6 +2,8 @@ import type Database from 'better-sqlite3';
 import type { PrivateObjectStore } from '@jcb/application';
 import { ulid } from 'ulid';
 
+export const MAX_OBJECT_PUBLICATION_ATTEMPTS = 8;
+
 export interface ObjectPublication {
   readonly id: string;
   readonly key: string;
@@ -119,17 +121,37 @@ export class SqliteObjectPublicationStore {
   }
 
   public fail(publication: ObjectPublication, workerId: string, now: number, error: unknown): void {
+    const isDeadLetter = publication.attemptCount >= MAX_OBJECT_PUBLICATION_ATTEMPTS;
     const backoff = Math.min(60_000, 1_000 * 2 ** Math.min(publication.attemptCount - 1, 6));
     const message = error instanceof Error ? error.message : 'Unknown object publication error.';
     const result = this.database
       .prepare(
         `UPDATE object_publications
-         SET status = 'pending', next_attempt_at = ?, locked_at = NULL, locked_by = NULL,
+         SET status = ?, next_attempt_at = ?, locked_at = NULL, locked_by = NULL,
              last_error_redacted = ?, updated_at = ?
          WHERE id = ? AND status = 'running' AND locked_by = ?`,
       )
-      .run(BigInt(now + backoff), message.slice(0, 300), BigInt(now), publication.id, workerId);
+      .run(
+        isDeadLetter ? 'dead_letter' : 'pending',
+        BigInt(isDeadLetter ? now : now + backoff),
+        message.slice(0, 300),
+        BigInt(now),
+        publication.id,
+        workerId,
+      );
     if (result.changes !== 1) throw new Error('Object publication failure lost its lock.');
+  }
+
+  public retryDeadLetter(id: string, now: number): void {
+    const result = this.database
+      .prepare(
+        `UPDATE object_publications
+         SET status = 'pending', attempt_count = 0, next_attempt_at = ?,
+             locked_at = NULL, locked_by = NULL, last_error_redacted = NULL, updated_at = ?
+         WHERE id = ? AND status = 'dead_letter'`,
+      )
+      .run(BigInt(now), BigInt(now), id);
+    if (result.changes !== 1) throw new Error('Object publication dead-letter was not found.');
   }
 
   public reclaimStale(now: number, staleAfterMilliseconds: number): number {

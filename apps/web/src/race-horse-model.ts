@@ -73,7 +73,14 @@ export interface HorseRig {
 let assetsPromise: Promise<LoadedHorseAssets> | undefined;
 
 export async function loadHorseAssets(renderer: THREE.WebGLRenderer): Promise<LoadedHorseAssets> {
-  assetsPromise ??= loadAssets(renderer);
+  if (assetsPromise === undefined) {
+    const pending = loadAssets(renderer);
+    const retryable = pending.catch((error: unknown) => {
+      if (assetsPromise === retryable) assetsPromise = undefined;
+      throw error;
+    });
+    assetsPromise = retryable;
+  }
   return assetsPromise;
 }
 

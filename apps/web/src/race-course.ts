@@ -13,6 +13,7 @@ const HALF_STRAIGHT_LENGTH = COURSE_STRAIGHT_HALF_LENGTH;
 const FULL_STRAIGHT_LENGTH = COURSE_STRAIGHT_HALF_LENGTH * 2;
 const HALF_TURN_LENGTH = Math.PI * COURSE_TURN_RADIUS;
 export const COURSE_LENGTH = FULL_STRAIGHT_LENGTH * 2 + HALF_TURN_LENGTH * 2;
+const courseLengthCache = new Map<number, number>([[REFERENCE_DISTANCE_M, COURSE_LENGTH]]);
 
 export interface CourseSample {
   readonly position: THREE.Vector3;
@@ -27,7 +28,22 @@ export function courseScaleForDistance(distanceM = REFERENCE_DISTANCE_M): number
 }
 
 export function courseLengthForDistance(distanceM = REFERENCE_DISTANCE_M): number {
-  return COURSE_LENGTH * courseScaleForDistance(distanceM);
+  const normalizedDistance =
+    Number.isFinite(distanceM) && distanceM > 0 ? distanceM : REFERENCE_DISTANCE_M;
+  const cached = courseLengthCache.get(normalizedDistance);
+  if (cached !== undefined) return cached;
+
+  const samples = 512;
+  const scaleX = courseScaleForDistance(normalizedDistance);
+  let length = 0;
+  let previous = sampleCenterline(0, scaleX).position;
+  for (let index = 1; index <= samples; index += 1) {
+    const current = sampleCenterline(index / samples, scaleX).position;
+    length += current.distanceTo(previous);
+    previous = current;
+  }
+  courseLengthCache.set(normalizedDistance, length);
+  return length;
 }
 
 export function courseRadiusXForDistance(distanceM = REFERENCE_DISTANCE_M): number {

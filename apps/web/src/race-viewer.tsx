@@ -20,6 +20,10 @@ type RaceDetail = Awaited<ReturnType<typeof getRace>>;
 type RaceResult = Awaited<ReturnType<typeof getResult>>;
 type TimelineFrame = TimelineFrameContract;
 type Bet = ReturnType<typeof betResponseSchema.parse>;
+interface LoadedTimeline {
+  readonly frames: readonly TimelineFrame[];
+  readonly duration: number;
+}
 
 type ViewerStatus =
   | { readonly state: 'waiting'; readonly message: string }
@@ -60,7 +64,6 @@ export function RaceViewer({
   const [bets, setBets] = useState<readonly Bet[]>([]);
   const [result, setResult] = useState<RaceResult>();
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
-  const livePlaybackDelay = useRef(0);
 
   useEffect(() => {
     void estimateServerOffset()
@@ -122,12 +125,15 @@ export function RaceViewer({
           token = refreshed.edgeAccessToken;
           sessionStorage.setItem(tokenKey, token);
         }
-        const frames = await loadTimeline(race.id, token);
+        const loadedTimeline = await loadTimeline(race.id, token);
         if (!isCancelled) {
           hasLoaded = true;
-          const duration = frames.at(-1)?.timeMs ?? 0;
-          setViewer({ state: 'ready', frames, duration });
-          if (Date.now() + offset >= race.scheduledAt + duration) {
+          setViewer({
+            state: 'ready',
+            frames: loadedTimeline.frames,
+            duration: loadedTimeline.duration,
+          });
+          if (Date.now() + offset >= race.scheduledAt + loadedTimeline.duration) {
             setIsReplay(true);
             replayAnchor.current = { local: performance.now(), position: 0 };
           }
@@ -159,7 +165,14 @@ export function RaceViewer({
       if (isReplay) {
         replayAnchor.current = { local: performance.now(), position };
       } else {
-        livePlaybackDelay.current = Date.now() + offset - race.scheduledAt - position;
+        setPosition(
+          synchronizedPosition(
+            Date.now(),
+            offset,
+            race.scheduledAt,
+            viewer.duration + FINISH_RUNOUT_MS,
+          ),
+        );
       }
       setHasPlaybackStarted(true);
     }, RACE_START_HOLD_MS);
@@ -184,14 +197,7 @@ export function RaceViewer({
         const elapsed = performance.now() - replayAnchor.current.local;
         setPosition(Math.min(playbackEndMs, replayAnchor.current.position + elapsed));
       } else {
-        setPosition(
-          synchronizedPosition(
-            Date.now(),
-            offset - livePlaybackDelay.current,
-            race.scheduledAt,
-            playbackEndMs,
-          ),
-        );
+        setPosition(synchronizedPosition(Date.now(), offset, race.scheduledAt, playbackEndMs));
       }
     }, 50);
     return () => window.clearInterval(interval);
@@ -213,6 +219,19 @@ export function RaceViewer({
     const timer = window.setTimeout(() => setPhase('results'), 3_000);
     return () => window.clearTimeout(timer);
   }, [phase]);
+
+  useEffect(() => {
+    if (viewer.state !== 'ready' || phase === 'race' || result !== undefined) return;
+    let cancelled = false;
+    void getResult(race.id)
+      .then((value) => {
+        if (!cancelled) setResult(value);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, race.id, result, viewer]);
 
   const timelineFinishOrder = useMemo(() => {
     if (viewer.state !== 'ready') return [];
@@ -244,7 +263,7 @@ export function RaceViewer({
   const finalOrder = result?.finishOrder ?? timelineFinishOrder;
   const currentFrame = useMemo(() => {
     if (viewer.state !== 'ready') return undefined;
-    return createRaceDramaFrame(viewer.frames, position, finalOrder);
+    return createRaceDramaFrame(viewer.frames, position, finalOrder, viewer.duration);
   }, [finalOrder, position, viewer]);
   const orderedHorses = useMemo(
     () => [...(currentFrame?.horses ?? [])].sort((left, right) => left.rank - right.rank),
@@ -618,7 +637,7 @@ function BroadcastState({ state, message }: { readonly state: string; readonly m
   );
 }
 
-async function loadTimeline(raceId: string, token: string): Promise<readonly TimelineFrame[]> {
+async function loadTimeline(raceId: string, token: string): Promise<LoadedTimeline> {
   const headers = { authorization: `Bearer ${token}` };
   const releaseResponse = await fetch(
     `${EDGE_ORIGIN}/edge/v1/races/${encodeURIComponent(raceId)}/release`,
@@ -656,7 +675,10 @@ async function loadTimeline(raceId: string, token: string): Promise<readonly Tim
   const decompressed = new Response(
     new Blob([plaintext]).stream().pipeThrough(new DecompressionStream('gzip')),
   );
-  return timelineSchema.parse((await decompressed.json()) as unknown);
+  return {
+    frames: timelineSchema.parse((await decompressed.json()) as unknown),
+    duration: release.timelineDuration,
+  };
 }
 
 function base64Bytes(value: string): Uint8Array {

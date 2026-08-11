@@ -15,9 +15,35 @@ const FINISH_ORDER = FINISH_TIMES.map((finishTimeMs, index) => ({
 describe('race drama', () => {
   it('preserves the untouched official start and finish frames', () => {
     const officialResult = structuredClone(FINISH_ORDER);
+    const finalFrame = createRaceDramaFrame(FRAMES, DURATION_MS, FINISH_ORDER);
     expect(createRaceDramaFrame(FRAMES, 0, FINISH_ORDER)).toEqual(FRAMES[0]);
-    expect(createRaceDramaFrame(FRAMES, DURATION_MS, FINISH_ORDER)).toEqual(FRAMES.at(-1));
+    expect(finalFrame.timeMs).toBe(FRAMES.at(-1)!.timeMs);
+    expect([...finalFrame.horses].sort((left, right) => left.rank - right.rank)).toEqual(
+      FINISH_ORDER.map((finish) => ({
+        ...findHorse(finalFrame, finish.horseNumber),
+        rank: finish.position,
+        progress: 1,
+        animationState: 'finished',
+      })),
+    );
     expect(FINISH_ORDER).toEqual(officialResult);
+  });
+
+  it('does not finish before the release duration when the final sample is early', () => {
+    const truncatedFrames = FRAMES.slice(0, -1);
+    const beforeReleaseEnd = createRaceDramaFrame(
+      truncatedFrames,
+      DURATION_MS - 250,
+      FINISH_ORDER,
+      DURATION_MS,
+    );
+
+    expect(beforeReleaseEnd.horses.some((horse) => horse.progress < 1)).toBe(true);
+    expect(
+      createRaceDramaFrame(truncatedFrames, DURATION_MS, FINISH_ORDER, DURATION_MS).horses.every(
+        (horse) => horse.progress === 1,
+      ),
+    ).toBe(true);
   });
 
   it('keeps every horse moving forward while creating repeated mid-race order changes', () => {
@@ -104,6 +130,43 @@ describe('race drama', () => {
 
     expect(dramaticRunnerGain).toBeGreaterThan(officialRunnerGain * 1.08);
     expect(dramaticWinnerGain).toBeGreaterThan(dramaticRunnerGain * 1.08);
+  });
+
+  it('keeps cinematic movement above a safe fraction of official pace', () => {
+    let minimumRatio = Number.POSITIVE_INFINITY;
+    for (let positionMs = 50; positionMs < DURATION_MS; positionMs += 50) {
+      const previous = createRaceDramaFrame(FRAMES, positionMs - 50, FINISH_ORDER);
+      const current = createRaceDramaFrame(FRAMES, positionMs, FINISH_ORDER);
+      const officialPrevious = interpolateTimelineFrame(FRAMES, positionMs - 50);
+      const officialCurrent = interpolateTimelineFrame(FRAMES, positionMs);
+      for (const horse of current.horses) {
+        const previousHorse = findHorse(previous, horse.horseNumber);
+        const officialHorse = findHorse(officialCurrent, horse.horseNumber);
+        const officialPreviousHorse = findHorse(officialPrevious, horse.horseNumber);
+        const officialProgressDelta = officialHorse.progress - officialPreviousHorse.progress;
+        if (officialProgressDelta <= 0 || officialHorse.progress >= 0.999) continue;
+        minimumRatio = Math.min(
+          minimumRatio,
+          (horse.progress - previousHorse.progress) / officialProgressDelta,
+        );
+      }
+    }
+
+    expect(minimumRatio).toBeGreaterThanOrEqual(0.78);
+  });
+
+  it('locks horses that crossed the finish in official order', () => {
+    for (let positionMs = 0; positionMs <= DURATION_MS; positionMs += 50) {
+      const frame = createRaceDramaFrame(FRAMES, positionMs, FINISH_ORDER);
+      const finished = frame.horses
+        .filter((horse) => horse.progress >= 1)
+        .sort((left, right) => left.rank - right.rank);
+      const expected = FINISH_ORDER.filter((finish) =>
+        finished.some((horse) => horse.horseNumber === finish.horseNumber),
+      ).map((finish) => finish.horseNumber);
+
+      expect(finished.map((horse) => horse.horseNumber)).toEqual(expected);
+    }
   });
 });
 

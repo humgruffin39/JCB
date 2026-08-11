@@ -19,6 +19,7 @@ const FINAL_STRAIGHT_START = 0.855;
 const WINNER_ATTACK_START = 0.875;
 const WINNER_ATTACK_END = 0.955;
 const FINAL_SPRINT_RATE = 0.12;
+const FINAL_SPRINT_SHIFT_START = 0.24;
 
 /**
  * The official timeline and result remain untouched. This function only time-warps the
@@ -28,44 +29,102 @@ export function createRaceDramaFrame(
   frames: readonly TimelineFrame[],
   positionMs: number,
   finishOrder: readonly RaceDramaFinish[],
+  timelineDurationMs?: number,
 ): TimelineFrame {
   const officialFrame = interpolateTimelineFrame(frames, positionMs);
   if (frames.length < 2) return officialFrame;
 
-  const durationMs = frames.at(-1)!.timeMs;
-  if (durationMs <= 0 || positionMs <= 0 || positionMs >= durationMs) return officialFrame;
+  const durationMs = Math.max(frames.at(-1)!.timeMs, timelineDurationMs ?? frames.at(-1)!.timeMs);
+  if (durationMs <= 0 || positionMs <= 0) return officialFrame;
+  if (positionMs >= durationMs) return applyFinishOrder(officialFrame, finishOrder);
 
   const phase = clamp01(positionMs / durationMs);
   const winner = finishOrder.find((finish) => finish.position === 1);
   const runnerUp = finishOrder.find((finish) => finish.position === 2);
+  const finishByHorse = new Map(finishOrder.map((finish) => [finish.horseNumber, finish]));
+  const finishPositions = new Map(
+    finishOrder.map((finish) => [finish.horseNumber, finish.position]),
+  );
   const horses = officialFrame.horses.map((horse) => {
     const timeShiftMs = cinematicTimeShift(phase, durationMs, horse.horseNumber, winner, runnerUp);
     const sampleTimeMs = clamp(positionMs + timeShiftMs, 0, durationMs);
     const sampled = interpolateTimelineHorse(frames, sampleTimeMs, horse.horseNumber) ?? horse;
-    const playbackRate = clamp(
-      1 + cinematicTimeShiftDerivative(phase, durationMs, horse.horseNumber, winner, runnerUp),
-      0.92,
-      1.12,
+    const finish = finishByHorse.get(horse.horseNumber);
+    const officiallyFinished = finish !== undefined && positionMs >= finish.finishTimeMs;
+    const progress = officiallyFinished ? 1 : Math.min(sampled.progress, 0.999999);
+    const animationState = officiallyFinished
+      ? ('finished' as const)
+      : sampled.animationState === 'finished'
+        ? ('running' as const)
+        : sampled.animationState;
+    const timeShiftDerivative = cinematicTimeShiftDerivative(
+      phase,
+      durationMs,
+      horse.horseNumber,
+      winner,
+      runnerUp,
     );
+    const playbackRate = clamp(1 + timeShiftDerivative, 0.92, 1.12);
     return {
       ...sampled,
+      progress,
+      animationState,
       speed: sampled.speed * playbackRate,
     };
   });
 
-  const ranks = new Map(
-    [...horses]
+  const rankedHorses = [
+    ...horses
+      .filter((horse) => horse.progress >= 1)
+      .sort(
+        (left, right) =>
+          (finishPositions.get(left.horseNumber) ?? Number.POSITIVE_INFINITY) -
+            (finishPositions.get(right.horseNumber) ?? Number.POSITIVE_INFINITY) ||
+          left.horseNumber - right.horseNumber,
+      ),
+    ...horses
+      .filter((horse) => horse.progress < 1)
       .sort(
         (left, right) =>
           right.progress - left.progress ||
           right.speed - left.speed ||
           left.horseNumber - right.horseNumber,
-      )
-      .map((horse, index) => [horse.horseNumber, index + 1]),
-  );
+      ),
+  ];
+  const ranks = new Map(rankedHorses.map((horse, index) => [horse.horseNumber, index + 1]));
 
   return {
     timeMs: Math.round(positionMs),
+    horses: horses.map((horse) => ({
+      ...horse,
+      rank: ranks.get(horse.horseNumber) ?? horse.rank,
+    })),
+  };
+}
+
+function applyFinishOrder(
+  frame: TimelineFrame,
+  finishOrder: readonly RaceDramaFinish[],
+): TimelineFrame {
+  const positions = new Map(finishOrder.map((finish) => [finish.horseNumber, finish.position]));
+  const horses = frame.horses.map((horse) => ({
+    ...horse,
+    progress: positions.has(horse.horseNumber) ? 1 : horse.progress,
+    animationState: positions.has(horse.horseNumber) ? ('finished' as const) : horse.animationState,
+  }));
+  const ranks = new Map(
+    [...horses]
+      .sort(
+        (left, right) =>
+          (positions.get(left.horseNumber) ?? Number.POSITIVE_INFINITY) -
+            (positions.get(right.horseNumber) ?? Number.POSITIVE_INFINITY) ||
+          right.progress - left.progress ||
+          left.horseNumber - right.horseNumber,
+      )
+      .map((horse, index) => [horse.horseNumber, index + 1]),
+  );
+  return {
+    ...frame,
     horses: horses.map((horse) => ({
       ...horse,
       rank: ranks.get(horse.horseNumber) ?? horse.rank,
@@ -156,7 +215,7 @@ function cinematicTimeShift(
   const primary = Math.sin((phase * signature.primaryCycles + signature.primaryPhase) * TAU);
   const secondary = Math.sin((phase * signature.secondaryCycles + signature.secondaryPhase) * TAU);
   const fieldShift =
-    durationMs * signature.amplitude * earlyEnvelope * (primary * 0.72 + secondary * 0.28);
+    durationMs * signature.amplitude * 0.5 * earlyEnvelope * (primary * 0.72 + secondary * 0.28);
 
   const finalSprint = finalSprintTimeShift(phase, durationMs);
   if (winner === undefined || runnerUp === undefined) return fieldShift + finalSprint;
@@ -174,7 +233,10 @@ function cinematicTimeShift(
 function finalSprintTimeShift(phase: number, durationMs: number): number {
   const sprintReserveMs = durationMs * (1 - FINAL_STRAIGHT_START) * FINAL_SPRINT_RATE;
   if (phase < FINAL_STRAIGHT_START) {
-    return -sprintReserveMs * smootherstep(normalize(phase, DRAMA_FADE, FINAL_STRAIGHT_START));
+    return phase < FINAL_SPRINT_SHIFT_START
+      ? 0
+      : -sprintReserveMs *
+          smootherstep(normalize(phase, FINAL_SPRINT_SHIFT_START, FINAL_STRAIGHT_START));
   }
   return -sprintReserveMs + (phase - FINAL_STRAIGHT_START) * durationMs * FINAL_SPRINT_RATE;
 }

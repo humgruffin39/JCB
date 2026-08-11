@@ -20,7 +20,7 @@ import {
   type HorseCoatColor,
   type HorseRig,
 } from './race-horse-model.js';
-import { racingLineOffset } from './race-lines.js';
+import { finishLineOffset, racingLineOffset } from './race-lines.js';
 
 const HORSE_NOSE_OFFSET = 1.05;
 const FINISH_ROOT_PROGRESS = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET);
@@ -168,18 +168,28 @@ export class RaceWorld {
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 
-    const [assets] = await Promise.all([loadHorseAssets(renderer)]);
-    const rigs = Array.from({ length: 8 }, (_, index) =>
-      createHorseRig(assets, index + 1, horseCoats.get(index + 1)),
-    );
-    return new RaceWorld(
-      renderer,
-      new RaceEnvironment(renderer, distanceM, surface),
-      rigs,
-      distanceM,
-      onCameraModeChange,
-      onTrackedHorseChange,
-    );
+    const rigs: HorseRig[] = [];
+    let environment: RaceEnvironment | undefined;
+    try {
+      const assets = await loadHorseAssets(renderer);
+      for (let index = 0; index < 8; index += 1) {
+        rigs.push(createHorseRig(assets, index + 1, horseCoats.get(index + 1)));
+      }
+      environment = new RaceEnvironment(renderer, distanceM, surface);
+      return new RaceWorld(
+        renderer,
+        environment,
+        rigs,
+        distanceM,
+        onCameraModeChange,
+        onTrackedHorseChange,
+      );
+    } catch (error) {
+      rigs.forEach((rig) => rig.dispose());
+      environment?.dispose();
+      renderer.dispose();
+      throw error;
+    }
   }
 
   setCameraMode(mode: RaceCameraMode): void {
@@ -236,12 +246,7 @@ export class RaceWorld {
     );
     this.leaderHorseNumber =
       state.frame.horses.find((horse) => horse.rank === 1)?.horseNumber ?? ranked[0]?.horseNumber;
-    const weights = [4, 3, 2, 1] as const;
-    const leaderProgress =
-      ranked
-        .slice(0, 4)
-        .reduce((sum, horse, index) => sum + horse.progress * (weights[index] ?? 1), 0) /
-      weights.reduce((sum, weight) => sum + weight, 0);
+    const leaderProgress = ranked[0]?.progress ?? 0;
     const focusRaceProgress = state.isPhoto ? 1 : Math.min(leaderProgress, 1);
 
     for (const horse of this.horses) {
@@ -298,10 +303,12 @@ export class RaceWorld {
       }
       let targetProgress = frameCourseProgress;
       if (state.isPhoto && finish !== undefined) {
-        const winnerTime = state.finishOrder[0]?.finishTimeMs ?? finish.finishTimeMs;
+        const winnerTime =
+          state.finishOrder.find((candidate) => candidate.position === 1)?.finishTimeMs ??
+          finish.finishTimeMs;
         targetProgress =
           this.finishRootProgress -
-          Math.min(13, ((finish.finishTimeMs - winnerTime) / 1_000) * 12.5) / this.courseLength;
+          Math.min(13, ((finish.finishTimeMs - winnerTime) / 1_000) * 12.5) / this.distanceM;
       } else if (horse.visualFinishTimeMs !== undefined) {
         targetProgress = postFinishCourseProgress(
           state.positionMs,
@@ -311,7 +318,10 @@ export class RaceWorld {
           this.courseLength,
         );
       }
-      const targetLateralOffset = racingLineOffset(frameHorse, state.frame.horses, this.distanceM);
+      const targetLateralOffset =
+        state.isPhoto && finish !== undefined
+          ? finishLineOffset(finish.position, state.finishOrder.length)
+          : racingLineOffset(frameHorse, state.frame.horses, this.distanceM);
       const poseState =
         frameHorse.animationState === 'waiting' ? 'waiting' : state.isPhoto ? 'photo' : 'running';
 
@@ -354,7 +364,8 @@ export class RaceWorld {
     if (this.cameraMode === 'horse') {
       this.updateTrackedHorseCamera();
     } else {
-      const battleProgress = this.getBattleFocusProgress(state);
+      const battleProgress =
+        focusRaceProgress >= 0.9 ? undefined : this.getBattleFocusProgress(state);
       this.updateCamera(
         battleProgress ?? focusRaceProgress,
         state.isPhoto,
@@ -528,7 +539,7 @@ export class RaceWorld {
       const gapMetres =
         rival === undefined
           ? Number.POSITIVE_INFINITY
-          : Math.abs(rival.progress - overtaker.progress) * this.courseLength;
+          : Math.abs(rival.progress - overtaker.progress) * this.distanceM;
       if (rival !== undefined && gapMetres <= 6.5) {
         this.battleHorseNumbers = [overtaker.horseNumber, rival.horseNumber];
         this.battleUntilMs = state.positionMs + 3_200;

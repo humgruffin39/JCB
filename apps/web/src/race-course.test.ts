@@ -77,6 +77,7 @@ describe('stadium oval race course', () => {
     expect(longStraight.position.z).toBeCloseTo(shortStraight.position.z, 5);
     expect(displacement.length()).toBeCloseTo(4.25, 3);
     expect(Math.abs(displacement.dot(longStraight.tangent))).toBeLessThan(0.001);
-    expect(courseLengthForDistance(2_400)).toBeCloseTo(COURSE_LENGTH * 2, 5);
+    expect(courseLengthForDistance(2_400)).toBeGreaterThan(COURSE_LENGTH);
+    expect(courseLengthForDistance(2_400)).toBeLessThan(COURSE_LENGTH * 2);
   });
 });

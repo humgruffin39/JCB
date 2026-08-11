@@ -18,6 +18,13 @@ export interface RacingLineHorse {
   readonly lateralOffset: number;
 }
 
+export function finishLineOffset(position: number, fieldSize: number): number {
+  const safeFieldSize = Math.max(1, Math.round(fieldSize));
+  const safePosition = THREE.MathUtils.clamp(Math.round(position), 1, safeFieldSize);
+  const centeredPosition = safePosition - (safeFieldSize + 1) / 2;
+  return THREE.MathUtils.clamp(centeredPosition * 0.95, -4.6, 4.6);
+}
+
 export function racingLineOffset(
   horse: RacingLineHorse,
   field: readonly RacingLineHorse[],

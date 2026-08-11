@@ -20,7 +20,11 @@ describe('race camera director', () => {
   });
 
   it('uses the finish-line camera for the photo state at any progress', () => {
-    expect(selectBroadcastCameraShot(0.4, true).id).toBe('finish-line');
+    const shot = selectBroadcastCameraShot(0.4, true);
+    expect(shot.id).toBe('finish-line');
+    expect(shot.tangentOffset).toBe(0);
+    expect(shot.normalOffset).toBeLessThan(0);
+    expect(shot.height).toBeLessThan(4);
   });
 
   it('keeps every camera specification physically valid', () => {

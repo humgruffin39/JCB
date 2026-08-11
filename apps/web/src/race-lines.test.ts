@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { racingLineOffset, type RacingLineHorse } from './race-lines.js';
+import { finishLineOffset, racingLineOffset, type RacingLineHorse } from './race-lines.js';
 
 const field: readonly RacingLineHorse[] = Array.from({ length: 8 }, (_, index) => ({
   horseNumber: index + 1,
@@ -11,6 +11,15 @@ const field: readonly RacingLineHorse[] = Array.from({ length: 8 }, (_, index) =
 }));
 
 describe('visual racing lines', () => {
+  it('spreads the photo finish slots by official position', () => {
+    const offsets = Array.from({ length: 8 }, (_, index) => finishLineOffset(index + 1, 8));
+
+    expect(offsets).toEqual([...offsets].sort((left, right) => left - right));
+    expect(offsets[0]).toBeCloseTo(-3.325, 3);
+    expect(offsets.at(-1)).toBeCloseTo(3.325, 3);
+    expect(new Set(offsets).size).toBe(8);
+  });
+
   it('holds the starting stalls before allowing the field to merge', () => {
     const horse = { ...field[7]!, progress: 0 };
     expect(racingLineOffset(horse, [horse])).toBeCloseTo(4.27, 5);

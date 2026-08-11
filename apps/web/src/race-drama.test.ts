@@ -84,52 +84,21 @@ describe('race drama', () => {
     expect(decisiveChanges).toBeGreaterThanOrEqual(20);
   });
 
-  it('stages a close winner-runner-up duel only near the finish', () => {
-    const winner = FINISH_ORDER[0]!;
-    const runnerUp = FINISH_ORDER[1]!;
-    let runnerLed = false;
-    let winnerLedAfterward = false;
-    let crossingGap = Number.POSITIVE_INFINITY;
-
-    for (let phase = 0.88; phase <= 0.98; phase += 0.001) {
-      const frame = createRaceDramaFrame(FRAMES, phase * DURATION_MS, FINISH_ORDER);
-      const winnerHorse = findHorse(frame, winner.horseNumber);
-      const runnerHorse = findHorse(frame, runnerUp.horseNumber);
-      const gap = winnerHorse.progress - runnerHorse.progress;
-      if (gap < 0) runnerLed = true;
-      if (runnerLed && gap >= 0) {
-        winnerLedAfterward = true;
-        crossingGap = Math.min(crossingGap, Math.abs(gap));
-      }
-    }
-
-    expect(runnerLed).toBe(true);
-    expect(winnerLedAfterward).toBe(true);
-    expect(crossingGap).toBeLessThan(0.0015);
-  });
-
-  it('accelerates the whole field on the final straight and only gives the winner extra pace', () => {
+  it('keeps the final approach on the official timeline', () => {
     const startMs = DURATION_MS * 0.9;
     const endMs = startMs + 300;
     const officialStart = interpolateTimelineFrame(FRAMES, startMs);
     const officialEnd = interpolateTimelineFrame(FRAMES, endMs);
     const dramaticStart = createRaceDramaFrame(FRAMES, startMs, FINISH_ORDER);
     const dramaticEnd = createRaceDramaFrame(FRAMES, endMs, FINISH_ORDER);
-    const winnerNumber = FINISH_ORDER[0]!.horseNumber;
-    const runnerNumber = FINISH_ORDER[1]!.horseNumber;
 
-    const officialRunnerGain =
-      findHorse(officialEnd, runnerNumber).progress -
-      findHorse(officialStart, runnerNumber).progress;
-    const dramaticRunnerGain =
-      findHorse(dramaticEnd, runnerNumber).progress -
-      findHorse(dramaticStart, runnerNumber).progress;
-    const dramaticWinnerGain =
-      findHorse(dramaticEnd, winnerNumber).progress -
-      findHorse(dramaticStart, winnerNumber).progress;
-
-    expect(dramaticRunnerGain).toBeGreaterThan(officialRunnerGain * 1.08);
-    expect(dramaticWinnerGain).toBeGreaterThan(dramaticRunnerGain * 1.08);
+    for (const horse of officialStart.horses) {
+      expect(findHorse(dramaticStart, horse.horseNumber).progress).toBeCloseTo(horse.progress, 8);
+      expect(findHorse(dramaticEnd, horse.horseNumber).progress).toBeCloseTo(
+        findHorse(officialEnd, horse.horseNumber).progress,
+        8,
+      );
+    }
   });
 
   it('keeps cinematic movement above a safe fraction of official pace', () => {
@@ -152,7 +121,7 @@ describe('race drama', () => {
       }
     }
 
-    expect(minimumRatio).toBeGreaterThanOrEqual(0.78);
+    expect(minimumRatio).toBeGreaterThanOrEqual(0.9);
   });
 
   it('locks horses that crossed the finish in official order', () => {

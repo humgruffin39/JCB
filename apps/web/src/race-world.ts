@@ -11,6 +11,7 @@ import {
   courseLengthForDistance,
   raceProgressToCourseProgress,
   sampleCourse,
+  sampleCourseWithRunout,
 } from './race-course.js';
 import { RaceEnvironment, type RaceSurface } from './race-environment.js';
 import {
@@ -20,10 +21,13 @@ import {
   type HorseCoatColor,
   type HorseRig,
 } from './race-horse-model.js';
-import { finishLineOffset, racingLineOffset } from './race-lines.js';
+import { racingLineOffset } from './race-lines.js';
 
 const HORSE_NOSE_OFFSET = 1.05;
 const FINISH_ROOT_PROGRESS = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET);
+const PHOTO_FINISH_SPEED_MPS = 12.5;
+const PHOTO_MAX_GAP_M = 120;
+const FINISH_SETTLE_DURATION_MS = 900;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 export interface FinishPosition {
@@ -306,9 +310,12 @@ export class RaceWorld {
         const winnerTime =
           state.finishOrder.find((candidate) => candidate.position === 1)?.finishTimeMs ??
           finish.finishTimeMs;
-        targetProgress =
-          this.finishRootProgress -
-          Math.min(13, ((finish.finishTimeMs - winnerTime) / 1_000) * 12.5) / this.distanceM;
+        targetProgress = photoFinishCourseProgress(
+          finish.finishTimeMs,
+          winnerTime,
+          this.distanceM,
+          this.finishRootProgress,
+        );
       } else if (horse.visualFinishTimeMs !== undefined) {
         targetProgress = postFinishCourseProgress(
           state.positionMs,
@@ -320,10 +327,22 @@ export class RaceWorld {
       }
       const targetLateralOffset =
         state.isPhoto && finish !== undefined
-          ? finishLineOffset(finish.position, state.finishOrder.length)
+          ? horse.initialized
+            ? horse.lateralOffset
+            : frameHorse.lateralOffset
           : racingLineOffset(frameHorse, state.frame.horses, this.distanceM);
+      const finishingElapsedMs =
+        horse.visualFinishTimeMs === undefined
+          ? state.isPhoto
+            ? 1_200
+            : 0
+          : Math.max(0, state.positionMs - horse.visualFinishTimeMs);
       const poseState =
-        frameHorse.animationState === 'waiting' ? 'waiting' : state.isPhoto ? 'photo' : 'running';
+        frameHorse.animationState === 'waiting'
+          ? 'waiting'
+          : state.isPhoto || horse.visualFinishTimeMs !== undefined
+            ? 'finishing'
+            : 'running';
 
       if (!horse.initialized || snap) {
         horse.courseProgress = targetProgress;
@@ -345,7 +364,11 @@ export class RaceWorld {
         );
         horse.y = THREE.MathUtils.damp(horse.y, 0.025, 20, deltaSeconds);
       }
-      const courseSample = sampleCourse(horse.courseProgress, horse.lateralOffset, this.distanceM);
+      const courseSample = sampleCourseWithRunout(
+        horse.courseProgress,
+        horse.lateralOffset,
+        this.distanceM,
+      );
       horse.rig.root.position.copy(courseSample.position);
       horse.rig.root.position.y = horse.y;
       horse.rig.root.rotation.y = courseSample.heading;
@@ -356,7 +379,7 @@ export class RaceWorld {
         7,
         deltaSeconds,
       );
-      poseHorse(horse.rig, state.positionMs, frameHorse.speed, poseState);
+      poseHorse(horse.rig, state.positionMs, frameHorse.speed, poseState, finishingElapsedMs);
     }
 
     this.updateBattleSelection(state, focusRaceProgress, rewound);
@@ -366,12 +389,14 @@ export class RaceWorld {
     } else {
       const battleProgress =
         focusRaceProgress >= 0.9 ? undefined : this.getBattleFocusProgress(state);
+      const photoFocus = state.isPhoto ? this.getPhotoFocus() : undefined;
       this.updateCamera(
         battleProgress ?? focusRaceProgress,
         state.isPhoto,
         battleProgress !== undefined,
         snap,
         deltaSeconds,
+        photoFocus,
       );
       this.orbit.target.copy(this.cameraTarget);
     }
@@ -404,6 +429,7 @@ export class RaceWorld {
     isBattle: boolean,
     snap: boolean,
     deltaSeconds: number,
+    photoFocus?: THREE.Vector3,
   ): void {
     const shot = isBattle
       ? getBattleCameraShot()
@@ -432,7 +458,8 @@ export class RaceWorld {
       .addScaledVector(cameraOrigin.tangent, shot.tangentOffset)
       .addScaledVector(cameraOrigin.normal, shot.normalOffset);
     targetCamera.y = shot.height;
-    const targetLook = focus.position.clone().addScaledVector(focus.tangent, shot.lookAhead);
+    const targetLook =
+      photoFocus?.clone() ?? focus.position.clone().addScaledVector(focus.tangent, shot.lookAhead);
     targetLook.y = shot.lookHeight;
     const portraitCompensation = THREE.MathUtils.clamp(1.65 / this.camera.aspect, 1, 1.42);
     const targetFieldOfView = shot.fieldOfView * portraitCompensation;
@@ -496,6 +523,19 @@ export class RaceWorld {
     this.camera.lookAt(this.cameraTarget);
 
     this.updateSun(focus.position);
+  }
+
+  private getPhotoFocus(): THREE.Vector3 | undefined {
+    const focus = new THREE.Vector3();
+    let count = 0;
+    for (const horse of this.horses) {
+      if (!horse.initialized) continue;
+      focus.add(horse.rig.root.position);
+      count += 1;
+    }
+    if (count === 0) return undefined;
+    focus.multiplyScalar(1 / count);
+    return focus;
   }
 
   private updateBattleSelection(
@@ -649,10 +689,27 @@ export function postFinishCourseProgress(
   finishRootProgress = FINISH_ROOT_PROGRESS,
   courseLength = COURSE_LENGTH,
 ): number {
-  const elapsedSeconds = Math.max(0, positionMs - visualFinishTimeMs) / 1_000;
-  return (
-    finishRootProgress + Math.min(32, elapsedSeconds * Math.max(0, finishSpeedMps)) / courseLength
+  const elapsedMs = Math.max(0, positionMs - visualFinishTimeMs);
+  const settleProgress = THREE.MathUtils.clamp(elapsedMs / FINISH_SETTLE_DURATION_MS, 0, 1);
+  const elapsedSeconds = FINISH_SETTLE_DURATION_MS / 1_000;
+  const settleDistance =
+    (Math.min(32, (elapsedSeconds * Math.max(0, finishSpeedMps)) / 3) / courseLength) *
+    (1 - Math.pow(1 - settleProgress, 3));
+  return finishRootProgress + settleDistance;
+}
+
+export function photoFinishCourseProgress(
+  finishTimeMs: number,
+  winnerTimeMs: number,
+  distanceM: number,
+  finishRootProgress = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET, distanceM),
+): number {
+  const finishGapM = THREE.MathUtils.clamp(
+    ((finishTimeMs - winnerTimeMs) / 1_000) * PHOTO_FINISH_SPEED_MPS,
+    0,
+    PHOTO_MAX_GAP_M,
   );
+  return finishRootProgress - finishGapM / Math.max(1, distanceM);
 }
 
 function createSky(): THREE.Mesh {

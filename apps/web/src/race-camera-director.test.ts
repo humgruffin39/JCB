@@ -3,7 +3,7 @@ import { getBattleCameraShot, selectBroadcastCameraShot } from './race-camera-di
 
 describe('race camera director', () => {
   it('covers the full race with a deliberate broadcast sequence', () => {
-    const checkpoints = [0, 0.04, 0.12, 0.25, 0.36, 0.5, 0.6, 0.7, 0.82, 0.9, 0.97];
+    const checkpoints = [0, 0.04, 0.12, 0.25, 0.36, 0.5, 0.6, 0.7, 0.82, 0.9, 0.98, 0.99];
     expect(checkpoints.map((progress) => selectBroadcastCameraShot(progress, false).id)).toEqual([
       'break',
       'launch-track',
@@ -15,6 +15,7 @@ describe('race camera director', () => {
       'far-turn-head-on',
       'final-turn-track',
       'home-stretch-track',
+      'home-stretch-track',
       'finish-line',
     ]);
   });
@@ -25,6 +26,11 @@ describe('race camera director', () => {
     expect(shot.tangentOffset).toBe(0);
     expect(shot.normalOffset).toBeLessThan(0);
     expect(shot.height).toBeLessThan(4);
+  });
+
+  it('holds the home-stretch shot until the field is genuinely at the line', () => {
+    expect(selectBroadcastCameraShot(0.945, false).id).toBe('home-stretch-track');
+    expect(selectBroadcastCameraShot(0.985, false).id).toBe('finish-line');
   });
 
   it('keeps every camera specification physically valid', () => {

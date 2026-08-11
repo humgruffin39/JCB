@@ -72,6 +72,25 @@ export function sampleCourse(
   };
 }
 
+export function sampleCourseWithRunout(
+  courseProgress: number,
+  lateralOffset = 0,
+  distanceM = REFERENCE_DISTANCE_M,
+): CourseSample {
+  const sample = sampleCourse(
+    Math.min(courseProgress, RACE_FINISH_COURSE_PROGRESS),
+    lateralOffset,
+    distanceM,
+  );
+  if (courseProgress > RACE_FINISH_COURSE_PROGRESS) {
+    sample.position.addScaledVector(
+      sample.tangent,
+      (courseProgress - RACE_FINISH_COURSE_PROGRESS) * courseLengthForDistance(distanceM),
+    );
+  }
+  return sample;
+}
+
 export function courseTurnAmount(courseProgress: number, distanceM = REFERENCE_DISTANCE_M): number {
   return sampleCenterline(courseProgress, courseScaleForDistance(distanceM)).turnAmount;
 }

@@ -269,11 +269,11 @@ function createFinishStructure(labelTexture: THREE.Texture): THREE.Group {
     side: THREE.DoubleSide,
   });
   const signBacking = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.88, 0.12), black);
-  signBacking.position.set(0.2, 5.5, TRACK_HALF_WIDTH + 0.64);
+  signBacking.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.64);
   signBacking.castShadow = true;
   group.add(signBacking);
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.55, 0.7), signMaterial);
-  sign.position.set(0.2, 5.5, TRACK_HALF_WIDTH + 0.71);
+  sign.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.71);
   group.add(sign);
   return group;
 }

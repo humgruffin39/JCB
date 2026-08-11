@@ -70,6 +70,8 @@ export interface HorseRig {
   dispose(): void;
 }
 
+export type HorsePoseState = 'waiting' | 'running' | 'finishing';
+
 let assetsPromise: Promise<LoadedHorseAssets> | undefined;
 
 export async function loadHorseAssets(renderer: THREE.WebGLRenderer): Promise<LoadedHorseAssets> {
@@ -180,7 +182,8 @@ export function poseHorse(
   rig: HorseRig,
   positionMs: number,
   speed: number,
-  state: 'waiting' | 'running' | 'photo',
+  state: HorsePoseState,
+  finishingElapsedMs = 0,
 ): void {
   const gallopDuration = rig.gallop.getClip().duration;
   const rewound = rig.lastPosePositionMs !== undefined && positionMs + 100 < rig.lastPosePositionMs;
@@ -192,13 +195,15 @@ export function poseHorse(
   }
   rig.lastPosePositionMs = positionMs;
   rig.gallop.time = THREE.MathUtils.euclideanModulo(rig.gallopTime, gallopDuration);
-  rig.gallop.setEffectiveWeight(state === 'waiting' ? 0 : 1);
+  const finishingBlend =
+    state === 'finishing' ? THREE.MathUtils.smoothstep(finishingElapsedMs, 0, 1_200) : 0;
+  rig.gallop.setEffectiveWeight(state === 'waiting' ? 0 : 1 - finishingBlend);
   const idleDuration = rig.idle.getClip().duration;
   rig.idle.time = THREE.MathUtils.euclideanModulo(
     positionMs / 2_800 + rig.phaseOffset * Math.min(0.18, idleDuration),
     idleDuration,
   );
-  rig.idle.setEffectiveWeight(state === 'waiting' ? 1 : 0);
+  rig.idle.setEffectiveWeight(state === 'waiting' ? 1 : finishingBlend);
   rig.mixer.update(0);
 }
 

@@ -7,7 +7,6 @@ const INSIDE_SAFE_LIMIT = TRACK_HALF_WIDTH - 1.28;
 const OUTSIDE_SAFE_LIMIT = -TRACK_HALF_WIDTH + 1.2;
 
 const PREFERRED_LINES = [3.8, 2.1, 3.25, 1.1, 4.15, 0.55, 2.65, 1.6] as const;
-const FINISH_FAN = [0.25, -0.7, 0.85, -1.05, 0.55, -0.35, 1.1, -0.1] as const;
 
 export interface RacingLineHorse {
   readonly horseNumber: number;
@@ -62,9 +61,6 @@ export function racingLineOffset(
   let raceLine =
     preferred + turnBias + flowingDrift - outsideMove + settleInside + horse.lateralOffset * 0.35;
 
-  const finalStretch = smootherstep(normalize(horse.progress, 0.76, 0.9));
-  const finishLine = 2.45 + (FINISH_FAN[horse.horseNumber - 1] ?? 0) * 1.15;
-  raceLine = THREE.MathUtils.lerp(raceLine, finishLine, finalStretch);
   raceLine = THREE.MathUtils.clamp(raceLine, OUTSIDE_SAFE_LIMIT, INSIDE_SAFE_LIMIT);
 
   return THREE.MathUtils.lerp(startLane, raceLine, merge);

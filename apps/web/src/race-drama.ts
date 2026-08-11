@@ -12,14 +12,8 @@ export interface RaceDramaFinish {
 const TAU = Math.PI * 2;
 const DRAMA_START = 0.055;
 const DRAMA_FULL = 0.13;
-const DRAMA_FADE = 0.76;
-const DRAMA_END = 0.855;
-const WINNER_STAGE_START = 0.76;
-const FINAL_STRAIGHT_START = 0.855;
-const WINNER_ATTACK_START = 0.875;
-const WINNER_ATTACK_END = 0.955;
-const FINAL_SPRINT_RATE = 0.12;
-const FINAL_SPRINT_SHIFT_START = 0.24;
+const DRAMA_FADE = 0.5;
+const DRAMA_END = 0.8;
 
 /**
  * The official timeline and result remain untouched. This function only time-warps the
@@ -31,24 +25,33 @@ export function createRaceDramaFrame(
   finishOrder: readonly RaceDramaFinish[],
   timelineDurationMs?: number,
 ): TimelineFrame {
-  const officialFrame = interpolateTimelineFrame(frames, positionMs);
-  if (frames.length < 2) return officialFrame;
+  if (frames.length < 2) return interpolateTimelineFrame(frames, positionMs);
 
   const durationMs = Math.max(frames.at(-1)!.timeMs, timelineDurationMs ?? frames.at(-1)!.timeMs);
+  const officialFrame = extendFinalTimelineFrame(
+    interpolateTimelineFrame(frames, positionMs),
+    frames.at(-1)!,
+    positionMs,
+    finishOrder,
+  );
   if (durationMs <= 0 || positionMs <= 0) return officialFrame;
   if (positionMs >= durationMs) return applyFinishOrder(officialFrame, finishOrder);
 
   const phase = clamp01(positionMs / durationMs);
-  const winner = finishOrder.find((finish) => finish.position === 1);
-  const runnerUp = finishOrder.find((finish) => finish.position === 2);
   const finishByHorse = new Map(finishOrder.map((finish) => [finish.horseNumber, finish]));
   const finishPositions = new Map(
     finishOrder.map((finish) => [finish.horseNumber, finish.position]),
   );
   const horses = officialFrame.horses.map((horse) => {
-    const timeShiftMs = cinematicTimeShift(phase, durationMs, horse.horseNumber, winner, runnerUp);
+    const timeShiftMs = cinematicTimeShift(phase, durationMs, horse.horseNumber);
     const sampleTimeMs = clamp(positionMs + timeShiftMs, 0, durationMs);
-    const sampled = interpolateTimelineHorse(frames, sampleTimeMs, horse.horseNumber) ?? horse;
+    const sampled =
+      extendFinalTimelineHorse(
+        interpolateTimelineHorse(frames, sampleTimeMs, horse.horseNumber) ?? horse,
+        frames.at(-1)!.timeMs,
+        sampleTimeMs,
+        finishByHorse.get(horse.horseNumber),
+      ) ?? horse;
     const finish = finishByHorse.get(horse.horseNumber);
     const officiallyFinished = finish !== undefined && positionMs >= finish.finishTimeMs;
     const progress = officiallyFinished ? 1 : Math.min(sampled.progress, 0.999999);
@@ -57,13 +60,7 @@ export function createRaceDramaFrame(
       : sampled.animationState === 'finished'
         ? ('running' as const)
         : sampled.animationState;
-    const timeShiftDerivative = cinematicTimeShiftDerivative(
-      phase,
-      durationMs,
-      horse.horseNumber,
-      winner,
-      runnerUp,
-    );
+    const timeShiftDerivative = cinematicTimeShiftDerivative(phase, durationMs, horse.horseNumber);
     const playbackRate = clamp(1 + timeShiftDerivative, 0.92, 1.12);
     return {
       ...sampled,
@@ -99,6 +96,43 @@ export function createRaceDramaFrame(
       ...horse,
       rank: ranks.get(horse.horseNumber) ?? horse.rank,
     })),
+  };
+}
+
+function extendFinalTimelineFrame(
+  frame: TimelineFrame,
+  lastFrame: TimelineFrame,
+  positionMs: number,
+  finishOrder: readonly RaceDramaFinish[],
+): TimelineFrame {
+  if (positionMs <= lastFrame.timeMs || finishOrder.length === 0) return frame;
+  const finishByHorse = new Map(finishOrder.map((finish) => [finish.horseNumber, finish]));
+  return {
+    ...frame,
+    horses: frame.horses.map((horse) =>
+      extendFinalTimelineHorse(
+        horse,
+        lastFrame.timeMs,
+        positionMs,
+        finishByHorse.get(horse.horseNumber),
+      ),
+    ),
+  };
+}
+
+function extendFinalTimelineHorse(
+  horse: TimelineHorse,
+  lastFrameTimeMs: number,
+  positionMs: number,
+  finish: RaceDramaFinish | undefined,
+): TimelineHorse {
+  if (finish === undefined || positionMs <= lastFrameTimeMs) return horse;
+  const finishSpan = Math.max(1, finish.finishTimeMs - lastFrameTimeMs);
+  const alpha = clamp01((positionMs - lastFrameTimeMs) / finishSpan);
+  return {
+    ...horse,
+    progress: lerp(horse.progress, 1, alpha),
+    animationState: alpha >= 1 ? ('finished' as const) : ('running' as const),
   };
 }
 
@@ -201,13 +235,7 @@ function interpolateHorse(
   };
 }
 
-function cinematicTimeShift(
-  phase: number,
-  durationMs: number,
-  horseNumber: number,
-  winner: RaceDramaFinish | undefined,
-  runnerUp: RaceDramaFinish | undefined,
-): number {
+function cinematicTimeShift(phase: number, durationMs: number, horseNumber: number): number {
   const earlyEnvelope =
     smootherstep(normalize(phase, DRAMA_START, DRAMA_FULL)) *
     (1 - smootherstep(normalize(phase, DRAMA_FADE, DRAMA_END)));
@@ -215,54 +243,18 @@ function cinematicTimeShift(
   const primary = Math.sin((phase * signature.primaryCycles + signature.primaryPhase) * TAU);
   const secondary = Math.sin((phase * signature.secondaryCycles + signature.secondaryPhase) * TAU);
   const fieldShift =
-    durationMs * signature.amplitude * 0.5 * earlyEnvelope * (primary * 0.72 + secondary * 0.28);
-
-  const finalSprint = finalSprintTimeShift(phase, durationMs);
-  if (winner === undefined || runnerUp === undefined) return fieldShift + finalSprint;
-  if (horseNumber !== winner.horseNumber) return fieldShift + finalSprint;
-
-  const officialGapMs = Math.max(0, runnerUp.finishTimeMs - winner.finishTimeMs);
-  const stagingDelayMs = Math.min(durationMs * 0.035, officialGapMs * 1.1 + 300);
-  const stagedBehind =
-    -stagingDelayMs * smootherstep(normalize(phase, WINNER_STAGE_START, FINAL_STRAIGHT_START));
-  const finishingAttack =
-    stagingDelayMs * smootherstep(normalize(phase, WINNER_ATTACK_START, WINNER_ATTACK_END));
-  return fieldShift + finalSprint + stagedBehind + finishingAttack;
-}
-
-function finalSprintTimeShift(phase: number, durationMs: number): number {
-  const sprintReserveMs = durationMs * (1 - FINAL_STRAIGHT_START) * FINAL_SPRINT_RATE;
-  if (phase < FINAL_STRAIGHT_START) {
-    return phase < FINAL_SPRINT_SHIFT_START
-      ? 0
-      : -sprintReserveMs *
-          smootherstep(normalize(phase, FINAL_SPRINT_SHIFT_START, FINAL_STRAIGHT_START));
-  }
-  return -sprintReserveMs + (phase - FINAL_STRAIGHT_START) * durationMs * FINAL_SPRINT_RATE;
+    durationMs * signature.amplitude * 0.2 * earlyEnvelope * (primary * 0.72 + secondary * 0.28);
+  return fieldShift;
 }
 
 function cinematicTimeShiftDerivative(
   phase: number,
   durationMs: number,
   horseNumber: number,
-  winner: RaceDramaFinish | undefined,
-  runnerUp: RaceDramaFinish | undefined,
 ): number {
   const epsilon = 0.00025;
-  const before = cinematicTimeShift(
-    Math.max(0, phase - epsilon),
-    durationMs,
-    horseNumber,
-    winner,
-    runnerUp,
-  );
-  const after = cinematicTimeShift(
-    Math.min(1, phase + epsilon),
-    durationMs,
-    horseNumber,
-    winner,
-    runnerUp,
-  );
+  const before = cinematicTimeShift(Math.max(0, phase - epsilon), durationMs, horseNumber);
+  const after = cinematicTimeShift(Math.min(1, phase + epsilon), durationMs, horseNumber);
   return (
     (after - before) /
     (Math.max(epsilon, Math.min(1, phase + epsilon) - Math.max(0, phase - epsilon)) * durationMs)

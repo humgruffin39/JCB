@@ -9,6 +9,7 @@ import {
   courseTurnAmount,
   raceProgressToCourseProgress,
   sampleCourse,
+  sampleCourseWithRunout,
 } from './race-course.js';
 
 describe('stadium oval race course', () => {
@@ -18,6 +19,15 @@ describe('stadium oval race course', () => {
 
     expect(start.position.distanceTo(end.position)).toBeLessThan(0.001);
     expect(start.tangent.distanceTo(end.tangent)).toBeLessThan(0.001);
+  });
+
+  it('continues beyond the finish along the finish straight without wrapping the sample', () => {
+    const atFinish = sampleCourseWithRunout(1);
+    const afterFinish = sampleCourseWithRunout(1 + 8 / COURSE_LENGTH);
+    const displacement = afterFinish.position.clone().sub(atFinish.position);
+
+    expect(displacement.dot(atFinish.tangent)).toBeCloseTo(8, 1);
+    expect(Math.abs(displacement.dot(atFinish.normal))).toBeLessThan(0.001);
   });
 
   it('uses two true straights joined by semicircular turns', () => {

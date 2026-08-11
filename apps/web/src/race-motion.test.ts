@@ -42,6 +42,38 @@ describe('race motion polish', () => {
     expect(afterFinish - afterAcceleration).toBeLessThan(0.09);
   });
 
+  it('blends a finishing horse into a stopped idle pose', () => {
+    const root = new THREE.Group();
+    const mixer = new THREE.AnimationMixer(root);
+    const idle = mixer.clipAction(new THREE.AnimationClip('idle', 1, []));
+    const gallop = mixer.clipAction(new THREE.AnimationClip('gallop', 1, []));
+    const rig: HorseRig = {
+      horseNumber: 1,
+      root,
+      mixer,
+      idle,
+      gallop,
+      phaseOffset: 0,
+      gallopTime: 0,
+      lastPosePositionMs: undefined,
+      dispose() {
+        mixer.stopAllAction();
+      },
+    };
+
+    poseHorse(rig, 20_000, 18, 'finishing', 0);
+    expect(rig.gallop.getEffectiveWeight()).toBe(1);
+    expect(rig.idle.getEffectiveWeight()).toBe(0);
+
+    poseHorse(rig, 20_500, 10, 'finishing', 500);
+    expect(rig.gallop.getEffectiveWeight()).toBeLessThan(1);
+    expect(rig.idle.getEffectiveWeight()).toBeGreaterThan(0);
+
+    poseHorse(rig, 21_200, 0, 'finishing', 1_200);
+    expect(rig.gallop.getEffectiveWeight()).toBe(0);
+    expect(rig.idle.getEffectiveWeight()).toBe(1);
+  });
+
   it('places every scenery tree beyond the outside rail', () => {
     for (let index = 0; index < 100; index += 1) {
       const progress = index / 100;

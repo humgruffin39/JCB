@@ -122,6 +122,18 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     max: 120,
     timeWindow: '1 minute',
   });
+
+  const notifyAdmin = async (notice: AdminNotice): Promise<void> => {
+    if (dependencies.adminNotifier === undefined) return;
+    try {
+      await dependencies.adminNotifier(notice);
+    } catch (error) {
+      app.log.error(
+        { err: error },
+        'Administrative notification failed after a committed mutation.',
+      );
+    }
+  };
   if (dependencies.timelineStore !== undefined) {
     registerLocalEdgeRoutes(app, {
       environment: dependencies.environment,
@@ -562,7 +574,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       targetId: race.id,
       after: race,
     });
-    await dependencies.adminNotifier?.({
+    await notifyAdmin({
       level: 'info',
       title: 'レースの下書きを作成しました',
       description: '開催内容を保存しました。確定するとシミュレーションを予約します。',
@@ -631,7 +643,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
         return locked;
       })
       .immediate();
-    await dependencies.adminNotifier?.({
+    await notifyAdmin({
       level: 'info',
       title: 'レースを確定しました',
       description: 'シミュレーションを予約しました。',
@@ -680,7 +692,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
         });
       })
       .immediate();
-    await dependencies.adminNotifier?.({
+    await notifyAdmin({
       level: 'warning',
       title: 'レースを中止しました',
       description: '参加者への投票額は全額返金しました。',
@@ -850,7 +862,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       reason: body.reason,
       ipHash: hashIp(request.ip, sessionSecret),
     });
-    await dependencies.adminNotifier?.({
+    await notifyAdmin({
       level: 'error',
       title: '緊急結果閲覧を実行しました',
       description: '通常の公開前に、管理者がレース結果を確認しました。',

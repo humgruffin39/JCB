@@ -262,19 +262,38 @@ function createFinishStructure(labelTexture: THREE.Texture): THREE.Group {
   beam.position.set(0, 6.05, 0);
   beam.castShadow = true;
   group.add(beam);
+  group.add(createFinishSign(labelTexture));
+  return group;
+}
+
+export function createFinishSign(labelTexture: THREE.Texture): THREE.Group {
+  const group = new THREE.Group();
+  const backingMaterial = new THREE.MeshStandardMaterial({
+    color: 0x171817,
+    roughness: 0.52,
+  });
+  const signBacking = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.88, 0.12), backingMaterial);
+  signBacking.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.64);
+  signBacking.castShadow = true;
+  group.add(signBacking);
+
   const signMaterial = new THREE.MeshStandardMaterial({
     map: labelTexture,
     color: 0xffffff,
     roughness: 0.72,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
   });
-  const signBacking = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.88, 0.12), black);
-  signBacking.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.64);
-  signBacking.castShadow = true;
-  group.add(signBacking);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.55, 0.7), signMaterial);
-  sign.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.71);
-  group.add(sign);
+  const signGeometry = new THREE.PlaneGeometry(2.55, 0.7);
+  const spectatorFace = new THREE.Mesh(signGeometry, signMaterial);
+  spectatorFace.name = 'finish-sign-spectator-face';
+  spectatorFace.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.71);
+  spectatorFace.rotation.y = Math.PI;
+  group.add(spectatorFace);
+
+  const infieldFace = new THREE.Mesh(signGeometry, signMaterial);
+  infieldFace.name = 'finish-sign-infield-face';
+  infieldFace.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.57);
+  group.add(infieldFace);
   return group;
 }
 

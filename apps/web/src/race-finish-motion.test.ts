@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { COURSE_LENGTH, raceProgressToCourseProgress } from './race-course.js';
-import { postFinishCourseProgress } from './race-world.js';
+import {
+  isPostFinishPoseReady,
+  POST_FINISH_RUNOUT_DISTANCE_M,
+  postFinishCourseProgress,
+} from './race-world.js';
 
 describe('race finish motion', () => {
   it('continues from the visible finish crossing instead of the official timestamp', () => {
@@ -27,5 +31,45 @@ describe('race finish motion', () => {
     expect(
       (stopped - postFinishCourseProgress(finishTimeMs, finishTimeMs, 12)) * COURSE_LENGTH,
     ).toBeCloseTo(18, 8);
+  });
+
+  it('keeps the gallop active until the displayed horse reaches the runout stop', () => {
+    const finishTimeMs = 100_000;
+    const finishSpeedMps = 12;
+    const runoutStopTimeMs =
+      finishTimeMs + (POST_FINISH_RUNOUT_DISTANCE_M / finishSpeedMps) * 1_000;
+    const beforeStop = postFinishCourseProgress(
+      runoutStopTimeMs - 500,
+      finishTimeMs,
+      finishSpeedMps,
+    );
+    const atStop = postFinishCourseProgress(runoutStopTimeMs, finishTimeMs, finishSpeedMps);
+
+    expect(
+      isPostFinishPoseReady(
+        runoutStopTimeMs - 500,
+        finishTimeMs,
+        finishSpeedMps,
+        beforeStop,
+        beforeStop,
+      ),
+    ).toBe(false);
+    expect(
+      isPostFinishPoseReady(runoutStopTimeMs, finishTimeMs, finishSpeedMps, atStop, atStop),
+    ).toBe(true);
+    expect(
+      isPostFinishPoseReady(runoutStopTimeMs, finishTimeMs, finishSpeedMps, atStop - 0.001, atStop),
+    ).toBe(false);
+    expect(
+      isPostFinishPoseReady(
+        finishTimeMs,
+        finishTimeMs,
+        finishSpeedMps,
+        atStop,
+        atStop,
+        COURSE_LENGTH,
+        true,
+      ),
+    ).toBe(true);
   });
 });

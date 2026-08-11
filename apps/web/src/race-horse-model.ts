@@ -71,6 +71,7 @@ export interface HorseRig {
 }
 
 export type HorsePoseState = 'waiting' | 'running' | 'finishing';
+export const FINISHING_BLEND_DURATION_MS = 1_200;
 
 let assetsPromise: Promise<LoadedHorseAssets> | undefined;
 
@@ -195,8 +196,7 @@ export function poseHorse(
   }
   rig.lastPosePositionMs = positionMs;
   rig.gallop.time = THREE.MathUtils.euclideanModulo(rig.gallopTime, gallopDuration);
-  const finishingBlend =
-    state === 'finishing' ? THREE.MathUtils.smoothstep(finishingElapsedMs, 0, 1_200) : 0;
+  const finishingBlend = state === 'finishing' ? finishingBlendForElapsedMs(finishingElapsedMs) : 0;
   rig.gallop.setEffectiveWeight(state === 'waiting' ? 0 : 1 - finishingBlend);
   const idleDuration = rig.idle.getClip().duration;
   rig.idle.time = THREE.MathUtils.euclideanModulo(
@@ -205,6 +205,10 @@ export function poseHorse(
   );
   rig.idle.setEffectiveWeight(state === 'waiting' ? 1 : finishingBlend);
   rig.mixer.update(0);
+}
+
+export function finishingBlendForElapsedMs(finishingElapsedMs: number): number {
+  return THREE.MathUtils.smoothstep(finishingElapsedMs, 0, FINISHING_BLEND_DURATION_MS);
 }
 
 export function gallopCadenceForSpeed(speed: number): number {

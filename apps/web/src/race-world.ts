@@ -17,6 +17,7 @@ import {
 import { RaceEnvironment, type RaceSurface } from './race-environment.js';
 import {
   createHorseRig,
+  FINISHING_BLEND_DURATION_MS,
   loadHorseAssets,
   poseHorse,
   type HorseCoatColor,
@@ -26,6 +27,8 @@ import { racingLineOffset } from './race-lines.js';
 
 const HORSE_NOSE_OFFSET = 1.05;
 const FINISH_ROOT_PROGRESS = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET);
+export const POST_FINISH_RUNOUT_DISTANCE_M = 32;
+const FINISH_POSITION_SETTLE_TOLERANCE_M = 0.25;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 export interface FinishPosition {
@@ -51,6 +54,7 @@ interface AnimatedHorse {
   y: number;
   visualFinishTimeMs: number | undefined;
   visualFinishSpeedMps: number | undefined;
+  finishingElapsedMs: number;
   previousFrameCourseProgress: number | undefined;
   previousFramePositionMs: number | undefined;
   visualCourseSpeedMps: number | undefined;
@@ -106,6 +110,7 @@ export class RaceWorld {
       y: 0,
       visualFinishTimeMs: undefined,
       visualFinishSpeedMps: undefined,
+      finishingElapsedMs: 0,
       previousFrameCourseProgress: undefined,
       previousFramePositionMs: undefined,
       visualCourseSpeedMps: undefined,
@@ -263,6 +268,7 @@ export class RaceWorld {
       if (rewound) {
         horse.visualFinishTimeMs = undefined;
         horse.visualFinishSpeedMps = undefined;
+        horse.finishingElapsedMs = 0;
         horse.previousFrameCourseProgress = undefined;
         horse.previousFramePositionMs = undefined;
         horse.visualCourseSpeedMps = undefined;
@@ -322,16 +328,31 @@ export class RaceWorld {
         state.isPhoto && horse.initialized
           ? horse.lateralOffset
           : racingLineOffset(frameHorse, state.frame.horses, this.distanceM);
-      const finishingElapsedMs =
-        horse.visualFinishTimeMs === undefined
-          ? state.isPhoto
-            ? 1_200
-            : 0
-          : Math.max(0, state.positionMs - horse.visualFinishTimeMs);
+      const hasCrossedFinish = horse.visualFinishTimeMs !== undefined || frameHorse.progress >= 1;
+      const postFinishTimeMs = horse.visualFinishTimeMs ?? state.positionMs;
+      const postFinishPoseReady =
+        hasCrossedFinish &&
+        isPostFinishPoseReady(
+          state.positionMs,
+          postFinishTimeMs,
+          horse.visualFinishSpeedMps ?? 8.5,
+          horse.courseProgress,
+          targetProgress,
+          this.courseLength,
+          state.isPhoto,
+        );
+      if (postFinishPoseReady) {
+        horse.finishingElapsedMs = Math.min(
+          FINISHING_BLEND_DURATION_MS,
+          horse.finishingElapsedMs + Math.max(0, deltaSeconds) * 1_000,
+        );
+      } else {
+        horse.finishingElapsedMs = 0;
+      }
       const poseState =
         frameHorse.animationState === 'waiting'
           ? 'waiting'
-          : state.isPhoto || horse.visualFinishTimeMs !== undefined
+          : postFinishPoseReady
             ? 'finishing'
             : 'running';
 
@@ -370,7 +391,13 @@ export class RaceWorld {
         7,
         deltaSeconds,
       );
-      poseHorse(horse.rig, state.positionMs, frameHorse.speed, poseState, finishingElapsedMs);
+      poseHorse(
+        horse.rig,
+        state.positionMs,
+        frameHorse.speed,
+        poseState,
+        postFinishPoseReady ? horse.finishingElapsedMs : 0,
+      );
     }
 
     if (
@@ -735,8 +762,37 @@ export function postFinishCourseProgress(
 ): number {
   const elapsedSeconds = Math.max(0, positionMs - visualFinishTimeMs) / 1_000;
   return (
-    finishRootProgress + Math.min(32, elapsedSeconds * Math.max(0, finishSpeedMps)) / courseLength
+    finishRootProgress +
+    Math.min(POST_FINISH_RUNOUT_DISTANCE_M, elapsedSeconds * Math.max(0, finishSpeedMps)) /
+      courseLength
   );
+}
+
+export function isPostFinishPoseReady(
+  positionMs: number,
+  visualFinishTimeMs: number,
+  finishSpeedMps: number,
+  displayedProgress: number,
+  targetProgress: number,
+  courseLength = COURSE_LENGTH,
+  isPhoto = false,
+): boolean {
+  const targetStopped =
+    isPhoto || hasReachedPostFinishStop(positionMs, visualFinishTimeMs, finishSpeedMps);
+  const displayedDistanceFromTarget =
+    Math.abs(displayedProgress - targetProgress) * Math.max(1, courseLength);
+  return targetStopped && displayedDistanceFromTarget <= FINISH_POSITION_SETTLE_TOLERANCE_M;
+}
+
+function hasReachedPostFinishStop(
+  positionMs: number,
+  visualFinishTimeMs: number,
+  finishSpeedMps: number,
+): boolean {
+  const speed = Math.max(0, finishSpeedMps);
+  if (speed === 0) return true;
+  const elapsedSeconds = Math.max(0, positionMs - visualFinishTimeMs) / 1_000;
+  return elapsedSeconds * speed >= POST_FINISH_RUNOUT_DISTANCE_M;
 }
 
 function readRenderTargetDataUrl(

@@ -28,6 +28,10 @@ import { racingLineOffset } from './race-lines.js';
 const HORSE_NOSE_OFFSET = 1.05;
 const FINISH_ROOT_PROGRESS = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET);
 export const POST_FINISH_RUNOUT_DISTANCE_M = 32;
+const MIN_VISUAL_FINISH_SPEED_MPS = 4;
+export const POST_FINISH_RUNOUT_MS = Math.ceil(
+  (POST_FINISH_RUNOUT_DISTANCE_M / MIN_VISUAL_FINISH_SPEED_MPS) * 1_000,
+);
 const FINISH_POSITION_SETTLE_TOLERANCE_M = 0.25;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
@@ -248,7 +252,7 @@ export class RaceWorld {
 
   update(state: RaceWorldState, deltaSeconds: number): void {
     const rewound = state.positionMs + 700 < this.lastPositionMs;
-    const snap = rewound || state.isPhoto || !this.cameraInitialized;
+    const snap = rewound || !this.cameraInitialized;
     this.lastPositionMs = state.positionMs;
     if (rewound && this.finishSnapshotDataUrl !== undefined) {
       this.finishSnapshotDataUrl = undefined;
@@ -306,11 +310,11 @@ export class RaceWorld {
       }
       horse.previousFrameCourseProgress = frameCourseProgress;
       horse.previousFramePositionMs = state.positionMs;
-      if (!state.isPhoto && horse.visualFinishTimeMs === undefined && frameHorse.progress >= 1) {
+      if (horse.visualFinishTimeMs === undefined && frameHorse.progress >= 1) {
         horse.visualFinishTimeMs = state.positionMs;
         horse.visualFinishSpeedMps = THREE.MathUtils.clamp(
           horse.visualCourseSpeedMps ?? 8.5,
-          4,
+          MIN_VISUAL_FINISH_SPEED_MPS,
           16,
         );
       }
@@ -339,7 +343,6 @@ export class RaceWorld {
           horse.courseProgress,
           targetProgress,
           this.courseLength,
-          state.isPhoto,
         );
       if (postFinishPoseReady) {
         horse.finishingElapsedMs = Math.min(
@@ -775,10 +778,8 @@ export function isPostFinishPoseReady(
   displayedProgress: number,
   targetProgress: number,
   courseLength = COURSE_LENGTH,
-  isPhoto = false,
 ): boolean {
-  const targetStopped =
-    isPhoto || hasReachedPostFinishStop(positionMs, visualFinishTimeMs, finishSpeedMps);
+  const targetStopped = hasReachedPostFinishStop(positionMs, visualFinishTimeMs, finishSpeedMps);
   const displayedDistanceFromTarget =
     Math.abs(displayedProgress - targetProgress) * Math.max(1, courseLength);
   return targetStopped && displayedDistanceFromTarget <= FINISH_POSITION_SETTLE_TOLERANCE_M;

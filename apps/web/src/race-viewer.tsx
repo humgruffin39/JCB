@@ -14,6 +14,7 @@ import { PodiumHorsePreview } from './podium-horse-preview.js';
 import { createRaceDramaFrame } from './race-drama.js';
 import { SADDLECLOTH_COLORS } from './race-horse-model.js';
 import { RaceScene3D } from './race-scene-3d.js';
+import { POST_FINISH_RUNOUT_MS } from './race-world.js';
 import type { RaceCameraMode } from './race-world.js';
 
 type RaceDetail = Awaited<ReturnType<typeof getRace>>;
@@ -192,7 +193,7 @@ export function RaceViewer({
             Date.now(),
             offset,
             race.scheduledAt,
-            viewer.duration + FINISH_RUNOUT_MS,
+            viewer.duration + POST_FINISH_RUNOUT_MS,
           ),
         );
       }
@@ -212,7 +213,7 @@ export function RaceViewer({
 
   useEffect(() => {
     if (viewer.state !== 'ready' || phase !== 'race' || !hasPlaybackStarted) return;
-    const playbackEndMs = viewer.duration + FINISH_RUNOUT_MS;
+    const playbackEndMs = viewer.duration + POST_FINISH_RUNOUT_MS;
     const interval = window.setInterval(() => {
       if (isReplay) {
         if (isPaused) return;
@@ -229,7 +230,7 @@ export function RaceViewer({
     if (
       viewer.state !== 'ready' ||
       phase !== 'race' ||
-      position < viewer.duration + FINISH_RUNOUT_MS
+      position < viewer.duration + POST_FINISH_RUNOUT_MS
     )
       return;
     setIsPaused(true);
@@ -792,4 +793,3 @@ function formatCountdown(milliseconds: number): string {
 function formatRupees(value: string): string {
   return `${BigInt(value).toLocaleString('ja-JP')} R`;
 }
-const FINISH_RUNOUT_MS = 500;

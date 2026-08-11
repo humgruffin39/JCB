@@ -60,16 +60,11 @@ describe('race finish motion', () => {
     expect(
       isPostFinishPoseReady(runoutStopTimeMs, finishTimeMs, finishSpeedMps, atStop - 0.001, atStop),
     ).toBe(false);
+    expect(isPostFinishPoseReady(finishTimeMs, finishTimeMs, finishSpeedMps, atStop, atStop)).toBe(
+      false,
+    );
     expect(
-      isPostFinishPoseReady(
-        finishTimeMs,
-        finishTimeMs,
-        finishSpeedMps,
-        atStop,
-        atStop,
-        COURSE_LENGTH,
-        true,
-      ),
+      isPostFinishPoseReady(runoutStopTimeMs, finishTimeMs, finishSpeedMps, atStop, atStop),
     ).toBe(true);
   });
 });

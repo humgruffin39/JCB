@@ -45,7 +45,7 @@ export function CurrencyAdmin() {
     setLedger(nextLedger);
   }, []);
 
-  const { error: refreshError, isInitialLoading } = useAdminPolling(refresh, 7_500);
+  const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 7_500);
 
   function adjust(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -76,7 +76,7 @@ export function CurrencyAdmin() {
     adjustmentForm.current?.reset();
     setMessage('中央銀行との複式台帳取引で残高を補正しました。');
     try {
-      await refresh();
+      await refreshNow();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '補正後の残高を更新できません。');
     }

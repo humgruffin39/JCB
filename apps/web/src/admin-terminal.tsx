@@ -10,14 +10,7 @@ export function AdminTerminal() {
   const [section, setSection] = useState<AdminSection>('races');
   return (
     <div className="admin-terminal">
-      <header className="admin-heading">
-        <div className="admin-heading__copy">
-          <p className="eyebrow">管理画面</p>
-          <h2>運用コンソール</h2>
-          <p>レース運営に必要な情報を、ここで確認・更新できます。</p>
-        </div>
-        <span className="admin-heading__badge">管理者</span>
-      </header>
+      <h1 className="visually-hidden">管理</h1>
       <nav className="terminal-tabs" aria-label="管理メニュー" role="tablist">
         <button
           type="button"

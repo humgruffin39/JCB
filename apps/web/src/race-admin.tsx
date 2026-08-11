@@ -1,6 +1,12 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { kindLabel, processStatusLabel, raceStatusLabel, raceStatusTone } from './admin-labels.js';
+import {
+  conditionLabel,
+  kindLabel,
+  processStatusLabel,
+  raceStatusLabel,
+  raceStatusTone,
+} from './admin-labels.js';
 import { apiAbsoluteUrl, apiRequest, getPublicSettings } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
@@ -61,6 +67,7 @@ const DISTANCE_OPTIONS = [
 
 export function RaceAdmin() {
   const [races, setRaces] = useState<readonly AdminRace[]>([]);
+  const raceRequestId = useRef(0);
   const [horses, setHorses] = useState<readonly HorseOption[]>([]);
   const [schedule, setSchedule] = useState<ScheduleSettings>(DEFAULT_SCHEDULE);
   const [cancelling, setCancelling] = useState<AdminRace>();
@@ -73,11 +80,12 @@ export function RaceAdmin() {
   const [pendingOperation, setPendingOperation] = useState<string>();
 
   const refreshRaces = useCallback(async () => {
-    setRaces(
-      await apiRequest<readonly AdminRace[]>('/api/v1/admin/races', {
-        cache: 'no-store',
-      }),
-    );
+    const requestId = raceRequestId.current + 1;
+    raceRequestId.current = requestId;
+    const nextRaces = await apiRequest<readonly AdminRace[]>('/api/v1/admin/races', {
+      cache: 'no-store',
+    });
+    if (requestId === raceRequestId.current) setRaces(nextRaces);
   }, []);
 
   const refreshFormOptions = useCallback(async () => {
@@ -100,21 +108,19 @@ export function RaceAdmin() {
     }
   }, []);
 
+  const {
+    isInitialLoading,
+    error: refreshError,
+    refreshNow,
+  } = useAdminPolling(refreshRaces, 5_000);
   const refresh = useCallback(async () => {
-    await refreshRaces();
+    await refreshNow();
     try {
       await refreshFormOptions();
     } catch {
       // The race list is still usable when only the form options are unavailable.
     }
-  }, [refreshFormOptions, refreshRaces]);
-
-  const {
-    isInitialLoading,
-    isRefreshing,
-    lastUpdatedAt,
-    error: refreshError,
-  } = useAdminPolling(refreshRaces, 3_000);
+  }, [refreshFormOptions, refreshNow]);
   useEffect(() => {
     void refreshFormOptions().catch(() => undefined);
   }, [refreshFormOptions]);
@@ -213,31 +219,20 @@ export function RaceAdmin() {
 
   return (
     <div className="admin-workspace">
-      <TerminalPanel heading="開催一覧" status={`${String(races.length)}件`}>
-        <div className="admin-live-status" aria-label="レース一覧の更新状態">
-          <span
-            className={`live-dot${isRefreshing ? ' live-dot--active' : ''}`}
-            aria-hidden="true"
-          />
-          {isRefreshing
-            ? '更新中'
-            : lastUpdatedAt === undefined
-              ? '自動更新中'
-              : `自動更新中 ・ 最終更新 ${formatClock(lastUpdatedAt)}`}
-        </div>
+      <TerminalPanel heading="開催一覧">
         {refreshError === undefined ? null : (
           <p className="field-error" role="alert">
-            {refreshError} レース一覧を再読み込みできません。時間をおいて再確認してください。
+            {refreshError}
           </p>
         )}
         {formOptionsError === '' ? null : (
           <p className="field-error" role="alert">
-            {formOptionsError} 入力候補を更新できません。
+            {formOptionsError}
           </p>
         )}
         {operationError === '' ? null : (
           <p className="field-error" role="alert">
-            {operationError} 操作を完了できませんでした。状態を確認して、もう一度お試しください。
+            {operationError}
           </p>
         )}
         {isInitialLoading ? (
@@ -247,7 +242,6 @@ export function RaceAdmin() {
         ) : races.length === 0 ? (
           <div className="empty-copy" role="status">
             <strong>レースがありません</strong>
-            <span>右側のフォームから、最初の下書きを作成できます。</span>
           </div>
         ) : (
           <div className="race-admin-list">
@@ -301,7 +295,7 @@ export function RaceAdmin() {
                       {entriesFor(race)
                         .map(
                           (entry) =>
-                            `${String(entry.horseNumber)}番 ${entry.condition ?? '未抽選'}`,
+                            `${String(entry.horseNumber)}番 ${conditionLabel(entry.condition)}`,
                         )
                         .join(' / ')}
                     </p>
@@ -599,7 +593,6 @@ function RaceForm({
         </div>
         <fieldset className="entry-selects">
           <legend>出走馬（8頭）</legend>
-          <p className="field-hint">選択済みの馬は、ほかの枠には表示されません。</p>
           {Array.from({ length: 8 }, (_, index) => {
             const selectedHorseId = selectedHorseIds[index] ?? '';
             return (
@@ -982,13 +975,4 @@ function moveTimestampToJstDate(timestampValue: string, raceDate: string): numbe
 function raceKindForDate(raceDate: string): 'regular' | 'midweek' | 'saturday_night' {
   const day = new Date(`${raceDate}T12:00:00+09:00`).getUTCDay();
   return day === 3 ? 'midweek' : day === 6 ? 'saturday_night' : 'regular';
-}
-
-function formatClock(timestamp: number): string {
-  return new Intl.DateTimeFormat('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(timestamp);
 }

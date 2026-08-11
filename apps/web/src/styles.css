@@ -144,7 +144,7 @@ textarea {
   --cyan-dim: rgb(255 255 255 / 8%);
   --line-contrast: #626262;
   --muted-contrast: #c6c6c6;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   color: var(--text);
   background: var(--surface-0);
 }
@@ -165,7 +165,7 @@ textarea {
 }
 
 .app-shell--admin main {
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-4);
 }
 
 .app-shell--admin button,
@@ -634,12 +634,7 @@ main {
 
 .admin-terminal {
   display: grid;
-  gap: var(--space-3);
-}
-
-.admin-heading {
-  display: flex;
-  align-items: center;
+  gap: var(--space-2);
 }
 
 .terminal-tabs,
@@ -662,6 +657,24 @@ main {
   color: var(--text);
   background: var(--surface-2);
   border-color: var(--line-contrast);
+}
+
+.app-shell--admin .terminal-tabs {
+  gap: 0;
+  border-bottom: 0.0625rem solid var(--line);
+}
+
+.app-shell--admin .terminal-tabs button {
+  border-color: transparent;
+  border-radius: 0;
+}
+
+.app-shell--admin .terminal-tabs button[aria-current='true'],
+.app-shell--admin .terminal-tabs button[aria-selected='true'] {
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  border-bottom: 0.125rem solid var(--text);
 }
 
 .admin-workspace {
@@ -942,6 +955,100 @@ main {
   border-bottom: 0.0625rem solid var(--line);
 }
 
+.status-badge {
+  display: inline-flex;
+  min-height: auto;
+  padding: 0;
+  align-items: center;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: 600 0.68rem/1 var(--font-display);
+  white-space: nowrap;
+}
+
+.status-badge--success,
+.status-badge--info,
+.status-badge--warning,
+.status-badge--danger {
+  color: var(--text);
+  background: transparent;
+}
+
+.race-admin-card {
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--space-2) 0;
+  gap: var(--space-1);
+}
+
+.race-admin-card__header {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.race-admin-card__eyebrow,
+.race-admin-card__meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.race-admin-card h3 {
+  margin: 0.1rem 0;
+  font-size: 0.9rem;
+}
+
+.race-admin-card__body,
+.race-admin-card__actions {
+  grid-column: 1 / -1;
+}
+
+.race-operation-metrics {
+  margin-block: var(--space-1);
+  gap: var(--space-2);
+}
+
+.race-operation-metrics div {
+  padding: 0;
+  border: 0;
+}
+
+.race-operation-metrics dt {
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.race-operation-metrics dd {
+  margin-top: 0.1rem;
+  color: var(--text);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+
+.condition-readout {
+  margin: 0;
+}
+
+.app-shell--admin .field-error {
+  padding: var(--space-2);
+  border-left-width: 0.15rem;
+}
+
+.app-shell--admin .admin-message {
+  min-height: 0;
+}
+
+@media (min-width: 52rem) {
+  .race-operation-metrics div + div {
+    padding-left: var(--space-2);
+    border-left: 0.0625rem solid var(--line);
+  }
+}
+
 .race-admin-list h3,
 .race-admin-list p {
   margin: 0;
@@ -1038,11 +1145,6 @@ main {
 
   .admin-message {
     grid-column: 1;
-  }
-
-  .admin-heading {
-    align-items: stretch;
-    flex-direction: column;
   }
 }
 
@@ -2021,553 +2123,5 @@ main {
 
   .race-scene-3d__state span {
     animation: none;
-  }
-}
-
-/* Admin console */
-.app-shell--admin {
-  color-scheme: light;
-  --surface-0: #f4f7f2;
-  --surface-1: #ffffff;
-  --surface-2: #edf3ee;
-  --line: #d7e0d8;
-  --text: #1f2a23;
-  --muted: #5f6d63;
-  --cyan: #2f6757;
-  --accent-strong: #245044;
-  --action-fill: #2f6757;
-  --action-hover: #245044;
-  --action-text: #ffffff;
-  --amber: #8a5a21;
-  --magenta: #8d5061;
-  --green: #2f6757;
-  --red: #b42335;
-  --red-strong: #8f1d2c;
-  --danger-fill: #b42335;
-  --danger-hover: #8f1d2c;
-  --danger-text: #ffffff;
-  --focus: #1d5b9f;
-  --overlay: rgb(32 35 31 / 48%);
-  --cyan-dim: rgb(47 103 87 / 10%);
-  --line-contrast: #9aa99a;
-  --muted-contrast: #455247;
-  background: var(--surface-0);
-}
-
-.app-shell--admin .masthead {
-  min-height: 3.75rem;
-  padding: var(--space-3) clamp(1rem, 4vw, 2rem);
-  background: var(--surface-1);
-  border-bottom: 0.0625rem solid var(--line);
-}
-
-.app-shell--admin .masthead h1 {
-  color: var(--accent-strong);
-  font-size: 1.05rem;
-  letter-spacing: -0.02em;
-}
-
-.app-shell--admin main {
-  max-width: 72rem;
-  padding: clamp(1rem, 2.5vw, 2rem);
-}
-
-.app-shell--admin .admin-terminal {
-  gap: var(--space-6);
-}
-
-.app-shell--admin .admin-heading {
-  align-items: end;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-.admin-heading__copy {
-  min-width: 0;
-}
-
-.admin-heading__copy h2 {
-  margin: 0;
-  color: var(--text);
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  line-height: 1.15;
-  letter-spacing: -0.04em;
-  text-wrap: balance;
-}
-
-.admin-heading__copy > p:last-child {
-  max-width: 48ch;
-  margin: var(--space-2) 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  text-wrap: pretty;
-}
-
-.admin-heading__badge,
-.status-badge {
-  display: inline-flex;
-  min-height: 1.75rem;
-  padding: 0.35rem 0.65rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.admin-heading__badge {
-  color: var(--accent-strong);
-  background: var(--surface-2);
-  border: 0.0625rem solid var(--line);
-}
-
-.app-shell--admin .terminal-tabs {
-  display: flex;
-  min-height: 3rem;
-  padding: 0.3rem;
-  align-items: stretch;
-  gap: 0.25rem;
-  background: var(--surface-2);
-  border: 0.0625rem solid var(--line);
-  border-radius: 0.75rem;
-}
-
-.app-shell--admin .terminal-tabs button {
-  min-height: 2.35rem;
-  padding-inline: 1rem;
-  color: var(--muted);
-  background: transparent;
-  border-color: transparent;
-  border-radius: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 650;
-}
-
-.app-shell--admin .terminal-tabs button[aria-current='true'],
-.app-shell--admin .terminal-tabs button[aria-selected='true'] {
-  color: var(--accent-strong);
-  background: var(--surface-1);
-  border-color: var(--line);
-  box-shadow: 0 0.15rem 0.45rem rgb(35 65 48 / 8%);
-}
-
-.app-shell--admin .terminal-panel {
-  overflow: hidden;
-  background: var(--surface-1);
-  border: 0.0625rem solid var(--line);
-  border-radius: 0.75rem;
-  box-shadow: 0 0.5rem 1.5rem rgb(35 65 48 / 5%);
-}
-
-.app-shell--admin .terminal-panel__header {
-  min-height: 3.25rem;
-  padding: 0.8rem 1rem;
-  background: var(--surface-1);
-  border-bottom: 0.0625rem solid var(--line);
-}
-
-.app-shell--admin .terminal-panel__header h2 {
-  color: var(--text);
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.app-shell--admin .terminal-panel__body {
-  padding: 1rem;
-}
-
-.app-shell--admin .status-readout {
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.app-shell--admin .admin-workspace {
-  grid-template-columns: minmax(0, 1.25fr) minmax(20rem, 0.75fr);
-  gap: 1rem;
-}
-
-.admin-live-status {
-  display: inline-flex;
-  margin-bottom: 0.75rem;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.live-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  background: var(--line-contrast);
-  border-radius: 50%;
-}
-
-.live-dot--active {
-  background: var(--green);
-}
-
-.status-badge--neutral {
-  color: var(--muted-contrast);
-  background: var(--surface-2);
-}
-
-.status-badge--info {
-  color: #1d5b9f;
-  background: #e8f0fb;
-}
-
-.status-badge--success {
-  color: var(--accent-strong);
-  background: #e4f2e9;
-}
-
-.status-badge--warning {
-  color: #7a4a13;
-  background: #fff2dc;
-}
-
-.status-badge--danger {
-  color: var(--red-strong);
-  background: #fde8eb;
-}
-
-.race-admin-list {
-  gap: 0.75rem;
-}
-
-.race-admin-card {
-  display: grid;
-  padding: 1rem;
-  gap: 0.9rem;
-  background: var(--surface-1);
-  border: 0.0625rem solid var(--line);
-  border-inline-start: 0.25rem solid var(--line-contrast);
-  border-radius: 0.65rem;
-}
-
-.race-admin-card--info {
-  border-inline-start-color: #6d9bc9;
-}
-
-.race-admin-card--success {
-  border-inline-start-color: var(--green);
-}
-
-.race-admin-card--warning {
-  border-inline-start-color: var(--amber);
-}
-
-.race-admin-card--danger {
-  border-inline-start-color: var(--red);
-}
-
-.race-admin-card__header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.race-admin-card__eyebrow,
-.race-admin-card__meta {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.race-admin-card__eyebrow {
-  font-variant-numeric: tabular-nums;
-}
-
-.race-admin-card h3 {
-  margin: 0.3rem 0 0;
-  color: var(--text);
-  font-size: 1.15rem;
-  line-height: 1.25;
-  text-wrap: balance;
-}
-
-.race-admin-card__meta {
-  margin-top: 0.3rem;
-}
-
-.race-admin-card__body {
-  min-width: 0;
-}
-
-.race-operation-metrics {
-  margin: 0;
-  gap: 0.5rem;
-}
-
-.race-operation-metrics div {
-  min-width: 0;
-  padding: 0.65rem;
-  background: var(--surface-0);
-  border: 0.0625rem solid var(--line);
-  border-radius: 0.45rem;
-}
-
-.race-operation-metrics dt {
-  overflow-wrap: break-word;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.race-operation-metrics dd {
-  overflow-wrap: anywhere;
-  color: var(--text);
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.race-admin-card__actions {
-  padding-top: 0.1rem;
-}
-
-.app-shell--admin .terminal-form {
-  gap: 1rem;
-}
-
-.app-shell--admin .terminal-form label,
-.app-shell--admin .confirmation-dialog label {
-  color: var(--text);
-  font-size: 0.82rem;
-  font-weight: 650;
-}
-
-.app-shell--admin input,
-.app-shell--admin select,
-.app-shell--admin textarea {
-  min-height: 2.75rem;
-  margin-top: 0.3rem;
-  padding: 0.55rem 0.7rem;
-  color: var(--text);
-  background: var(--surface-1);
-  border-color: var(--line-contrast);
-  border-radius: 0.5rem;
-  font-size: 1rem;
-}
-
-.app-shell--admin textarea {
-  min-height: 7rem;
-}
-
-.app-shell--admin input:hover,
-.app-shell--admin select:hover,
-.app-shell--admin textarea:hover {
-  border-color: var(--accent-strong);
-}
-
-.app-shell--admin input:focus-visible,
-.app-shell--admin select:focus-visible,
-.app-shell--admin textarea:focus-visible {
-  border-color: var(--focus);
-}
-
-.field-hint {
-  grid-column: 1 / -1;
-  margin: -0.25rem 0 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.app-shell--admin .entry-selects,
-.app-shell--admin .settings-form fieldset,
-.app-shell--admin .ability-group {
-  padding: 1rem;
-  background: var(--surface-0);
-  border: 0.0625rem solid var(--line);
-  border-radius: 0.65rem;
-}
-
-.app-shell--admin .entry-selects legend,
-.app-shell--admin .settings-form legend,
-.app-shell--admin .ability-group legend {
-  padding-inline: 0.45rem;
-  color: var(--accent-strong);
-  font-size: 0.8rem;
-  font-weight: 750;
-}
-
-.app-shell--admin .form-actions,
-.app-shell--admin .inline-actions {
-  gap: 0.55rem;
-}
-
-.app-shell--admin button,
-.app-shell--admin .button-link,
-.app-shell--admin .text-button {
-  min-height: 2.75rem;
-  border-radius: 0.5rem;
-}
-
-.app-shell--admin .button-secondary {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line);
-}
-
-.app-shell--admin .button-secondary:hover {
-  color: var(--text);
-  background: var(--surface-1);
-  border-color: var(--line-contrast);
-}
-
-.app-shell--admin .text-button {
-  padding-inline: 0.6rem;
-  color: var(--accent-strong);
-}
-
-.app-shell--admin .text-button:hover {
-  color: var(--accent-strong);
-  background: var(--cyan-dim);
-}
-
-.app-shell--admin .data-table {
-  font-size: 0.82rem;
-}
-
-.app-shell--admin .data-table th,
-.app-shell--admin .data-table td {
-  padding: 0.7rem;
-}
-
-.app-shell--admin .data-table th {
-  color: var(--muted);
-  background: var(--surface-0);
-  font-size: 0.72rem;
-}
-
-.app-shell--admin .data-table tbody tr {
-  transition-property: background-color;
-  transition-duration: 140ms;
-  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
-}
-
-.app-shell--admin .data-table tbody tr:hover {
-  background: var(--surface-0);
-}
-
-.app-shell--admin .metric-list dd,
-.app-shell--admin .data-table td:nth-last-child(-n + 2) {
-  font-variant-numeric: tabular-nums;
-}
-
-.app-shell--admin .admin-message {
-  min-height: 0;
-  padding: 0.7rem 0.85rem;
-  color: var(--accent-strong);
-  background: #e4f2e9;
-  border-radius: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 650;
-}
-
-.app-shell--admin .empty-copy {
-  display: grid;
-  padding: 2rem 1rem;
-  gap: 0.35rem;
-  color: var(--muted);
-  text-align: center;
-}
-
-.app-shell--admin .empty-copy strong {
-  color: var(--text);
-  font-size: 1rem;
-}
-
-.app-shell--admin .field-error {
-  border-inline-start-color: var(--red);
-  border-radius: 0.45rem;
-}
-
-.app-shell--admin .confirmation-dialog {
-  max-height: calc(100vh - 2rem);
-  overflow: auto;
-  padding: 1.5rem;
-  background: var(--surface-1);
-  border: 0.0625rem solid var(--line);
-  border-top: 0.25rem solid var(--red);
-  border-radius: 0.75rem;
-  box-shadow: 0 1.5rem 4rem rgb(35 45 38 / 22%);
-}
-
-.app-shell--admin .confirmation-dialog h2 {
-  color: var(--text);
-  font-size: 1.15rem;
-  line-height: 1.3;
-}
-
-.app-shell--admin .confirmation-dialog p {
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .app-shell--admin button:not(:disabled),
-  .app-shell--admin .button-link,
-  .app-shell--admin .terminal-panel,
-  .app-shell--admin .race-admin-card {
-    transition-property: background-color, border-color, box-shadow, opacity, scale, transform;
-    transition-duration: 140ms;
-    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
-  }
-
-  .app-shell--admin button:not(:disabled):hover,
-  .app-shell--admin .button-link:hover {
-    opacity: 0.88;
-  }
-
-  .app-shell--admin button:not(:disabled):active,
-  .app-shell--admin .button-link:active {
-    scale: 0.96;
-  }
-
-  .app-shell--admin .race-admin-card:hover {
-    box-shadow: 0 0.55rem 1.4rem rgb(35 65 48 / 8%);
-  }
-}
-
-@media (max-width: 52rem) {
-  .app-shell--admin .admin-workspace {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 38rem) {
-  .app-shell--admin main {
-    padding: 0.75rem;
-  }
-
-  .app-shell--admin .admin-heading {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .app-shell--admin .terminal-tabs {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .app-shell--admin .terminal-tabs button {
-    padding-inline: 0.5rem;
-  }
-
-  .app-shell--admin .terminal-panel__body {
-    padding: 0.8rem;
-  }
-
-  .race-admin-card__header {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .race-admin-card__actions button {
-    flex: 1 1 10rem;
   }
 }

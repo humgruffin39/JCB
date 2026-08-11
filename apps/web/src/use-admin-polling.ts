@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface AdminPollingState {
   readonly isInitialLoading: boolean;
-  readonly isRefreshing: boolean;
-  readonly lastUpdatedAt?: number;
   readonly error?: string;
+  readonly refreshNow: () => Promise<void>;
 }
 
 export function useAdminPolling(
@@ -12,53 +11,66 @@ export function useAdminPolling(
   intervalMilliseconds = 5_000,
 ): AdminPollingState {
   const refreshRef = useRef(refresh);
-  const inFlightRef = useRef(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queueRef = useRef(Promise.resolve());
+  const autoRefreshQueuedRef = useRef(false);
   const [hasLoaded, setHasLoaded] = useState(false);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<number>();
   const [error, setError] = useState<string>();
 
   refreshRef.current = refresh;
 
-  const run = useCallback(async () => {
-    if (document.hidden || inFlightRef.current) return;
-    inFlightRef.current = true;
-    setIsRefreshing(true);
-    try {
-      await refreshRef.current();
-      setHasLoaded(true);
-      setLastUpdatedAt(Date.now());
-      setError(undefined);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '最新情報を取得できません。');
-    } finally {
-      inFlightRef.current = false;
-      setIsRefreshing(false);
-    }
+  const enqueue = useCallback((force: boolean): Promise<void> => {
+    if (!force && autoRefreshQueuedRef.current) return queueRef.current;
+    if (!force) autoRefreshQueuedRef.current = true;
+    const task = queueRef.current.then(async () => {
+      if (!force && document.hidden) return;
+      try {
+        await refreshRef.current();
+        setHasLoaded(true);
+        setError(undefined);
+      } catch (caught) {
+        setHasLoaded(true);
+        setError(caught instanceof Error ? caught.message : '最新情報を取得できません。');
+        if (force) throw caught;
+      }
+    });
+    const settledTask = task
+      .catch(() => undefined)
+      .finally(() => {
+        if (!force) autoRefreshQueuedRef.current = false;
+      });
+    queueRef.current = settledTask;
+    return force ? task : settledTask;
   }, []);
+
+  const refreshNow = useCallback(() => enqueue(true), [enqueue]);
 
   useEffect(() => {
     let active = true;
+    let timer: number | undefined;
+    const schedule = (): void => {
+      if (active) timer = window.setTimeout(tick, intervalMilliseconds);
+    };
     const tick = (): void => {
-      if (active) void run();
+      if (!active) return;
+      void enqueue(false).finally(schedule);
     };
     tick();
-    const timer = window.setInterval(tick, intervalMilliseconds);
     const onVisibilityChange = (): void => {
-      if (!document.hidden) tick();
+      if (document.hidden || !active) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      tick();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [intervalMilliseconds, run]);
+  }, [enqueue, intervalMilliseconds]);
 
   return {
     isInitialLoading: !hasLoaded,
-    isRefreshing,
-    ...(lastUpdatedAt === undefined ? {} : { lastUpdatedAt }),
     ...(error === undefined ? {} : { error }),
+    refreshNow,
   };
 }

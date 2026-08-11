@@ -33,6 +33,7 @@ const race = {
     Array.from({ length: 8 }, (_, index) => ({
       horseId: `horse-${String(index + 1)}`,
       horseNumber: index + 1,
+      condition: index === 0 ? 'excellent' : index === 1 ? 'normal' : undefined,
     })).reverse(),
   ),
   officialSimulationStatus: null,
@@ -76,6 +77,8 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: '開催一覧' })).toBeVisible();
   await expect(page.getByText('下書き', { exact: true })).toBeVisible();
+  await expect(page.locator('.condition-readout')).toContainText('1番 絶好調');
+  await expect(page.locator('.condition-readout')).not.toContainText('excellent');
 
   await expect(page.getByRole('combobox', { name: '距離' })).toHaveValue('1200');
   await expect(
@@ -89,5 +92,5 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
     page.getByRole('combobox', { name: '2番' }).locator('option[value="horse-1"]'),
   ).toHaveCount(0);
 
-  await expect(page.getByText('確定済み', { exact: true })).toBeVisible({ timeout: 6_000 });
+  await expect(page.getByText('確定済み', { exact: true })).toBeVisible({ timeout: 8_000 });
 });

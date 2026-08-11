@@ -84,6 +84,14 @@ const HORSE_STATUS_LABELS: Readonly<Record<string, string>> = {
   retired: '引退',
 };
 
+const CONDITION_LABELS: Readonly<Record<string, string>> = {
+  terrible: '絶不調',
+  poor: '不調',
+  normal: '普通',
+  good: '好調',
+  excellent: '絶好調',
+};
+
 const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'horse.created': '馬を登録',
   'horse.updated': '馬を更新',
@@ -157,6 +165,11 @@ export function betStatusLabel(status: string): string {
 
 export function horseStatusLabel(status: string): string {
   return HORSE_STATUS_LABELS[status] ?? '状態を確認してください';
+}
+
+export function conditionLabel(condition: string | null | undefined): string {
+  if (condition === null || condition === undefined || condition === '') return '未抽選';
+  return CONDITION_LABELS[condition] ?? '状態を確認してください';
 }
 
 export function auditActionLabel(action: string): string {

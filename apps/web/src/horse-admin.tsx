@@ -1,6 +1,6 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useState, type FormEvent } from 'react';
-import { horseStatusLabel } from './admin-labels.js';
+import { conditionLabel, horseStatusLabel } from './admin-labels.js';
 import { AbilitySlider } from './ability-slider.js';
 import { apiRequest } from './api.js';
 import { PreferenceSlider } from './preference-slider.js';
@@ -69,11 +69,11 @@ export function HorseAdmin() {
   const refresh = useCallback(async () => {
     setHorses(await apiRequest<readonly Horse[]>('/api/v1/admin/horses'));
   }, []);
-  const { error: refreshError, isInitialLoading } = useAdminPolling(refresh, 10_000);
+  const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 10_000);
 
   return (
     <div className="admin-workspace">
-      <TerminalPanel heading="登録済みの馬" status={`${String(horses.length)}頭`}>
+      <TerminalPanel heading="登録済みの馬">
         {refreshError === undefined ? null : (
           <p className="field-error" role="alert">
             {refreshError} 馬の一覧を更新できません。
@@ -153,7 +153,7 @@ export function HorseAdmin() {
         onSaved={async (savedMessage) => {
           setEditing(undefined);
           setMessage(savedMessage);
-          await refresh();
+          await refreshNow();
         }}
         onCancel={() => setEditing(undefined)}
       />
@@ -214,7 +214,7 @@ function HorsePerformancePanel({
                   {row.raceName} / {row.distanceM}m / {surfaceLabel(row.surface)}
                 </td>
                 <td>{row.horseNumber}</td>
-                <td>{row.condition}</td>
+                <td>{conditionLabel(row.condition)}</td>
                 <td>{row.finishPosition ?? '未確定'}</td>
                 <td>
                   {row.finishTimeMs === null

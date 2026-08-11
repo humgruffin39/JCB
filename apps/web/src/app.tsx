@@ -31,9 +31,9 @@ export function App() {
     <div
       className={`app-shell${isAdmin ? ' app-shell--admin' : ''}${isRace ? ' app-shell--race' : ''}`}
     >
-      {isRace ? null : (
+      {isRace || isAdmin ? null : (
         <header className="masthead">
-          <h1>{isAdmin ? 'ジョサン中央銀行' : 'ジョサン中央銀行 競馬'}</h1>
+          <h1>ジョサン中央銀行 競馬</h1>
         </header>
       )}
       <main id="main">

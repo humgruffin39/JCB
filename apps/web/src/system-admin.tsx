@@ -35,7 +35,7 @@ export function SystemAdmin() {
     setAudit(z.array(z.record(z.string(), z.string().nullable())).parse(nextAudit));
     setObjects(nextObjects);
   }, []);
-  const { error: refreshError, isInitialLoading } = useAdminPolling(refresh, 7_500);
+  const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 7_500);
   const systemNominal =
     health.ledgerProjectionValid === true &&
     health.databaseReadWrite === true &&
@@ -55,7 +55,7 @@ export function SystemAdmin() {
           method: 'POST',
           body: '{}',
         });
-        await refresh();
+        await refreshNow();
       } catch (caught) {
         setOperationError(
           caught instanceof Error ? caught.message : '自動処理を再試行できません。',
@@ -247,6 +247,9 @@ function formatHealthValue(key: string, value: unknown): string {
   }
   if (key === 'schedulerStatus' || key === 'r2AccessStatus') {
     return value === 'nominal' ? '正常' : '異常';
+  }
+  if (key === 'memoryStatus') {
+    return value === 'nominal' ? '正常' : value === 'warning' ? '注意' : '異常';
   }
   if (key === 'medianUserPoolByRaceKind' && typeof value === 'object' && value !== null) {
     return Object.entries(value)

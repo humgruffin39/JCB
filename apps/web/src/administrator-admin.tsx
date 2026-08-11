@@ -21,7 +21,7 @@ export function AdministratorAdmin() {
       administratorSchema.array().parse(await apiRequest<unknown>('/api/v1/admin/administrators')),
     );
   }, []);
-  const { error: refreshError, isInitialLoading } = useAdminPolling(refresh, 15_000);
+  const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 15_000);
 
   async function add(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -38,7 +38,7 @@ export function AdministratorAdmin() {
       element.reset();
       setError('');
       setMessage('管理者を追加しました。');
-      await refresh();
+      await refreshNow();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '管理者を追加できません。');
     }
@@ -53,7 +53,7 @@ export function AdministratorAdmin() {
       setError('');
       setMessage('管理者権限を外しました。');
       setRemovalTarget(undefined);
-      await refresh();
+      await refreshNow();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '管理者を削除できません。');
     }

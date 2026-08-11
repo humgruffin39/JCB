@@ -31,7 +31,7 @@ export function SettingsAdmin() {
     if (!formDirty.current) setFormKey((current) => current + 1);
   }, []);
 
-  const { error: refreshError } = useAdminPolling(refresh, 10_000);
+  const { error: refreshError, refreshNow } = useAdminPolling(refresh, 10_000);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -48,7 +48,7 @@ export function SettingsAdmin() {
       setMessage('設定を保存しました。以後に確定するレースと新しい更新周期へ反映されます。');
       formDirty.current = false;
       formElement.reset();
-      await refresh();
+      await refreshNow();
     } catch (caught) {
       setMessage('');
       setError(

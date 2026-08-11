@@ -30,15 +30,12 @@ test('edits all abilities with accessible sliders and uses turf or dirt courses'
   page,
 }) => {
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: 'ジョサン中央銀行' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '運用コンソール' })).toBeVisible();
+  await expect(page.locator('.app-shell--admin .masthead')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '運用コンソール' })).toHaveCount(0);
   await expect(page.getByText('SECURE LINK')).toHaveCount(0);
   await expect(page.getByText('RACE CONTROL TERMINAL')).toHaveCount(0);
   await expect(page.getByText('レース、出走馬、通貨、システム設定を管理します。')).toHaveCount(0);
-  await expect(page.locator('.app-shell--admin')).toHaveCSS(
-    'background-color',
-    'rgb(244, 247, 242)',
-  );
+  await expect(page.locator('.app-shell--admin')).toHaveCSS('background-color', 'rgb(8, 8, 8)');
   expect((await page.locator('main').boundingBox())?.width).toBeLessThanOrEqual(1_152);
 
   const course = page.getByLabel('コース');
@@ -86,7 +83,7 @@ test('edits all abilities with accessible sliders and uses turf or dirt courses'
   expect(outputFont).toContain('Noto Sans JP Variable');
   await expect(page.locator('.preference-slider input').first()).toHaveCSS(
     'accent-color',
-    'rgb(47, 103, 87)',
+    'rgb(240, 240, 240)',
   );
   const coloredAdminValues = await page.locator('.app-shell--admin').evaluate((root) => {
     const elements = [root, ...root.querySelectorAll('*')];
@@ -110,7 +107,7 @@ test('edits all abilities with accessible sliders and uses turf or dirt courses'
         });
     });
   });
-  expect(coloredAdminValues.length).toBeGreaterThan(0);
+  expect(coloredAdminValues.length).toBe(0);
 
   const adminMotion = await page
     .locator('.app-shell--admin button')
@@ -120,7 +117,7 @@ test('edits all abilities with accessible sliders and uses turf or dirt courses'
       return { animationName: style.animationName, transitionDuration: style.transitionDuration };
     });
   expect(adminMotion.animationName).toBe('none');
-  expect(adminMotion.transitionDuration).toBe('0.14s');
+  expect(adminMotion.transitionDuration).toBe('0s');
 
   const dimensions = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

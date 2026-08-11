@@ -24,6 +24,7 @@ export function SettingsAdmin() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [formKey, setFormKey] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const formDirty = useRef(false);
   const refresh = useCallback(async () => {
     const parsed = responseSchema.parse(await apiRequest<unknown>('/api/v1/admin/settings'));
@@ -35,8 +36,10 @@ export function SettingsAdmin() {
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (isSubmitting) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    setIsSubmitting(true);
     try {
       const settings = readSettings(form, data?.gameSettings);
       const reason = requiredString(form, 'reason');
@@ -48,7 +51,15 @@ export function SettingsAdmin() {
       setMessage('設定を保存しました。以後に確定するレースと新しい更新周期へ反映されます。');
       formDirty.current = false;
       formElement.reset();
-      await refreshNow();
+      try {
+        await refreshNow();
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? `設定は保存されましたが、履歴を更新できませんでした。${caught.message}`
+            : '設定は保存されましたが、履歴を更新できませんでした。',
+        );
+      }
     } catch (caught) {
       setMessage('');
       setError(
@@ -56,6 +67,8 @@ export function SettingsAdmin() {
           ? caught.message
           : '設定を保存できません。入力内容を確認してください。',
       );
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -83,6 +96,7 @@ export function SettingsAdmin() {
       <form
         key={formKey}
         className="terminal-form settings-form"
+        aria-busy={isSubmitting}
         onInput={() => {
           formDirty.current = true;
         }}
@@ -297,8 +311,8 @@ export function SettingsAdmin() {
             {error}
           </p>
         )}
-        <button type="submit" className="form-submit">
-          設定を保存
+        <button type="submit" className="form-submit" disabled={isSubmitting}>
+          {isSubmitting ? '保存中…' : '設定を保存'}
         </button>
       </form>
 

@@ -16,6 +16,7 @@ export function AdministratorAdmin() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [removalTarget, setRemovalTarget] = useState<string>();
+  const [isAdding, setIsAdding] = useState(false);
   const refresh = useCallback(async () => {
     setAdministrators(
       administratorSchema.array().parse(await apiRequest<unknown>('/api/v1/admin/administrators')),
@@ -25,8 +26,10 @@ export function AdministratorAdmin() {
 
   async function add(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (isAdding) return;
     const element = event.currentTarget;
     const form = new FormData(element);
+    setIsAdding(true);
     try {
       await apiRequest('/api/v1/admin/administrators', {
         method: 'POST',
@@ -38,9 +41,19 @@ export function AdministratorAdmin() {
       element.reset();
       setError('');
       setMessage('管理者を追加しました。');
-      await refreshNow();
+      try {
+        await refreshNow();
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? `管理者は追加されましたが、一覧を更新できませんでした。${caught.message}`
+            : '管理者は追加されましたが、一覧を更新できませんでした。',
+        );
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '管理者を追加できません。');
+    } finally {
+      setIsAdding(false);
     }
   }
 
@@ -53,7 +66,15 @@ export function AdministratorAdmin() {
       setError('');
       setMessage('管理者権限を外しました。');
       setRemovalTarget(undefined);
-      await refreshNow();
+      try {
+        await refreshNow();
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? `権限は変更されましたが、一覧を更新できませんでした。${caught.message}`
+            : '権限は変更されましたが、一覧を更新できませんでした。',
+        );
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '管理者を削除できません。');
     }
@@ -92,7 +113,7 @@ export function AdministratorAdmin() {
           ))}
         </ul>
       )}
-      <form className="terminal-form" onSubmit={(event) => void add(event)}>
+      <form className="terminal-form" aria-busy={isAdding} onSubmit={(event) => void add(event)}>
         <div className="form-row">
           <label>
             DiscordユーザーID
@@ -113,8 +134,8 @@ export function AdministratorAdmin() {
             {message}
           </p>
         )}
-        <button type="submit" className="form-submit">
-          管理者を追加
+        <button type="submit" className="form-submit" disabled={isAdding}>
+          {isAdding ? '追加中…' : '管理者を追加'}
         </button>
       </form>
       {removalTarget === undefined ? null : (

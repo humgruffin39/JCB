@@ -60,7 +60,14 @@ describe('economy integrity', () => {
     expect(result.hasUserWinner).toBe(false);
     expect(result.nextCarryover).toBe(1_200n);
     expect(sumLedgerEntries(result.ledgerEntries)).toBe(0n);
-    expect(result.payouts).toEqual([]);
+    expect(result.payouts).toEqual([
+      {
+        recipientType: 'seed',
+        recipientId: '1-2-3',
+        accountId: centralBankAccountId,
+        amount: 1_000n,
+      },
+    ]);
   });
 
   it('rejects an imbalanced ledger transaction', () => {
@@ -85,7 +92,7 @@ describe('economy integrity', () => {
       poolAccountId: identifier('win-pool'),
       centralBankAccountId: identifier('bank'),
       winningSelection: '1',
-      poolBalance: money(12_345n),
+      poolBalance: money(1_500n),
       tickets: [
         {
           id: 'winner',
@@ -97,8 +104,29 @@ describe('economy integrity', () => {
       ],
       seedPositions: [{ selectionCode: '1', stake: money(1_000n) }],
     });
-    expect(result.payouts.reduce((sum, payout) => sum + payout.amount, 0n)).toBe(12_345n);
+    expect(result.payouts.reduce((sum, payout) => sum + payout.amount, 0n)).toBe(1_500n);
     expect(sumLedgerEntries(result.ledgerEntries)).toBe(0n);
+  });
+
+  it('rejects a pool balance that does not match persisted stakes', () => {
+    expect(() =>
+      settleWinPool({
+        poolAccountId: identifier('win-pool'),
+        centralBankAccountId: identifier('bank'),
+        winningSelection: '1',
+        poolBalance: money(12_344n),
+        tickets: [
+          {
+            id: 'winner',
+            accountId: identifier('winner-account'),
+            selectionCode: '1',
+            stake: money(500n),
+            createdAt: 1,
+          },
+        ],
+        seedPositions: [{ selectionCode: '1', stake: money(1_000n) }],
+      }),
+    ).toThrow(/pool balance/i);
   });
 
   it('rejects insufficient funds and the snapshotted per-race cap', () => {

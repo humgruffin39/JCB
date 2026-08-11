@@ -44,6 +44,7 @@ export interface SettlementResult {
 }
 
 export function settleWinPool(input: WinSettlementInput): SettlementResult {
+  assertPoolBalance(input);
   const winningTickets = input.tickets.filter(
     (ticket) => ticket.selectionCode === input.winningSelection,
   );
@@ -96,6 +97,7 @@ export function settleWinPool(input: WinSettlementInput): SettlementResult {
 }
 
 export function settleTrifectaPool(input: TrifectaSettlementInput): SettlementResult {
+  assertPoolBalance(input);
   const winningTickets = input.tickets.filter(
     (ticket) => ticket.selectionCode === input.winningSelection,
   );
@@ -110,8 +112,14 @@ export function settleTrifectaPool(input: TrifectaSettlementInput): SettlementRe
         ? transfer(input.poolAccountId, input.carryoverAccountId, money(userStake))
         : []),
     ];
+    const seedPayouts = input.seedPositions.map((position): SettlementPayout => ({
+      recipientType: 'seed',
+      recipientId: position.selectionCode,
+      accountId: input.centralBankAccountId,
+      amount: position.stake,
+    }));
     return {
-      payouts: [],
+      payouts: seedPayouts,
       ledgerEntries: entries,
       nextCarryover: money(input.carryoverBalance + userStake),
       hasUserWinner: false,
@@ -147,4 +155,12 @@ export function settleTrifectaPool(input: TrifectaSettlementInput): SettlementRe
     nextCarryover: money(0n),
     hasUserWinner: true,
   };
+}
+
+function assertPoolBalance(input: WinSettlementInput): void {
+  const seedTotal = input.seedPositions.reduce((sum, position) => sum + position.stake, 0n);
+  const userTotal = input.tickets.reduce((sum, ticket) => sum + ticket.stake, 0n);
+  if (seedTotal + userTotal !== input.poolBalance) {
+    throw new Error('Pool balance does not match seed liquidity and user stakes.');
+  }
 }

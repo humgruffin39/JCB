@@ -248,6 +248,9 @@ export class SqliteRaceLifecycleStore {
           });
         }
         this.database
+          .prepare('UPDATE seed_positions SET payout = stake WHERE pool_id = ?')
+          .run(pool.id);
+        this.database
           .prepare("UPDATE bet_pools SET status = 'refunded', finalized_at = ? WHERE id = ?")
           .run(BigInt(at), pool.id);
       }
@@ -272,11 +275,21 @@ export class SqliteRaceLifecycleStore {
     const seeds = this.loadSeedPositions(pool.id);
     const poolAccountId = identifier<'AccountId'>(pool.accountId);
     const centralBankAccountId = this.findAccount('central_bank', 'global');
+    const seedTotal = seeds.reduce((sum, seed) => sum + seed.stake, 0n);
+    const userTotal = tickets.reduce((sum, ticket) => sum + ticket.stake, 0n);
+    const poolBalance = this.ledger.balance(poolAccountId);
+    if (
+      seedTotal !== pool.seedLiquidity ||
+      userTotal !== pool.userStakeTotal ||
+      poolBalance !== seedTotal + userTotal
+    ) {
+      throw new Error('Pool projection does not match its ledger balance.');
+    }
     const common = {
       poolAccountId,
       centralBankAccountId,
       winningSelection,
-      poolBalance: this.ledger.balance(poolAccountId),
+      poolBalance,
       tickets,
       seedPositions: seeds,
     };
@@ -285,10 +298,22 @@ export class SqliteRaceLifecycleStore {
       settlement = settleWinPool(common);
     } else {
       const carryoverAccountId = this.findAccount('trifecta_carryover', 'global');
+      const carryoverProjection = this.database
+        .prepare(
+          "SELECT amount_projection AS amountProjection FROM trifecta_carryover WHERE id = 'global'",
+        )
+        .get() as { amountProjection: bigint } | undefined;
+      const carryoverBalance = this.ledger.balance(carryoverAccountId);
+      if (
+        carryoverProjection === undefined ||
+        carryoverProjection.amountProjection !== carryoverBalance
+      ) {
+        throw new Error('Carryover projection does not match its ledger balance.');
+      }
       settlement = settleTrifectaPool({
         ...common,
         carryoverAccountId,
-        carryoverBalance: this.ledger.balance(carryoverAccountId),
+        carryoverBalance,
       });
     }
     this.ledger.post({
@@ -299,6 +324,7 @@ export class SqliteRaceLifecycleStore {
       description: `${pool.poolType} pool settlement`,
       entries: settlement.ledgerEntries,
     });
+    this.database.prepare('UPDATE seed_positions SET payout = 0 WHERE pool_id = ?').run(pool.id);
     const payoutByTicket = new Map<string, bigint>();
     for (const payout of settlement.payouts) {
       if (payout.recipientType === 'user') {

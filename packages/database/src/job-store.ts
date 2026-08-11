@@ -64,16 +64,8 @@ export class SqliteJobStore implements JobStore {
         createdAt,
         createdAt,
       );
-    const row = this.database
-      .prepare(
-        `SELECT id, job_type AS jobType, deduplication_key AS deduplicationKey,
-                payload_json AS payloadJson, run_at AS runAt, status,
-                attempt_count AS attemptCount
-         FROM scheduled_jobs WHERE deduplication_key = ?`,
-      )
-      .get(job.deduplicationKey) as JobRow | undefined;
-    if (row === undefined) throw new Error('Job could not be enqueued.');
-    const persisted = mapJob(row);
+    const persisted = this.getByDeduplicationKey(job.deduplicationKey);
+    if (persisted === undefined) throw new Error('Job could not be enqueued.');
     if (
       persisted.jobType !== job.jobType ||
       persisted.runAt !== job.runAt ||
@@ -85,6 +77,19 @@ export class SqliteJobStore implements JobStore {
       );
     }
     return persisted;
+  }
+
+  public getByDeduplicationKey(deduplicationKey: string): ScheduledJob | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT id, job_type AS jobType, deduplication_key AS deduplicationKey,
+                payload_json AS payloadJson, run_at AS runAt, status,
+                attempt_count AS attemptCount
+         FROM scheduled_jobs WHERE deduplication_key = ?`,
+      )
+      .get(deduplicationKey) as JobRow | undefined;
+    if (row === undefined) return undefined;
+    return mapJob(row);
   }
 
   public claimDue(now: Timestamp, workerId: string): ScheduledJob | undefined {

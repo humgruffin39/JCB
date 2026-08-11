@@ -108,7 +108,7 @@ export class SqliteGameFinanceStore {
       const duplicate = this.database
         .prepare(
           `SELECT id, pool_id AS poolId, user_id AS userId, selection_code AS selectionCode,
-                  stake, interaction_id AS interactionId
+                  stake, balance_after AS balanceAfter
            FROM bets WHERE idempotency_key = ?`,
         )
         .get(input.idempotencyKey) as
@@ -118,7 +118,7 @@ export class SqliteGameFinanceStore {
             userId: string;
             selectionCode: string;
             stake: bigint;
-            interactionId: string;
+            balanceAfter: bigint | null;
           }
         | undefined;
       const accountId = this.findUserAccount(input.userId);
@@ -127,8 +127,7 @@ export class SqliteGameFinanceStore {
           duplicate.poolId !== input.poolId ||
           duplicate.userId !== input.userId ||
           duplicate.selectionCode !== input.selectionCode ||
-          duplicate.stake !== input.stake ||
-          duplicate.interactionId !== input.interactionId
+          duplicate.stake !== input.stake
         ) {
           throw new DomainError(
             'DUPLICATE_OPERATION',
@@ -138,7 +137,10 @@ export class SqliteGameFinanceStore {
         return {
           id: duplicate.id,
           wasDuplicate: true,
-          balanceAfter: this.ledger.balance(accountId),
+          balanceAfter:
+            duplicate.balanceAfter === null
+              ? this.ledger.balance(accountId)
+              : money(duplicate.balanceAfter),
         };
       }
       const pool = this.database
@@ -225,7 +227,11 @@ export class SqliteGameFinanceStore {
       this.database
         .prepare('UPDATE bet_pools SET user_stake_total = user_stake_total + ? WHERE id = ?')
         .run(input.stake, input.poolId);
-      return { id: betId, wasDuplicate: false, balanceAfter: this.ledger.balance(accountId) };
+      const balanceAfter = this.ledger.balance(accountId);
+      this.database
+        .prepare('UPDATE bets SET balance_after = ? WHERE id = ?')
+        .run(balanceAfter, betId);
+      return { id: betId, wasDuplicate: false, balanceAfter };
     });
     return run.immediate();
   }

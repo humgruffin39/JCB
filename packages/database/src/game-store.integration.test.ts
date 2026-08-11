@@ -156,7 +156,11 @@ describe('SQLite game store', () => {
     };
     const purchased = store.purchaseBet(purchase);
     expect(purchased.balanceAfter).toBe(49_500n);
-    expect(store.purchaseBet(purchase).wasDuplicate).toBe(true);
+    expect(store.purchaseBet({ ...purchase, interactionId: 'interaction-retry' })).toEqual({
+      id: purchased.id,
+      wasDuplicate: true,
+      balanceAfter: 49_500n,
+    });
     expect(() => store.purchaseBet({ ...purchase, stake: money(400n) })).toThrow(
       /different bet purchase/i,
     );

@@ -86,7 +86,11 @@ export function HorseAdmin() {
         heading="登録済みの馬"
         status={`${String(horses.length)}頭`}
         headerAction={
-          <button type="button" onClick={(event) => openHorseForm(undefined, event.currentTarget)}>
+          <button
+            type="button"
+            className="text-button"
+            onClick={(event) => openHorseForm(undefined, event.currentTarget)}
+          >
             馬を登録
           </button>
         }

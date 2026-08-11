@@ -229,7 +229,11 @@ export function RaceAdmin() {
         heading="開催一覧"
         status={`${String(races.length)}件`}
         headerAction={
-          <button type="button" onClick={(event) => openRaceForm(undefined, event.currentTarget)}>
+          <button
+            type="button"
+            className="text-button"
+            onClick={(event) => openRaceForm(undefined, event.currentTarget)}
+          >
             レースを作成
           </button>
         }

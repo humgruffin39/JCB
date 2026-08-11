@@ -26,15 +26,10 @@ const NOTICE_COLORS: Readonly<Record<AdminNoticeLevel, number>> = {
   error: 0xef4444,
 };
 
-export function buildAdminNoticeMessage(
-  notice: AdminNotice,
-  occurredAt: number,
-): AdminNoticeMessage {
+export function buildAdminNoticeMessage(notice: AdminNotice): AdminNoticeMessage {
   const embed = new EmbedBuilder()
     .setColor(NOTICE_COLORS[notice.level])
-    .setTitle(limitText(notice.title, 256))
-    .setFooter({ text: 'ジョサン中央銀行 管理通知' })
-    .setTimestamp(occurredAt);
+    .setTitle(limitText(notice.title, 256));
 
   if (notice.description !== undefined) {
     embed.setDescription(limitText(notice.description, 4_096));

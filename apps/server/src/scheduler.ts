@@ -450,7 +450,7 @@ async function sendAdminNotice(
     dependencies.environment.DISCORD_ADMIN_CHANNEL_ID,
   );
   if (channel !== null && channel.isSendable()) {
-    await channel.send(buildAdminNoticeMessage(notice, dependencies.clock.now()));
+    await channel.send(buildAdminNoticeMessage(notice));
   }
 }
 

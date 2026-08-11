@@ -77,7 +77,7 @@ const app = await buildServer({
         adminNotifier: async (notice) => {
           const channel = await discordClient.channels.fetch(environment.DISCORD_ADMIN_CHANNEL_ID!);
           if (channel !== null && channel.isSendable()) {
-            await channel.send(buildAdminNoticeMessage(notice, clock.now()));
+            await channel.send(buildAdminNoticeMessage(notice));
           }
         },
       }),

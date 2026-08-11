@@ -25,7 +25,7 @@ export function toJstDateKey(value: Timestamp): string {
 }
 
 export function jstDateTimeToTimestamp(dateKey: string, time: string): Timestamp {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !/^\d{2}:\d{2}:\d{2}$/.test(time)) {
+  if (!isCalendarDate(dateKey) || !/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(time)) {
     throw new DomainError('INVALID_TIMESTAMP', 'JST date/time must use YYYY-MM-DD and HH:mm:ss.');
   }
   const parsed = Date.parse(`${dateKey}T${time}+09:00`);
@@ -35,6 +35,9 @@ export function jstDateTimeToTimestamp(dateKey: string, time: string): Timestamp
 export type RaceKind = 'regular' | 'midweek' | 'saturday_night';
 
 export function raceKindForJstDate(dateKey: string): RaceKind {
+  if (!isCalendarDate(dateKey)) {
+    throw new DomainError('INVALID_TIMESTAMP', 'Race date is invalid.');
+  }
   const midday = Date.parse(`${dateKey}T12:00:00+09:00`);
   if (!Number.isFinite(midday)) {
     throw new DomainError('INVALID_TIMESTAMP', 'Race date is invalid.');
@@ -43,4 +46,16 @@ export function raceKindForJstDate(dateKey: string): RaceKind {
   if (jstDay === 3) return 'midweek';
   if (jstDay === 6) return 'saturday_night';
   return 'regular';
+}
+
+function isCalendarDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= (days[month - 1] ?? 0);
 }

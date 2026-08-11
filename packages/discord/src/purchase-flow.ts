@@ -14,7 +14,12 @@ import {
   type StringSelectMenuInteraction,
 } from 'discord.js';
 import { money, type Clock, type PoolType } from '@jcb/domain';
-import type { DiscordPurchaseGateway, PurchaseSession, PurchaseSessionStore } from './types.js';
+import type {
+  DiscordPurchaseGateway,
+  PurchaseReceipt,
+  PurchaseSession,
+  PurchaseSessionStore,
+} from './types.js';
 
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 const PURCHASE_SESSION_ACTIONS = new Set(['pool', 'pick', 'amount', 'confirm', 'back']);
@@ -94,11 +99,14 @@ async function choosePool(
   poolTypeValue: string | undefined,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
+  requireStep(session, 'pool');
   await interaction.deferUpdate();
   if (poolTypeValue !== 'win' && poolTypeValue !== 'trifecta') {
     throw new Error('Unknown pool type.');
   }
-  const updated = dependencies.sessions.update(session.id, 'pick-1', { poolType: poolTypeValue });
+  const updated = dependencies.sessions.update(session.id, 'pool', 'pick-1', {
+    poolType: poolTypeValue,
+  });
   await interaction.editReply(await horseChoice(updated, dependencies));
 }
 
@@ -107,11 +115,12 @@ async function chooseHorse(
   session: PurchaseSession,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
+  if (!/^pick-[1-3]$/.test(session.step)) throw new Error('Purchase session step is stale.');
   const selected = interaction.values[0];
   if (selected === undefined) throw new Error('Horse selection is missing.');
   const poolType = parsePoolType(session.payload.poolType);
   if (poolType === 'win') {
-    const updated = dependencies.sessions.update(session.id, 'amount', {
+    const updated = dependencies.sessions.update(session.id, session.step, 'amount', {
       ...session.payload,
       first: selected,
     });
@@ -128,12 +137,13 @@ async function chooseHorse(
     await interaction.deferUpdate();
     const updated = dependencies.sessions.update(
       session.id,
+      session.step,
       `pick-${String(position + 1)}`,
       payload,
     );
     await interaction.editReply(await horseChoice(updated, dependencies));
   } else {
-    const updated = dependencies.sessions.update(session.id, 'amount', payload);
+    const updated = dependencies.sessions.update(session.id, session.step, 'amount', payload);
     await showAmountModal(interaction, updated);
   }
 }
@@ -142,6 +152,7 @@ async function showAmountModal(
   interaction: StringSelectMenuInteraction,
   session: PurchaseSession,
 ): Promise<void> {
+  requireStep(session, 'amount');
   const input = new TextInputBuilder()
     .setCustomId('stake')
     .setStyle(TextInputStyle.Short)
@@ -179,7 +190,7 @@ async function submitAmount(
     selectionCode,
     stake,
   });
-  const updated = dependencies.sessions.update(session.id, 'confirm', {
+  const updated = dependencies.sessions.update(session.id, 'amount', 'confirm', {
     ...session.payload,
     stake: rawStake,
     selectionCode,
@@ -213,6 +224,7 @@ async function confirmPurchase(
   session: PurchaseSession,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
+  requireStep(session, 'confirm');
   await interaction.deferUpdate();
   const currentVersion = await dependencies.gateway.currentRaceVersion(session.raceId);
   if (currentVersion !== session.raceVersion) throw new Error('Race version changed.');
@@ -221,15 +233,31 @@ async function confirmPurchase(
   const selectionCode = session.payload.selectionCode;
   if (stake === undefined || selectionCode === undefined)
     throw new Error('Purchase is incomplete.');
-  const receipt = await dependencies.gateway.purchase({
-    discordUserId: interaction.user.id,
-    raceId: session.raceId,
-    raceVersion: session.raceVersion,
-    poolType,
-    selectionCode,
-    stake: money(BigInt(stake)),
-    interactionId: interaction.id,
-  });
+  dependencies.sessions.update(session.id, 'confirm', 'processing', session.payload);
+  let receipt: PurchaseReceipt;
+  try {
+    receipt = await dependencies.gateway.purchase({
+      discordUserId: interaction.user.id,
+      raceId: session.raceId,
+      raceVersion: session.raceVersion,
+      poolType,
+      selectionCode,
+      stake: money(BigInt(stake)),
+      interactionId: interaction.id,
+      operationId: session.id,
+    });
+    dependencies.sessions.update(session.id, 'processing', 'completed', {
+      ...session.payload,
+      betId: receipt.betId,
+    });
+  } catch (error) {
+    try {
+      dependencies.sessions.update(session.id, 'processing', 'confirm', session.payload);
+    } catch {
+      // Preserve the original purchase error if the session changed concurrently.
+    }
+    throw error;
+  }
   await interaction.editReply({
     content: [
       receipt.wasDuplicate ? 'この購入はすでに処理済みです。' : '馬券を購入しました。',
@@ -246,8 +274,9 @@ async function renderCurrentStep(
   session: PurchaseSession,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
+  requireStep(session, 'confirm');
   await interaction.deferUpdate();
-  const updated = dependencies.sessions.update(session.id, 'pool', {});
+  const updated = dependencies.sessions.update(session.id, 'confirm', 'pool', {});
   await interaction.editReply(poolChoice(updated));
 }
 
@@ -341,4 +370,8 @@ function selectionFromSession(session: PurchaseSession, poolType: PoolType): str
     throw new Error('Trifecta selection is incomplete.');
   }
   return `${first}-${second}-${third}`;
+}
+
+function requireStep(session: PurchaseSession, expected: string): void {
+  if (session.step !== expected) throw new Error('Purchase session step is stale.');
 }

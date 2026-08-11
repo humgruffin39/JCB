@@ -61,6 +61,12 @@ describe('SQLite ledger store', () => {
     } as const;
     expect(ledger.post(grant).wasDuplicate).toBe(false);
     expect(ledger.post(grant).wasDuplicate).toBe(true);
+    expect(() =>
+      ledger.post({
+        ...grant,
+        description: 'Conflicting reuse of the same key',
+      }),
+    ).toThrow(/different ledger transaction/i);
     expect(ledger.balance(user)).toBe(50_000n);
     expect(ledger.balance(bank)).toBe(9_950_000n);
     expect(() => ledger.assertProjectionIntegrity()).not.toThrow();

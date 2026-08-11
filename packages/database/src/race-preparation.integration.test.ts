@@ -7,6 +7,7 @@ import { generateProbabilities } from '@jcb/odds';
 import { openDatabase } from './connection.js';
 import { SqliteGameStore, type HorseWrite } from './game-store.js';
 import { applyMigrations } from './migrations.js';
+import { publishPendingObjects, SqliteObjectPublicationStore } from './object-publication-store.js';
 import { SqliteRacePreparationRepository } from './race-preparation-repository.js';
 
 class TestObjectStore implements PrivateObjectStore {
@@ -151,6 +152,18 @@ describe('race preparation workflow', () => {
       ).count,
     ).toBe(344n);
     expect(timelineStore.objects.has(completion.timelineObjectKey)).toBe(true);
+    expect(timelineStore.objects.has(`race-manifests/${race.id}.json`)).toBe(false);
+    const publicationStore = new SqliteObjectPublicationStore(database);
+    expect(
+      (
+        database
+          .prepare("SELECT COUNT(*) AS count FROM object_publications WHERE status = 'pending'")
+          .get() as { count: bigint }
+      ).count,
+    ).toBe(1n);
+    await expect(
+      publishPendingObjects(publicationStore, timelineStore, 'test-publisher', () => now),
+    ).resolves.toEqual({ completed: 1, failed: 0 });
     expect(timelineStore.objects.has(`race-manifests/${race.id}.json`)).toBe(true);
     expect(
       (

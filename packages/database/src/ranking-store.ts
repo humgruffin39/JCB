@@ -45,8 +45,9 @@ export class SqliteRankingStore {
 
   public calculateAndSave(): RankingSnapshot {
     const calculatedAt = this.now();
+    const streaksByUser = this.streaksByUser();
     const users = this.userSummaries().map((row) => {
-      const streaks = this.streaksForUser(row.userId);
+      const streaks = streaksByUser.get(row.userId) ?? { current: 0, longest: 0 };
       return {
         userId: row.userId,
         displayName: row.displayName,
@@ -109,25 +110,26 @@ export class SqliteRankingStore {
       .all() as UserSummaryRow[];
   }
 
-  private streaksForUser(userId: string): {
-    readonly current: number;
-    readonly longest: number;
-  } {
+  private streaksByUser(): ReadonlyMap<
+    string,
+    { readonly current: number; readonly longest: number }
+  > {
     const outcomes = this.database
       .prepare(
         `SELECT user_id AS userId, status
          FROM bets
-         WHERE user_id = ? AND status IN ('won', 'lost')
-         ORDER BY COALESCE(settled_at, created_at), created_at, id`,
+         WHERE status IN ('won', 'lost')
+         ORDER BY user_id, COALESCE(settled_at, created_at), created_at, id`,
       )
-      .all(userId) as BetOutcomeRow[];
-    let current = 0;
-    let longest = 0;
+      .all() as BetOutcomeRow[];
+    const streaks = new Map<string, { current: number; longest: number }>();
     for (const outcome of outcomes) {
-      current = outcome.status === 'lost' ? current + 1 : 0;
-      longest = Math.max(longest, current);
+      const streak = streaks.get(outcome.userId) ?? { current: 0, longest: 0 };
+      streak.current = outcome.status === 'lost' ? streak.current + 1 : 0;
+      streak.longest = Math.max(streak.longest, streak.current);
+      streaks.set(outcome.userId, streak);
     }
-    return { current, longest };
+    return streaks;
   }
 
   private highestCarryover(): bigint {

@@ -10,6 +10,7 @@ import {
 import { handlePurchaseInteraction, renderRaceMessage } from '@jcb/discord';
 import { money, type Clock } from '@jcb/domain';
 import { Client, Events, GatewayIntentBits, MessageFlags, type Interaction } from 'discord.js';
+import { createHash } from 'node:crypto';
 import { DiscordClientGuildMembership } from './guild-membership.js';
 import { SqliteDiscordPurchaseGateway } from './discord-purchase-gateway.js';
 
@@ -35,7 +36,7 @@ export function wireDiscordGateway(input: {
   const gateway = new SqliteDiscordPurchaseGateway(input.database, input.clock, membership);
 
   input.client.on(Events.InteractionCreate, (interaction) => {
-    void handleInteraction(interaction);
+    void handleInteraction(interaction).catch(reportDiscordError);
   });
 
   async function handleInteraction(interaction: Interaction): Promise<void> {
@@ -104,10 +105,21 @@ export function wireDiscordGateway(input: {
         );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : '操作に失敗しました。';
-      await safeEphemeralReply(interaction, `処理できませんでした: ${message.slice(0, 180)}`);
+      reportDiscordError(error);
+      try {
+        await safeEphemeralReply(
+          interaction,
+          '処理できませんでした。時間をおいて再度お試しください。',
+        );
+      } catch (replyError) {
+        reportDiscordError(replyError);
+      }
     }
   }
+}
+
+function reportDiscordError(error: unknown): void {
+  process.emitWarning(error instanceof Error ? error : String(error));
 }
 
 export async function publishRaceMessage(input: {
@@ -161,13 +173,21 @@ export async function publishRaceMessage(input: {
       // A deleted fixed message is recreated below and its ID is replaced.
     }
   }
-  const created = await channel.send(options);
+  const created = await channel.send({
+    ...options,
+    nonce: messageNonce(JSON.stringify(options)),
+    enforceNonce: true,
+  });
   messages.save({
     purpose: 'race',
     raceId: input.raceId,
     channelId,
     messageId: created.id,
   });
+}
+
+function messageNonce(content: string): string {
+  return createHash('sha256').update(content).digest('hex').slice(0, 25);
 }
 
 async function safeEphemeralReply(interaction: Interaction, content: string): Promise<void> {

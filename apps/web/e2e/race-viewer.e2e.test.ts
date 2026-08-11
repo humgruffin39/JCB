@@ -2,9 +2,7 @@ import { createCipheriv, randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { expect, test } from '@playwright/test';
 
-test('loads a verified timeline with replay and camera controls', async ({
-  page,
-}) => {
+test('loads a verified timeline with replay and camera controls', async ({ page }) => {
   test.setTimeout(150_000);
   await page.addInitScript(() => {
     (window as unknown as { audioContextCreations: number }).audioContextCreations = 0;
@@ -96,7 +94,7 @@ test('loads a verified timeline with replay and camera controls', async ({
         result: {
           raceId: 'viewer-test',
           scheduledStart: scheduledAt,
-          timelineDuration: 10_000,
+          timelineDuration: 4_000,
           timelineKey: encrypted.key,
           iv: encrypted.iv,
           authTag: encrypted.authTag,
@@ -127,15 +125,18 @@ test('loads a verified timeline with replay and camera controls', async ({
   const horseFour = page.getByRole('button', { name: /4番を追尾/ });
   await horseFour.dispatchEvent('click');
   await expect(horseFour).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: '追走に戻す' })).toBeVisible();
-  await page.getByRole('button', { name: '追走に戻す' }).dispatchEvent('click');
+  await expect(page.getByRole('button', { name: '放送カメラに戻す' })).toBeVisible();
+  await page.getByRole('button', { name: '放送カメラに戻す' }).dispatchEvent('click');
   await expect(horseFour).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.getByRole('button', { name: '自由視点' })).toBeVisible();
-  await page.getByRole('button', { name: '自由視点' }).dispatchEvent('click');
-  await expect(page.getByRole('button', { name: '追走に戻す' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '1位を追尾' })).toBeVisible();
+  const horseOne = page.getByRole('button', { name: /1番を追尾/ });
+  await page.getByRole('button', { name: '1位を追尾' }).dispatchEvent('click');
+  await expect(horseOne).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '放送カメラに戻す' })).toBeVisible();
   await expect(page.getByText('ドラッグ 回転 · ホイール ズーム')).toHaveCount(0);
-  await page.getByRole('button', { name: '追走に戻す' }).dispatchEvent('click');
-  await expect(page.getByRole('button', { name: '自由視点' })).toBeVisible();
+  await page.getByRole('button', { name: '放送カメラに戻す' }).dispatchEvent('click');
+  await expect(horseOne).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: '1位を追尾' })).toBeVisible();
   await expect(page.locator('.running-order small')).toHaveCount(0);
   expect(
     await page.evaluate(
@@ -154,16 +155,17 @@ test('loads a verified timeline with replay and camera controls', async ({
 });
 
 function timelineFixture() {
-  return Array.from({ length: 101 }, (_, frame) => ({
+  const finalFrame = 40;
+  return Array.from({ length: finalFrame + 1 }, (_, frame) => ({
     timeMs: frame * 100,
     horses: Array.from({ length: 8 }, (_, index) => ({
       horseNumber: index + 1,
-      progress: Math.min(1, frame / 100 - index * 0.002),
+      progress: Math.min(1, frame / finalFrame - index * 0.002),
       laneIndex: index,
       lateralOffset: 0,
       rank: index + 1,
       speed: frame === 0 ? 0 : 16,
-      animationState: frame === 0 ? 'waiting' : frame === 100 ? 'finished' : 'running',
+      animationState: frame === 0 ? 'waiting' : frame === finalFrame ? 'finished' : 'running',
     })).map((horse) => ({ ...horse, progress: Math.max(0, horse.progress) })),
   }));
 }

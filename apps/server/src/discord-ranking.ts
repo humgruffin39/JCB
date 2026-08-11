@@ -7,6 +7,7 @@ import {
 } from '@jcb/database';
 import type { Clock } from '@jcb/domain';
 import type { Client } from 'discord.js';
+import { createHash } from 'node:crypto';
 
 const MESSAGE_LIMIT = 2_000;
 
@@ -41,6 +42,8 @@ export async function publishRankingMessages(input: {
     const created = await channel.send({
       content,
       allowedMentions: { parse: [] },
+      nonce: createHash('sha256').update(`${purpose}:${content}`).digest('hex').slice(0, 25),
+      enforceNonce: true,
     });
     messageStore.save({
       purpose,

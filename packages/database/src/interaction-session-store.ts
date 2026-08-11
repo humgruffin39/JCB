@@ -55,16 +55,19 @@ export class SqliteInteractionSessionStore implements PurchaseSessionStore {
 
   public update(
     id: string,
+    expectedStep: string,
     step: string,
     payload: Readonly<Record<string, string>>,
   ): PurchaseSession {
     const result = this.database
       .prepare(
         `UPDATE interaction_sessions SET step = ?, payload_json = ?, updated_at = ?
-         WHERE id = ? AND expires_at > ?`,
+         WHERE id = ? AND step = ? AND expires_at > ?`,
       )
-      .run(step, JSON.stringify(payload), BigInt(this.now()), id, BigInt(this.now()));
-    if (result.changes !== 1) throw new Error('Purchase session is expired or missing.');
+      .run(step, JSON.stringify(payload), BigInt(this.now()), id, expectedStep, BigInt(this.now()));
+    if (result.changes !== 1) {
+      throw new Error('Purchase session is expired, missing, or was updated concurrently.');
+    }
     const session = this.get(id);
     if (session === undefined) throw new Error('Purchase session disappeared.');
     return session;

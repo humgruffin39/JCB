@@ -115,6 +115,16 @@ describe('server API contract', () => {
     const authorization = new URL(oauthStart.headers.location!);
     expect(authorization.searchParams.get('prompt')).toBe('consent');
     expect(authorization.searchParams.get('scope')).toBe('identify');
+    const unboundCallback = await app.inject({
+      method: 'GET',
+      url: `/api/v1/auth/discord/callback?code=test&state=${encodeURIComponent(
+        authorization.searchParams.get('state')!,
+      )}`,
+    });
+    expect(unboundCallback.statusCode).toBe(401);
+    expect(unboundCallback.json()).toMatchObject({
+      error: { code: 'OAUTH_STATE_BROWSER_MISMATCH' },
+    });
     const authStore = new SqliteAuthStore(database, () => Date.now());
     const ticket = authStore.issueLoginTicket('123456', race.id);
     const exchange = await app.inject({
@@ -210,6 +220,41 @@ describe('server API contract', () => {
     expect(audit.reason).toContain('障害調査');
     expect(audit.ipHash).toMatch(/^[a-f0-9]{64}$/);
 
+    const account = database
+      .prepare("SELECT id FROM accounts WHERE account_type = 'user' AND owner_key = ?")
+      .get(findUserId(database, '123456')) as { id: string };
+    const adjustmentHeaders = {
+      cookie: `jcb_session=${oauthSession.sessionToken}`,
+      'x-csrf-token': oauthSession.csrfToken,
+    };
+    const adjustment = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/ledger/adjustments',
+      headers: adjustmentHeaders,
+      payload: {
+        accountId: account.id,
+        amount: '100',
+        reason: 'API idempotency regression',
+        idempotencyKey: 'api-adjustment-key',
+      },
+    });
+    expect(adjustment.statusCode).toBe(200);
+    const conflictingAdjustment = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/ledger/adjustments',
+      headers: adjustmentHeaders,
+      payload: {
+        accountId: account.id,
+        amount: '200',
+        reason: 'API idempotency regression',
+        idempotencyKey: 'api-adjustment-key',
+      },
+    });
+    expect(conflictingAdjustment.statusCode).toBe(409);
+    expect(conflictingAdjustment.json()).toMatchObject({
+      error: { code: 'DUPLICATE_OPERATION' },
+    });
+
     database
       .prepare(
         `INSERT INTO admin_allowlist
@@ -252,3 +297,11 @@ describe('server API contract', () => {
     database.close();
   });
 });
+
+function findUserId(database: ReturnType<typeof openDatabase>, discordUserId: string): string {
+  return (
+    database.prepare('SELECT id FROM users WHERE discord_user_id = ?').get(discordUserId) as {
+      id: string;
+    }
+  ).id;
+}

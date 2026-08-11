@@ -156,6 +156,22 @@ function runSimulation(
   if (!Number.isInteger(input.distanceM) || input.distanceM <= 0) {
     throw new Error('Distance must be a positive integer.');
   }
+  if (
+    input.noiseStandardDeviation !== undefined &&
+    (!Number.isFinite(input.noiseStandardDeviation) ||
+      input.noiseStandardDeviation < 0 ||
+      input.noiseStandardDeviation > 0.1)
+  ) {
+    throw new Error('Noise standard deviation must be between 0 and 0.1.');
+  }
+  if (
+    input.fatigueMaximum !== undefined &&
+    (!Number.isFinite(input.fatigueMaximum) ||
+      input.fatigueMaximum < 0 ||
+      input.fatigueMaximum > 0.3)
+  ) {
+    throw new Error('Maximum fatigue must be between 0 and 0.3.');
+  }
   const effective = input.entries.map((entry) => createEffectiveHorse(entry, input, prng));
   const states: HorseState[] = effective.map((horse) => ({
     effective: horse,
@@ -166,11 +182,14 @@ function runSimulation(
   }));
   const timeline: TimelineFrame[] = [];
   let tick = 0;
-  const maximumTicks = Math.ceil(360 / SIMULATION_TICK_SECONDS);
+  // A valid 5,000 m race with minimum abilities can legitimately take over six minutes.
+  // Five metres per second is below the model's slowest bounded forward pace.
+  const maximumDurationSeconds = Math.max(360, input.distanceM / 5 + 10);
+  const maximumTicks = Math.ceil(maximumDurationSeconds / SIMULATION_TICK_SECONDS);
   if (includeTimeline) timeline.push(createTimelineFrame(states, input.distanceM, 0));
 
   while (states.some((state) => state.finishTimeSeconds === undefined)) {
-    if (tick >= maximumTicks) throw new Error('Simulation exceeded the six-minute safety limit.');
+    if (tick >= maximumTicks) throw new Error('Simulation exceeded its distance safety limit.');
     const currentTime = tick * SIMULATION_TICK_SECONDS;
     for (const state of states) {
       if (state.finishTimeSeconds !== undefined) continue;

@@ -43,9 +43,7 @@ test('serves the read-only terminal to 50 concurrent clients', async ({ browser 
   );
   await Promise.all(
     pages.map((page) =>
-      expect(
-        page.getByRole('region', { name: '50クライアント負荷試験 レース観戦' }),
-      ).toBeVisible(),
+      expect(page.getByRole('region', { name: '50クライアント負荷試験 レース観戦' })).toBeVisible(),
     ),
   );
   const elapsed = performance.now() - started;

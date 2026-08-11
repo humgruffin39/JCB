@@ -22,6 +22,7 @@ import { ODDS_VERSION } from '@jcb/odds';
 import { generateSimulationSeeds, PRNG_VERSION, SIMULATION_VERSION } from '@jcb/simulation';
 import { ulid } from 'ulid';
 import { SqliteGameStore } from './game-store.js';
+import { SqliteObjectPublicationStore } from './object-publication-store.js';
 
 interface RacePreparationRow {
   readonly id: string;
@@ -191,6 +192,12 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
         winPositions: completion.winPositions,
         trifectaPositions: completion.trifectaPositions,
       });
+      new SqliteObjectPublicationStore(this.database).enqueue(
+        `race-manifests/${start.raceId}.json`,
+        Buffer.from(JSON.stringify(completion.signedManifest), 'utf8'),
+        { raceId: start.raceId, type: 'release-manifest' },
+        Number(now),
+      );
     });
     run.immediate();
   }

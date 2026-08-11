@@ -4,6 +4,7 @@ import { identifier, money, timestamp } from '@jcb/domain';
 import { transfer } from '@jcb/economy';
 import { openDatabase } from './connection.js';
 import { SqliteGameStore, type HorseWrite } from './game-store.js';
+import { SqliteInteractionSessionStore } from './interaction-session-store.js';
 import { applyMigrations } from './migrations.js';
 import { SqliteRaceLifecycleStore } from './race-lifecycle-store.js';
 
@@ -21,6 +22,33 @@ const horseBase: Omit<HorseWrite, 'name'> = {
 };
 
 describe('SQLite game store', () => {
+  it('creates a horse atomically without a follow-up coat update', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    database.exec(`
+      CREATE TRIGGER reject_coat_updates
+      BEFORE UPDATE OF coat_color ON horses
+      BEGIN
+        SELECT RAISE(ABORT, 'coat updates are forbidden');
+      END
+    `);
+    const store = new SqliteGameStore(database, () => 1);
+    const horse = store.createHorse({ ...horseBase, name: '一括作成', coatColor: 'black' });
+    expect(horse.coatColor).toBe('black');
+    expect(
+      (
+        database.prepare("SELECT COUNT(*) AS count FROM horses WHERE name = '一括作成'").get() as {
+          count: bigint;
+        }
+      ).count,
+    ).toBe(1n);
+    database.close();
+  });
+
   it('registers once, locks immutable snapshots, funds pools, and purchases idempotently', () => {
     let now = 1_000;
     const database = openDatabase(':memory:');
@@ -129,6 +157,22 @@ describe('SQLite game store', () => {
     const purchased = store.purchaseBet(purchase);
     expect(purchased.balanceAfter).toBe(49_500n);
     expect(store.purchaseBet(purchase).wasDuplicate).toBe(true);
+    expect(() => store.purchaseBet({ ...purchase, stake: money(400n) })).toThrow(
+      /different bet purchase/i,
+    );
+    const sessions = new SqliteInteractionSessionStore(database, () => now);
+    const session = sessions.create({
+      discordUserId: '123456',
+      raceId: race.id,
+      raceVersion: 1,
+      step: 'pool',
+      payload: {},
+      expiresAt: timestamp(30_000),
+    });
+    expect(sessions.update(session.id, 'pool', 'pick-1', { poolType: 'win' }).step).toBe('pick-1');
+    expect(() => sessions.update(session.id, 'pool', 'pick-1', { poolType: 'win' })).toThrow(
+      /stale|updated concurrently/i,
+    );
     expect(() =>
       store.purchaseBet({
         ...purchase,

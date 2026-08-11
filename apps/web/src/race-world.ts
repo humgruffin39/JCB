@@ -34,7 +34,7 @@ export interface RaceWorldState {
   readonly isPhoto: boolean;
 }
 
-export type RaceCameraMode = 'follow' | 'free' | 'horse';
+export type RaceCameraMode = 'follow' | 'horse';
 
 interface AnimatedHorse {
   readonly rig: HorseRig;
@@ -63,10 +63,9 @@ export class RaceWorld {
   private readonly raycaster = new THREE.Raycaster();
   private cameraInitialized = false;
   private cameraMode: RaceCameraMode = 'follow';
-  private readonly freeFocus = new THREE.Vector3();
-  private readonly latestRenderedFocus = new THREE.Vector3();
   private readonly trackedFocus = new THREE.Vector3();
   private trackedHorseNumber: number | undefined;
+  private leaderHorseNumber: number | undefined;
   private trackedCameraInitialized = false;
   private broadcastShotId: BroadcastShotId | undefined;
   private readonly previousRanks = new Map<number, number>();
@@ -178,12 +177,7 @@ export class RaceWorld {
       this.onTrackedHorseChange?.(undefined);
     }
     this.cameraMode = mode;
-    if (mode === 'free') {
-      this.freeFocus.copy(this.latestRenderedFocus);
-      this.orbit.target.copy(this.cameraTarget);
-      this.orbit.enablePan = false;
-      this.orbit.update();
-    } else if (mode === 'follow') {
+    if (mode === 'follow') {
       this.orbit.enablePan = false;
       this.cameraInitialized = false;
       this.broadcastShotId = undefined;
@@ -227,6 +221,8 @@ export class RaceWorld {
     const ranked = [...state.frame.horses].sort(
       (left, right) => right.progress - left.progress || left.rank - right.rank,
     );
+    this.leaderHorseNumber =
+      state.frame.horses.find((horse) => horse.rank === 1)?.horseNumber ?? ranked[0]?.horseNumber;
     const weights = [4, 3, 2, 1] as const;
     const leaderProgress =
       ranked
@@ -234,7 +230,6 @@ export class RaceWorld {
         .reduce((sum, horse, index) => sum + horse.progress * (weights[index] ?? 1), 0) /
       weights.reduce((sum, weight) => sum + weight, 0);
     const focusRaceProgress = state.isPhoto ? 1 : Math.min(leaderProgress, 1);
-    const focusProgress = raceProgressToCourseProgress(focusRaceProgress, HORSE_NOSE_OFFSET);
 
     for (const horse of this.horses) {
       if (rewound) {
@@ -338,25 +333,9 @@ export class RaceWorld {
       poseHorse(horse.rig, state.positionMs, frameHorse.speed, poseState);
     }
 
-    // Every horse stays in this average, so changes in the live ranking cannot
-    // cause a small camera jump when the fourth and fifth horses swap places.
-    const fallbackFocus = sampleCourse(focusProgress).position;
-    const renderedFocus = this.horses.reduce(
-      (sum, horse) => sum.add(horse.initialized ? horse.rig.root.position : fallbackFocus),
-      new THREE.Vector3(),
-    );
-    renderedFocus.multiplyScalar(1 / this.horses.length);
-    this.latestRenderedFocus.copy(renderedFocus);
     this.updateBattleSelection(state, focusRaceProgress, rewound);
 
-    if (this.cameraMode === 'free') {
-      const shift = renderedFocus.clone().sub(this.freeFocus);
-      this.camera.position.add(shift);
-      this.orbit.target.add(shift);
-      this.freeFocus.copy(renderedFocus);
-      this.orbit.update();
-      this.updateSun(renderedFocus);
-    } else if (this.cameraMode === 'horse') {
+    if (this.cameraMode === 'horse') {
       this.updateTrackedHorseCamera();
     } else {
       const battleProgress = this.getBattleFocusProgress(state);
@@ -552,7 +531,9 @@ export class RaceWorld {
   }
 
   private readonly handleOrbitStart = (): void => {
-    if (this.cameraMode === 'follow') this.setCameraMode('free');
+    if (this.cameraMode === 'follow' && this.leaderHorseNumber !== undefined) {
+      this.setTrackedHorse(this.leaderHorseNumber);
+    }
   };
 
   private updateTrackedHorseCamera(): void {

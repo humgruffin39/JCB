@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=browser --format=esm --target=es2024 --outfile=dist/index.js",
+    "build": "esbuild src/index.ts --bundle --minify --legal-comments=none --platform=browser --format=esm --target=es2024 --outfile=dist/index.js",
     "deploy": "pnpm build && wrangler deploy"
   },
   "dependencies": {

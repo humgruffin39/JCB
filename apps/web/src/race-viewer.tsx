@@ -5,7 +5,7 @@ import {
   timelineSchema,
   type TimelineFrameContract,
 } from '@jcb/contracts';
-import { LocateFixed, Orbit, Pause, Play, Volume2, VolumeX } from 'lucide-react';
+import { LocateFixed, Pause, Play, Video, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { apiRequest, EDGE_ORIGIN, estimateServerOffset, getResult } from './api.js';
 import type { getRace } from './api.js';
@@ -352,7 +352,17 @@ export function RaceViewer({
                   return !value;
                 });
               }}
-              onCameraModeChange={(mode) => setCameraMode(mode)}
+              onToggleCamera={() => {
+                if (cameraMode === 'horse') {
+                  setTrackedHorseNumber(undefined);
+                  setCameraMode('follow');
+                  return;
+                }
+                const leader = orderedHorses.find((horse) => horse.rank === 1) ?? orderedHorses[0];
+                if (leader === undefined) return;
+                setTrackedHorseNumber(leader.horseNumber);
+                setCameraMode('horse');
+              }}
             />
           ) : null}
         </>
@@ -473,27 +483,27 @@ function PlaybackControls({
   isPaused,
   cameraMode,
   onPause,
-  onCameraModeChange,
+  onToggleCamera,
 }: {
   readonly isPaused: boolean;
   readonly cameraMode: RaceCameraMode;
   readonly onPause: () => void;
-  readonly onCameraModeChange: (mode: RaceCameraMode) => void;
+  readonly onToggleCamera: () => void;
 }) {
   return (
     <div className="broadcast-controls">
       <button
         className="broadcast-icon-button broadcast-camera-button"
         type="button"
-        aria-label={cameraMode === 'follow' ? '自由視点' : '追走に戻す'}
-        aria-pressed={cameraMode !== 'follow'}
-        title={cameraMode === 'follow' ? '自由視点' : '追走に戻す'}
-        onClick={() => onCameraModeChange(cameraMode === 'follow' ? 'free' : 'follow')}
+        aria-label={cameraMode === 'follow' ? '1位を追尾' : '放送カメラに戻す'}
+        aria-pressed={cameraMode === 'horse'}
+        title={cameraMode === 'follow' ? '1位を追尾' : '放送カメラに戻す'}
+        onClick={onToggleCamera}
       >
         {cameraMode === 'follow' ? (
-          <Orbit aria-hidden="true" />
-        ) : (
           <LocateFixed aria-hidden="true" />
+        ) : (
+          <Video aria-hidden="true" />
         )}
       </button>
       <button

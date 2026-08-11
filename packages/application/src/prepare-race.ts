@@ -118,11 +118,6 @@ export async function prepareRace(
       sha256: timelineSha256,
       codecVersion: TIMELINE_CODEC_VERSION,
     });
-    await dependencies.timelineStore.put(
-      `race-manifests/${raceId}.json`,
-      Buffer.from(JSON.stringify(signedManifest), 'utf8'),
-      { raceId, type: 'release-manifest' },
-    );
     const liquidity = dependencies.seedLiquidity ?? INITIAL_SEED_LIQUIDITY[start.raceKind];
     const completion: RacePreparationCompletion = {
       official,

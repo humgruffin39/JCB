@@ -76,8 +76,9 @@ describe('Discord contracts', () => {
       sessions: {
         create: (input) => ({ id: 'session', ...input }),
         get: (id) => (id === session.id ? session : undefined),
-        update: (id, step, payload) => {
+        update: (id, expectedStep, step, payload) => {
           expect(id).toBe(session.id);
+          expect(expectedStep).toBe('pool');
           return { ...session, step, payload };
         },
       },

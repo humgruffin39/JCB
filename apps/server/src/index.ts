@@ -94,6 +94,7 @@ const stopScheduler = canRunRaceScheduler
       environment,
       clock,
       timelineStore,
+      onError: (error) => app.log.error({ err: error }, 'scheduler poll failed'),
       ...(backupProbe === undefined ? {} : { backupProbe }),
       ...(discordClient === undefined ? {} : { discordClient }),
     })
@@ -117,7 +118,11 @@ function noOperation(): void {
 }
 
 function scheduleSystemJobs(sqlite: ReturnType<typeof openDatabase>, now: Timestamp): void {
-  const jobs = new SqliteJobStore(sqlite, () => 0.5);
+  const jobs = new SqliteJobStore(
+    sqlite,
+    () => 0.5,
+    () => now,
+  );
   const storedSettings = sqlite
     .prepare("SELECT value_json AS valueJson FROM app_settings WHERE key = 'game_settings'")
     .get() as { valueJson: string } | undefined;

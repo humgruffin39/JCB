@@ -10,8 +10,11 @@ import {
   SqliteAdminStore,
   SqliteGameStore,
   SqliteJobStore,
+  SqliteMaintenanceStore,
+  SqliteObjectPublicationStore,
   SqliteRaceLifecycleStore,
   SqliteRacePreparationRepository,
+  publishPendingObjects,
   type SqliteDatabase,
 } from '@jcb/database';
 import { timestamp, toJstDateKey, type Clock } from '@jcb/domain';
@@ -32,22 +35,44 @@ export interface SchedulerDependencies {
   readonly timelineStore: PrivateObjectStore;
   readonly backupProbe?: BackupProbe;
   readonly discordClient?: Client;
+  readonly onError?: (error: unknown) => void;
 }
 
 export function startScheduler(dependencies: SchedulerDependencies): () => void {
   const workerId = `server:${process.pid.toString()}`;
-  const jobStore = new SqliteJobStore(dependencies.database, cryptoJitter);
+  const jobStore = new SqliteJobStore(dependencies.database, cryptoJitter, () =>
+    dependencies.clock.now(),
+  );
   const schedulerAdminStore = new SqliteAdminStore(dependencies.database, () =>
     dependencies.clock.now(),
   );
   jobStore.reclaimStale(dependencies.clock.now(), STALE_LOCK_MILLISECONDS);
   const handlers = createHandlers(dependencies, jobStore);
+  const publications = new SqliteObjectPublicationStore(dependencies.database);
+  const maintenance = new SqliteMaintenanceStore(dependencies.database);
+  publications.reclaimStale(dependencies.clock.now(), STALE_LOCK_MILLISECONDS);
+  let nextMaintenanceAt = 0;
   let isPolling = false;
 
   const poll = async (): Promise<void> => {
     if (isPolling) return;
     isPolling = true;
     try {
+      if (dependencies.clock.now() >= nextMaintenanceAt) {
+        maintenance.cleanup(dependencies.clock.now());
+        nextMaintenanceAt = dependencies.clock.now() + 60 * 60 * 1_000;
+      }
+      const publicationResult = await publishPendingObjects(
+        publications,
+        dependencies.timelineStore,
+        `${workerId}:objects`,
+        () => dependencies.clock.now(),
+      );
+      if (publicationResult.failed > 0) {
+        dependencies.onError?.(
+          new Error(`${String(publicationResult.failed)} object publication(s) will be retried.`),
+        );
+      }
       schedulerAdminStore.recordSystemSetting(
         'scheduler_heartbeat_at',
         new Date(dependencies.clock.now()).toISOString(),
@@ -79,12 +104,24 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
           );
         }
       }
+      await publishPendingObjects(
+        publications,
+        dependencies.timelineStore,
+        `${workerId}:objects`,
+        () => dependencies.clock.now(),
+      );
     } finally {
       isPolling = false;
     }
   };
-  void poll();
-  const interval = setInterval(() => void poll(), POLL_INTERVAL_MILLISECONDS);
+  const runPoll = (): void => {
+    void poll().catch((error: unknown) => {
+      if (dependencies.onError !== undefined) dependencies.onError(error);
+      else process.emitWarning(error instanceof Error ? error : String(error));
+    });
+  };
+  runPoll();
+  const interval = setInterval(runPoll, POLL_INTERVAL_MILLISECONDS);
   interval.unref();
   return () => clearInterval(interval);
 }

@@ -13,7 +13,6 @@
     "@jcb/odds": "workspace:*",
     "@jcb/simulation": "workspace:*",
     "better-sqlite3": "12.6.2",
-    "drizzle-orm": "0.45.2",
     "ulid": "3.0.2"
   }
 }

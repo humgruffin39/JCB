@@ -18,6 +18,47 @@ function createStore(): { database: ReturnType<typeof openDatabase>; store: Sqli
 }
 
 describe('SQLite job store', () => {
+  it('records enqueue time separately from the scheduled run time', () => {
+    const { database } = createStore();
+    const store = new SqliteJobStore(
+      database,
+      () => 0.5,
+      () => 123,
+    );
+    store.enqueue({
+      jobType: 'backup_check',
+      deduplicationKey: 'created-at-check',
+      payload: {},
+      runAt: timestamp(9_999),
+    });
+    const row = database
+      .prepare(
+        'SELECT run_at AS runAt, created_at AS createdAt, updated_at AS updatedAt FROM scheduled_jobs',
+      )
+      .get() as { runAt: bigint; createdAt: bigint; updatedAt: bigint };
+    expect(row).toEqual({ runAt: 9_999n, createdAt: 123n, updatedAt: 123n });
+    database.close();
+  });
+
+  it('rejects conflicting reuse of a job deduplication key', () => {
+    const { database, store } = createStore();
+    store.enqueue({
+      jobType: 'settle_race',
+      deduplicationKey: 'settle:conflict',
+      payload: { raceId: 'race-a' },
+      runAt: timestamp(100),
+    });
+    expect(() =>
+      store.enqueue({
+        jobType: 'settle_race',
+        deduplicationKey: 'settle:conflict',
+        payload: { raceId: 'race-b' },
+        runAt: timestamp(100),
+      }),
+    ).toThrow(/different scheduled job/i);
+    database.close();
+  });
+
   it('claims a due job after the database process restarts', () => {
     const directory = mkdtempSync(join(tmpdir(), 'jcb-job-restart-'));
     const databasePath = join(directory, 'jobs.sqlite');

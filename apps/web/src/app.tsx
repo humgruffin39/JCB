@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
-import { AdminTerminal } from './admin-terminal.js';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { apiAbsoluteUrl, apiRequest, exchangeTicket, getRace, refreshCsrfToken } from './api.js';
-import { RaceTerminal } from './race-terminal.js';
+
+const AdminTerminal = lazy(async () => {
+  const module = await import('./admin-terminal.js');
+  return { default: module.AdminTerminal };
+});
+const RaceTerminal = lazy(async () => {
+  const module = await import('./race-terminal.js');
+  return { default: module.RaceTerminal };
+});
 
 type AppState =
   | { readonly status: 'loading' }
@@ -31,7 +38,9 @@ export function App() {
       )}
       <main id="main">
         {isAdmin ? (
-          <AdminGate />
+          <Suspense fallback={<LoadingState />}>
+            <AdminGate />
+          </Suspense>
         ) : state.status === 'loading' ? (
           <LoadingState />
         ) : state.status === 'needs-discord' ? (
@@ -39,7 +48,9 @@ export function App() {
         ) : state.status === 'error' ? (
           <ErrorState message={state.message} />
         ) : (
-          <RaceTerminal raceId={state.raceId} />
+          <Suspense fallback={<LoadingState />}>
+            <RaceTerminal raceId={state.raceId} />
+          </Suspense>
         )}
       </main>
       {isAdmin || isRace ? null : (

@@ -95,6 +95,7 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
     readonly selectionCode: string;
     readonly stake: Money;
     readonly interactionId: string;
+    readonly operationId: string;
   }): Promise<PurchaseReceipt> {
     const isGuildMember = await this.membership.isCurrentMember(input.discordUserId);
     const user = this.database
@@ -112,7 +113,7 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
       selectionCode: input.selectionCode,
       stake: input.stake,
       interactionId: input.interactionId,
-      idempotencyKey: `discord:${input.interactionId}`,
+      idempotencyKey: `discord-session:${input.operationId}`,
       expectedRaceVersion: input.raceVersion,
       isGuildMember,
       now: this.clock.now(),
@@ -121,7 +122,7 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
       const current = this.clock.now();
       const interval = this.oddsRefreshInterval();
       const refreshAt = nextOddsRefreshAt(current, interval);
-      new SqliteJobStore(this.database, cryptoUnit).enqueue({
+      new SqliteJobStore(this.database, cryptoUnit, () => this.clock.now()).enqueue({
         jobType: 'refresh_race_message',
         deduplicationKey: `refresh-race:${input.raceId}:${String(input.raceVersion)}:${String(refreshAt)}`,
         payload: { raceId: input.raceId },

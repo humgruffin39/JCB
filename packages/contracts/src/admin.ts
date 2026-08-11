@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { timestampSchema } from './common.js';
+import { jstDateKeySchema, timestampSchema } from './common.js';
 
 const ability = z.number().int().min(0).max(100);
 const preference = z.number().int().min(-100).max(100);
@@ -30,7 +30,7 @@ export const raceEntryInputSchema = z.object({
 
 export const createRaceSchema = z
   .object({
-    raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    raceDate: jstDateKeySchema,
     name: z.string().trim().min(1).max(100),
     kind: z.enum(['regular', 'midweek', 'saturday_night']).optional(),
     distanceM: z.number().int().min(800).max(5000),
@@ -60,10 +60,7 @@ export const createRaceSchema = z
 
 export const racePatchSchema = z
   .object({
-    raceDate: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .optional(),
+    raceDate: jstDateKeySchema.optional(),
     name: z.string().trim().min(1).max(100).optional(),
     kind: z.enum(['regular', 'midweek', 'saturday_night']).optional(),
     distanceM: z.number().int().min(800).max(5000).optional(),
@@ -79,7 +76,13 @@ export const racePatchSchema = z
 export const adminAdjustmentSchema = z
   .object({
     accountId: z.string().min(1).max(80),
-    amount: z.string().regex(/^-?[1-9]\d*$/),
+    amount: z
+      .string()
+      .regex(/^-?[1-9]\d*$/)
+      .refine((value) => {
+        const amount = BigInt(value);
+        return amount >= -9_000_000_000_000_000n && amount <= 9_000_000_000_000_000n;
+      }, 'Adjustment amount is outside the supported monetary range.'),
     reason: z.string().trim().min(3).max(300),
     idempotencyKey: z.string().min(8).max(120),
   })

@@ -8,7 +8,7 @@ import {
   type JobType,
   type ScheduledJob,
 } from '@jcb/application';
-import { timestamp, type Timestamp } from '@jcb/domain';
+import { DomainError, timestamp, type Timestamp } from '@jcb/domain';
 import { ulid } from 'ulid';
 
 interface JobRow {
@@ -41,11 +41,13 @@ export class SqliteJobStore implements JobStore {
   public constructor(
     private readonly database: Database.Database,
     private readonly jitter: () => number,
+    private readonly now: () => number = Date.now,
   ) {}
 
   public enqueue(job: EnqueueJob): ScheduledJob {
     jobPayloadSchema.parse(job.payload);
     const id = ulid();
+    const createdAt = BigInt(this.now());
     this.database
       .prepare(
         `INSERT OR IGNORE INTO scheduled_jobs
@@ -59,8 +61,8 @@ export class SqliteJobStore implements JobStore {
         job.deduplicationKey,
         JSON.stringify(job.payload),
         BigInt(job.runAt),
-        BigInt(job.runAt),
-        BigInt(job.runAt),
+        createdAt,
+        createdAt,
       );
     const row = this.database
       .prepare(
@@ -71,7 +73,18 @@ export class SqliteJobStore implements JobStore {
       )
       .get(job.deduplicationKey) as JobRow | undefined;
     if (row === undefined) throw new Error('Job could not be enqueued.');
-    return mapJob(row);
+    const persisted = mapJob(row);
+    if (
+      persisted.jobType !== job.jobType ||
+      persisted.runAt !== job.runAt ||
+      canonicalJson(persisted.payload) !== canonicalJson(job.payload)
+    ) {
+      throw new DomainError(
+        'DUPLICATE_OPERATION',
+        'Deduplication key was already used for a different scheduled job.',
+      );
+    }
+    return persisted;
   }
 
   public claimDue(now: Timestamp, workerId: string): ScheduledJob | undefined {
@@ -167,6 +180,19 @@ export class SqliteJobStore implements JobStore {
       .run(BigInt(now), BigInt(now), BigInt(cutoff));
     return result.changes;
   }
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Readonly<Record<string, unknown>>).sort(
+      ([left], [right]) => left.localeCompare(right),
+    );
+    return `{${entries
+      .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function mapJob(row: JobRow): ScheduledJob {

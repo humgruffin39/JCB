@@ -37,7 +37,12 @@ export interface PurchaseSession {
 export interface PurchaseSessionStore {
   create(input: Omit<PurchaseSession, 'id'>): PurchaseSession;
   get(id: string): PurchaseSession | undefined;
-  update(id: string, step: string, payload: Readonly<Record<string, string>>): PurchaseSession;
+  update(
+    id: string,
+    expectedStep: string,
+    step: string,
+    payload: Readonly<Record<string, string>>,
+  ): PurchaseSession;
 }
 
 export interface PurchasePreview {
@@ -69,6 +74,7 @@ export interface DiscordPurchaseGateway {
     readonly selectionCode: string;
     readonly stake: Money;
     readonly interactionId: string;
+    readonly operationId: string;
   }): Promise<PurchaseReceipt>;
   raceHorses(
     raceId: string,

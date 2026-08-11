@@ -68,7 +68,27 @@ describe('Cloudflare release edge', () => {
         signature: tamperText(manifest.signature),
       }),
     );
-    expect(manifestResponse.status).toBe(401);
+    expect(manifestResponse.status).toBe(409);
+    await expect(manifestResponse.json()).resolves.toMatchObject({
+      error: { code: 'MANIFEST_INVALID' },
+    });
+  });
+
+  it('returns a server error for an unexpected object-store failure', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const bindings = environment(signedManifest(now - 1_000));
+    const response = await requestRelease(validToken(), {
+      ...bindings,
+      TIMELINE_BUCKET: {
+        async get() {
+          throw new Error('private storage detail');
+        },
+      },
+    });
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'EDGE_REQUEST_FAILED' },
+    });
   });
 
   it('serves a release with lowercased R2 metadata keys', async () => {

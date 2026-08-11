@@ -1,7 +1,7 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { PrivateObjectStore } from '@jcb/application';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, normalize, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 
 export class R2PrivateObjectStore implements PrivateObjectStore {
   private readonly client: S3Client;
@@ -76,8 +76,15 @@ export class FilePrivateObjectStore implements PrivateObjectStore {
   }
 
   private safePath(key: string): string {
-    const path = resolve(join(this.absoluteRoot, normalize(key)));
-    if (!path.startsWith(`${this.absoluteRoot}\\`) && path !== this.absoluteRoot) {
+    const segments = key.replaceAll('\\', '/').split('/');
+    const path = resolve(this.absoluteRoot, ...segments);
+    const relativePath = relative(this.absoluteRoot, path);
+    if (
+      key.length === 0 ||
+      relativePath === '..' ||
+      relativePath.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+      isAbsolute(relativePath)
+    ) {
       throw new Error('Object key escapes the private store root.');
     }
     return path;

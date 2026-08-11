@@ -1,7 +1,16 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { edgeAccessClaimsSchema, raceIdParamsSchema, signedManifestSchema } from '@jcb/contracts';
-import type { z } from 'zod';
+import { ZodError, type z } from 'zod';
+
+class EdgeRequestError extends Error {
+  public constructor(
+    public readonly status: number,
+    public readonly code: string,
+  ) {
+    super(code);
+  }
+}
 
 interface StoredObject {
   readonly body: ReadableStream;
@@ -44,13 +53,23 @@ export async function handleEdgeRequest(
     const url = new URL(request.url);
     const match = /^\/edge\/v1\/races\/([^/]+)\/(release|timeline)$/.exec(url.pathname);
     if (match === null) return errorResponse(404, 'NOT_FOUND', environment.WEB_ORIGIN);
-    const { raceId } = raceIdParamsSchema.parse({ raceId: decodeURIComponent(match[1]!) });
+    let raceId: string;
+    try {
+      raceId = raceIdParamsSchema.parse({ raceId: decodeURIComponent(match[1]!) }).raceId;
+    } catch {
+      throw new EdgeRequestError(400, 'INVALID_RACE_ID');
+    }
     const token = bearerToken(request);
-    const claims = await verifyAccessToken(
-      token,
-      environment.EDGE_TOKEN_PUBLIC_KEY,
-      Math.floor(Date.now() / 1000),
-    );
+    let claims: z.infer<typeof edgeAccessClaimsSchema>;
+    try {
+      claims = await verifyAccessToken(
+        token,
+        environment.EDGE_TOKEN_PUBLIC_KEY,
+        Math.floor(Date.now() / 1000),
+      );
+    } catch {
+      throw new EdgeRequestError(401, 'TOKEN_INVALID');
+    }
     if (claims.raceId !== raceId || claims.guildId !== environment.DISCORD_GUILD_ID) {
       return errorResponse(403, 'TOKEN_SCOPE_MISMATCH', environment.WEB_ORIGIN);
     }
@@ -58,8 +77,13 @@ export async function handleEdgeRequest(
     if (manifestObject === null) {
       return errorResponse(503, 'MANIFEST_UNAVAILABLE', environment.WEB_ORIGIN);
     }
-    const signedManifest = signedManifestSchema.parse(await manifestObject.json());
-    const manifest = await verifyManifest(signedManifest, environment.MANIFEST_PUBLIC_KEY);
+    let manifest: z.infer<typeof signedManifestSchema>['manifest'];
+    try {
+      const signedManifest = signedManifestSchema.parse(await manifestObject.json());
+      manifest = await verifyManifest(signedManifest, environment.MANIFEST_PUBLIC_KEY);
+    } catch {
+      throw new EdgeRequestError(409, 'MANIFEST_INVALID');
+    }
     if (manifest.raceId !== raceId) {
       return errorResponse(409, 'MANIFEST_RACE_MISMATCH', environment.WEB_ORIGIN);
     }
@@ -113,8 +137,13 @@ export async function handleEdgeRequest(
       { status: 200, headers },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'EDGE_REQUEST_FAILED';
-    return errorResponse(401, message.slice(0, 80), environment.WEB_ORIGIN);
+    if (error instanceof EdgeRequestError) {
+      return errorResponse(error.status, error.code, environment.WEB_ORIGIN);
+    }
+    if (error instanceof ZodError) {
+      return errorResponse(400, 'VALIDATION_FAILED', environment.WEB_ORIGIN);
+    }
+    return errorResponse(500, 'EDGE_REQUEST_FAILED', environment.WEB_ORIGIN);
   }
 }
 
@@ -212,7 +241,7 @@ async function importEd25519PublicKey(value: string): Promise<CryptoKey> {
 function bearerToken(request: Request): string {
   const authorization = request.headers.get('authorization');
   if (authorization === null || !authorization.startsWith('Bearer ')) {
-    throw new Error('TOKEN_REQUIRED');
+    throw new EdgeRequestError(401, 'TOKEN_REQUIRED');
   }
   return authorization.slice('Bearer '.length);
 }

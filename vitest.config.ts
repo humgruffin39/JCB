@@ -25,6 +25,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
+      include: ['apps/*/src/**/*.{ts,tsx}', 'packages/*/src/**/*.{ts,tsx}'],
+      exclude: ['**/*.test.ts', '**/*.integration.test.ts', '**/*.e2e.test.ts', '**/vite-env.d.ts'],
+      thresholds: {
+        statements: 38,
+        branches: 32,
+        functions: 40,
+        lines: 39,
+      },
     },
   },
 });

@@ -72,6 +72,34 @@ describe('admin operational store', () => {
     expect(gameSettingsSchema.parse(admin.getSetting('game_settings')).raceBetLimits).toEqual(
       DEFAULT_GAME_SETTINGS.raceBetLimits,
     );
+    const historyBefore = admin.listSettingHistory('game_settings').length;
+    const actor = game.registerUser('123456', '管理者', true);
+    admin.updateSetting({
+      key: 'game_settings',
+      value: DEFAULT_GAME_SETTINGS,
+      actorUserId: actor.id,
+      reason: 'verify one history record per update',
+    });
+    expect(admin.listSettingHistory('game_settings')).toHaveLength(historyBefore + 1);
+    const adjustment = {
+      targetAccountId: actor.accountId,
+      signedAmount: 250n,
+      reason: 'idempotent audit test',
+      idempotencyKey: 'admin-adjustment:test',
+      actorUserId: actor.id,
+    } as const;
+    admin.adjustBalance(adjustment);
+    admin.adjustBalance(adjustment);
+    expect(
+      (
+        database
+          .prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'ledger.adjusted'")
+          .get() as { count: bigint }
+      ).count,
+    ).toBe(1n);
+    expect(() => admin.adjustBalance({ ...adjustment, signedAmount: 500n })).toThrow(
+      /different ledger transaction/i,
+    );
     database.close();
   });
 

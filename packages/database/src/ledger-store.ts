@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { assertBalancedTransaction, type LedgerTransactionDraft } from '@jcb/economy';
 import {
+  DomainError,
   identifier,
   money,
   type AccountId,
@@ -16,6 +17,13 @@ export interface PostedLedgerTransaction {
 
 interface IdRow {
   readonly id: string;
+}
+
+interface TransactionRow extends IdRow {
+  readonly kind: string;
+  readonly referenceType: string;
+  readonly referenceId: string;
+  readonly description: string;
 }
 
 interface BalanceRow {
@@ -65,9 +73,14 @@ export class SqliteLedgerStore {
     assertBalancedTransaction(transactionDraft);
     const run = this.database.transaction((): PostedLedgerTransaction => {
       const duplicate = this.database
-        .prepare('SELECT id FROM ledger_transactions WHERE idempotency_key = ?')
-        .get(transactionDraft.idempotencyKey) as IdRow | undefined;
+        .prepare(
+          `SELECT id, kind, reference_type AS referenceType, reference_id AS referenceId,
+                  description
+           FROM ledger_transactions WHERE idempotency_key = ?`,
+        )
+        .get(transactionDraft.idempotencyKey) as TransactionRow | undefined;
       if (duplicate !== undefined) {
+        this.assertDuplicateMatches(duplicate, transactionDraft);
         return { id: identifier(duplicate.id), wasDuplicate: true };
       }
       const transactionId = identifier<'LedgerTransactionId'>(ulid());
@@ -168,6 +181,47 @@ export class SqliteLedgerStore {
       ) {
         throw new Error(`Insufficient funds in account ${accountId}.`);
       }
+    }
+  }
+
+  private assertDuplicateMatches(
+    existing: TransactionRow,
+    requested: LedgerTransactionDraft,
+  ): void {
+    const entries = this.database
+      .prepare(
+        `SELECT account_id AS accountId, amount
+         FROM ledger_entries WHERE transaction_id = ?
+         ORDER BY account_id, amount`,
+      )
+      .all(existing.id) as Array<{ accountId: string; amount: bigint }>;
+    const requestedEntries = requested.entries
+      .map((entry) => ({ accountId: String(entry.accountId), amount: entry.amount }))
+      .sort((left, right) =>
+        left.accountId === right.accountId
+          ? left.amount < right.amount
+            ? -1
+            : left.amount > right.amount
+              ? 1
+              : 0
+          : left.accountId.localeCompare(right.accountId),
+      );
+    const matches =
+      existing.kind === requested.kind &&
+      existing.referenceType === requested.referenceType &&
+      existing.referenceId === requested.referenceId &&
+      existing.description === requested.description &&
+      entries.length === requestedEntries.length &&
+      entries.every(
+        (entry, index) =>
+          entry.accountId === requestedEntries[index]?.accountId &&
+          entry.amount === requestedEntries[index]?.amount,
+      );
+    if (!matches) {
+      throw new DomainError(
+        'DUPLICATE_OPERATION',
+        'Idempotency key was already used for a different ledger transaction.',
+      );
     }
   }
 }

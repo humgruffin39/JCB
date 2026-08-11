@@ -30,13 +30,20 @@ import {
   SqliteAuthStore,
   SqliteGameStore,
   SqliteJobStore,
+  SqliteObjectPublicationStore,
   SqliteRaceLifecycleStore,
   SqliteViewerStore,
   type HorseWrite,
   type RaceDraftPatch,
   type SqliteDatabase,
 } from '@jcb/database';
-import { jstDateTimeToTimestamp, timestamp, toJstDateKey, type Clock } from '@jcb/domain';
+import {
+  DomainError,
+  jstDateTimeToTimestamp,
+  timestamp,
+  toJstDateKey,
+  type Clock,
+} from '@jcb/domain';
 import { ODDS_VERSION } from '@jcb/odds';
 import { SIMULATION_VERSION } from '@jcb/simulation';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
@@ -45,6 +52,7 @@ import { z, ZodError } from 'zod';
 import { registerLocalEdgeRoutes } from './local-edge.js';
 
 const SESSION_COOKIE = 'jcb_session';
+const OAUTH_STATE_COOKIE = 'jcb_oauth_state';
 const ONE_DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
 
 export interface ServerDependencies {
@@ -139,9 +147,13 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     'SESSION_SECRET',
   );
   const lifecycle = new SqliteRaceLifecycleStore(dependencies.database, now, resultMasterSecret);
-  const jobStore: JobStore = new SqliteJobStore(dependencies.database, () => {
-    return randomInt(0, 1_000_000) / 1_000_000;
-  });
+  const jobStore: JobStore = new SqliteJobStore(
+    dependencies.database,
+    () => {
+      return randomInt(0, 1_000_000) / 1_000_000;
+    },
+    now,
+  );
 
   async function authenticate(
     request: FastifyRequest,
@@ -203,7 +215,12 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       readonly statusCode?: number;
       readonly code?: string;
     };
-    const statusCode = typeof taggedError.statusCode === 'number' ? taggedError.statusCode : 500;
+    const statusCode =
+      typeof taggedError.statusCode === 'number'
+        ? taggedError.statusCode
+        : safeError instanceof DomainError
+          ? domainErrorStatus(safeError)
+          : 500;
     const code = typeof taggedError.code === 'string' ? taggedError.code : 'INTERNAL_ERROR';
     if (statusCode >= 500) app.log.error({ err: safeError }, 'request failed');
     void reply.status(statusCode).send({
@@ -305,6 +322,13 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
         code_challenge_method: 'S256',
         prompt: existingSession === undefined ? 'consent' : 'login',
       }).toString();
+      reply.setCookie(OAUTH_STATE_COOKIE, issued.state, {
+        path: '/api/v1/auth/discord/callback',
+        httpOnly: true,
+        secure: dependencies.environment.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 10 * 60,
+      });
       return reply.redirect(authorization.toString());
     },
   );
@@ -315,6 +339,10 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     async (request, reply) => {
       const query = discordOAuthCallbackSchema.parse(request.query);
       const oauth = oauthConfiguration(dependencies.environment);
+      if (request.cookies[OAUTH_STATE_COOKIE] !== query.state) {
+        throw httpError(401, 'OAUTH_STATE_BROWSER_MISMATCH', 'Discord sign-in state is invalid.');
+      }
+      reply.clearCookie(OAUTH_STATE_COOKIE, { path: '/api/v1/auth/discord/callback' });
       const oauthState = authStore.consumeOAuthState(query.state);
       const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
         method: 'POST',
@@ -571,26 +599,31 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     const session = await authenticate(request, { admin: true, csrf: true });
     const { raceId } = raceIdParamsSchema.parse(request.params);
     const settings = gameSettingsSchema.parse(adminStore.getSetting('game_settings'));
-    const race = gameStore.lockRace(raceId, secureRandomUnit, {
-      conditionProbabilities: settings.conditionProbabilities,
-      simulationNoiseStandardDeviation: settings.simulationNoiseStandardDeviation,
-      fatigueMaximum: settings.fatigueMaximum,
-      seedLiquidityClamp: settings.seedLiquidityClamp,
-      raceBetLimits: settings.raceBetLimits,
-    });
-    jobStore.enqueue({
-      jobType: 'simulate_race',
-      deduplicationKey: `simulate:${race.id}:${String(race.version)}`,
-      payload: { raceId: race.id },
-      runAt: now(),
-    });
-    adminStore.recordAudit({
-      actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
-      action: 'race.locked',
-      targetType: 'race',
-      targetId: race.id,
-      after: { version: race.version, inputHash: race.inputHash },
-    });
+    const race = dependencies.database
+      .transaction(() => {
+        const locked = gameStore.lockRace(raceId, secureRandomUnit, {
+          conditionProbabilities: settings.conditionProbabilities,
+          simulationNoiseStandardDeviation: settings.simulationNoiseStandardDeviation,
+          fatigueMaximum: settings.fatigueMaximum,
+          seedLiquidityClamp: settings.seedLiquidityClamp,
+          raceBetLimits: settings.raceBetLimits,
+        });
+        jobStore.enqueue({
+          jobType: 'simulate_race',
+          deduplicationKey: `simulate:${locked.id}:${String(locked.version)}`,
+          payload: { raceId: locked.id },
+          runAt: now(),
+        });
+        adminStore.recordAudit({
+          actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
+          action: 'race.locked',
+          targetType: 'race',
+          targetId: locked.id,
+          after: { version: locked.version, inputHash: locked.inputHash },
+        });
+        return locked;
+      })
+      .immediate();
     return envelope(race);
   });
   app.post('/api/v1/admin/races/:raceId/unlock', async (request) => {
@@ -612,20 +645,25 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     const session = await authenticate(request, { admin: true, csrf: true });
     const { raceId } = raceIdParamsSchema.parse(request.params);
     const { reason } = cancellationSchema.parse(request.body);
-    lifecycle.cancelAndRefund(raceId, reason, now());
-    jobStore.enqueue({
-      jobType: 'refresh_rankings',
-      deduplicationKey: `rankings:cancel:${raceId}:${String(now())}`,
-      payload: { raceId },
-      runAt: now(),
-    });
-    adminStore.recordAudit({
-      actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
-      action: 'race.cancelled',
-      targetType: 'race',
-      targetId: raceId,
-      reason,
-    });
+    const cancelledAt = now();
+    dependencies.database
+      .transaction(() => {
+        lifecycle.cancelAndRefund(raceId, reason, cancelledAt);
+        jobStore.enqueue({
+          jobType: 'refresh_rankings',
+          deduplicationKey: `rankings:cancel:${raceId}:${String(cancelledAt)}`,
+          payload: { raceId },
+          runAt: cancelledAt,
+        });
+        adminStore.recordAudit({
+          actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
+          action: 'race.cancelled',
+          targetType: 'race',
+          targetId: raceId,
+          reason,
+        });
+      })
+      .immediate();
     await dependencies.adminNotifier?.(`🚫 レースを中止し全額返金しました: ${raceId} / ${reason}`);
     return envelope({ cancelled: true });
   });
@@ -687,22 +725,19 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     const runAt = now();
     const scheduledAt = timestamp(runAt + 3_000);
     const finishAt = timestamp(scheduledAt + Number(timing.timelineDurationMs));
+    let manifestPublication: Uint8Array | undefined;
     if (dependencies.timelineStore !== undefined) {
       const stored = await dependencies.timelineStore.get(`race-manifests/${raceId}.json`);
       if (stored !== undefined && dependencies.environment.MANIFEST_PRIVATE_KEY !== undefined) {
         const signed = signedManifestSchema.parse(JSON.parse(Buffer.from(stored).toString('utf8')));
-        await dependencies.timelineStore.put(
-          `race-manifests/${raceId}.json`,
-          Buffer.from(
-            JSON.stringify(
-              signReleaseManifest(
-                { ...signed.manifest, scheduledStart: scheduledAt },
-                dependencies.environment.MANIFEST_PRIVATE_KEY,
-              ),
+        manifestPublication = Buffer.from(
+          JSON.stringify(
+            signReleaseManifest(
+              { ...signed.manifest, scheduledStart: scheduledAt },
+              dependencies.environment.MANIFEST_PRIVATE_KEY,
             ),
-            'utf8',
           ),
-          { raceId, type: 'release-manifest' },
+          'utf8',
         );
       }
     }
@@ -738,26 +773,34 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
           `finished:${raceId}:${String(race.version)}`,
           `settle:${raceId}:${String(race.version)}`,
         );
+      if (manifestPublication !== undefined) {
+        new SqliteObjectPublicationStore(dependencies.database).enqueue(
+          `race-manifests/${raceId}.json`,
+          manifestPublication,
+          { raceId, type: 'release-manifest' },
+          runAt,
+        );
+      }
+      jobStore.enqueue({
+        jobType: 'publish_race',
+        deduplicationKey: `publish:${raceId}:rehearsal:${String(runAt)}`,
+        payload: { raceId },
+        runAt,
+      });
+      jobStore.enqueue({
+        jobType: 'refresh_rankings',
+        deduplicationKey: `rankings:${raceId}:rehearsal:${String(runAt)}`,
+        payload: { raceId },
+        runAt,
+      });
+      adminStore.recordAudit({
+        actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
+        action: 'race.rehearsal_completed_now',
+        targetType: 'race',
+        targetId: raceId,
+      });
     });
     run.immediate();
-    jobStore.enqueue({
-      jobType: 'publish_race',
-      deduplicationKey: `publish:${raceId}:rehearsal:${String(runAt)}`,
-      payload: { raceId },
-      runAt,
-    });
-    jobStore.enqueue({
-      jobType: 'refresh_rankings',
-      deduplicationKey: `rankings:${raceId}:rehearsal:${String(runAt)}`,
-      payload: { raceId },
-      runAt,
-    });
-    adminStore.recordAudit({
-      actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
-      action: 'race.rehearsal_completed_now',
-      targetType: 'race',
-      targetId: raceId,
-    });
     return envelope({ settled: true });
   });
   app.post('/api/v1/admin/races/:raceId/emergency-reveal', async (request) => {
@@ -800,19 +843,24 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
   app.post('/api/v1/admin/ledger/adjustments', async (request) => {
     const session = await authenticate(request, { admin: true, csrf: true });
     const body = adminAdjustmentSchema.parse(request.body);
-    const transactionId = adminStore.adjustBalance({
-      targetAccountId: body.accountId,
-      signedAmount: BigInt(body.amount),
-      reason: body.reason,
-      idempotencyKey: body.idempotencyKey,
-      actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
-    });
-    jobStore.enqueue({
-      jobType: 'refresh_rankings',
-      deduplicationKey: `rankings:adjustment:${transactionId}`,
-      payload: {},
-      runAt: now(),
-    });
+    const transactionId = dependencies.database
+      .transaction(() => {
+        const adjusted = adminStore.adjustBalance({
+          targetAccountId: body.accountId,
+          signedAmount: BigInt(body.amount),
+          reason: body.reason,
+          idempotencyKey: body.idempotencyKey,
+          actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
+        });
+        jobStore.enqueue({
+          jobType: 'refresh_rankings',
+          deduplicationKey: `rankings:adjustment:${adjusted}`,
+          payload: {},
+          runAt: now(),
+        });
+        return adjusted;
+      })
+      .immediate();
     return envelope({ transactionId });
   });
   app.get('/api/v1/admin/jobs', async (request) => {
@@ -945,6 +993,19 @@ function requireRuntimeSecret(
 
 function httpError(statusCode: number, code: string, message: string): Error {
   return Object.assign(new Error(message), { statusCode, code });
+}
+
+function domainErrorStatus(error: DomainError): number {
+  switch (error.code) {
+    case 'INVALID_MONEY':
+    case 'INVALID_TIMESTAMP':
+    case 'INVALID_RACE_ENTRY':
+    case 'INVALID_HORSE':
+    case 'INVALID_SELECTION':
+      return 400;
+    default:
+      return 409;
+  }
 }
 
 function findInternalUserId(database: SqliteDatabase, discordUserId: string): string {

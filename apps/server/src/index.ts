@@ -6,6 +6,7 @@ import { buildServer } from './build-app.js';
 import { R2BackupProbe } from './backup-probe.js';
 import { createDiscordClient, wireDiscordGateway } from './discord-gateway.js';
 import { DiscordClientGuildMembership } from './guild-membership.js';
+import { buildAdminNoticeMessage } from './admin-notification.js';
 import { FilePrivateObjectStore, R2PrivateObjectStore } from './object-store.js';
 import { startScheduler } from './scheduler.js';
 import { SystemClock } from './system-clock.js';
@@ -73,10 +74,10 @@ const app = await buildServer({
   ...(discordClient === undefined || environment.DISCORD_ADMIN_CHANNEL_ID === undefined
     ? {}
     : {
-        adminNotifier: async (message: string) => {
+        adminNotifier: async (notice) => {
           const channel = await discordClient.channels.fetch(environment.DISCORD_ADMIN_CHANNEL_ID!);
           if (channel !== null && channel.isSendable()) {
-            await channel.send({ content: message });
+            await channel.send(buildAdminNoticeMessage(notice, clock.now()));
           }
         },
       }),

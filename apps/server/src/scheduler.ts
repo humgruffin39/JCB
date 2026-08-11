@@ -22,6 +22,7 @@ import type { Client } from 'discord.js';
 import type { BackupProbe } from './backup-probe.js';
 import { publishRaceMessage } from './discord-gateway.js';
 import { publishRankingMessages } from './discord-ranking.js';
+import { buildAdminNoticeMessage, type AdminNotice } from './admin-notification.js';
 import { WorkerProbabilityGenerator } from './worker-probability-generator.js';
 
 const POLL_INTERVAL_MILLISECONDS = 30_000;
@@ -98,10 +99,15 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
             targetId: job.id,
             reason: `${job.jobType} exhausted its retry policy.`,
           });
-          await sendAdminNotice(
-            dependencies,
-            `🚨 ジョブがdead letterになりました: ${job.jobType} / ${job.id}`,
-          );
+          await sendAdminNotice(dependencies, {
+            level: 'error',
+            title: '自動処理を完了できませんでした',
+            description: '再試行上限に達したため、処理を停止しました。',
+            fields: [
+              { name: '処理', value: formatJobType(job.jobType) },
+              { name: 'ジョブID', value: job.id },
+            ],
+          });
         }
       }
       await publishPendingObjects(
@@ -171,7 +177,11 @@ function createHandlers(
     async simulate_race(job) {
       const id = raceId(job);
       const seedPlan = gameStore.planSeedLiquidity(id);
-      await sendAdminNotice(dependencies, `⏳ レースsimulation開始: ${id}`);
+      await sendAdminNotice(dependencies, {
+        level: 'info',
+        title: 'レースのシミュレーションを開始しました',
+        fields: [{ name: 'レースID', value: id }],
+      });
       let completion;
       try {
         completion = await prepareRace(id, {
@@ -188,19 +198,46 @@ function createHandlers(
           seedLiquidity: seedPlan.liquidity,
         });
       } catch (error) {
-        await sendAdminNotice(
-          dependencies,
-          `🚨 レースsimulation失敗: ${id} / ${error instanceof Error ? error.message.slice(0, 160) : 'unknown error'}`,
-        );
+        await sendAdminNotice(dependencies, {
+          level: 'error',
+          title: 'レースのシミュレーションに失敗しました',
+          description: 'エラー内容を確認してください。',
+          fields: [
+            { name: 'レースID', value: id },
+            {
+              name: 'エラー内容',
+              value:
+                error instanceof Error
+                  ? error.message.slice(0, 160)
+                  : '原因を特定できませんでした。',
+            },
+          ],
+        });
         throw error;
       }
-      await sendAdminNotice(dependencies, `✅ レースsimulation完了・R2保存済み: ${id}`);
+      await sendAdminNotice(dependencies, {
+        level: 'success',
+        title: 'レースのシミュレーションが完了しました',
+        description: '観戦用データを保存しました。',
+        fields: [
+          { name: 'レースID', value: id },
+          { name: '保存先', value: 'R2', inline: true },
+        ],
+      });
       const residentSetBytes = process.memoryUsage().rss;
       if (residentSetBytes >= 430 * 1_024 * 1_024) {
-        await sendAdminNotice(
-          dependencies,
-          `⚠️ シミュレーション後RSSが警告水準です: ${String(Math.round(residentSetBytes / 1_024 / 1_024))} MiB`,
-        );
+        await sendAdminNotice(dependencies, {
+          level: 'warning',
+          title: 'サーバーのメモリ使用量が高くなっています',
+          description: 'シミュレーション後の使用量が警告水準を超えました。',
+          fields: [
+            { name: 'レースID', value: id },
+            {
+              name: '使用量',
+              value: `約 ${String(Math.round(residentSetBytes / 1_024 / 1_024))} MiB`,
+            },
+          ],
+        });
       }
       const race = gameStore.getRace(id);
       const jobs = [
@@ -268,7 +305,12 @@ function createHandlers(
     async settle_race(job) {
       lifecycle.settleRace(raceId(job), dependencies.clock.now());
       await publish(job);
-      await sendAdminNotice(dependencies, `✅ レース精算完了: ${raceId(job)}`);
+      await sendAdminNotice(dependencies, {
+        level: 'success',
+        title: 'レースの精算が完了しました',
+        description: '払戻と残高を更新しました。',
+        fields: [{ name: 'レースID', value: raceId(job) }],
+      });
       jobStore.enqueue({
         jobType: 'refresh_rankings',
         deduplicationKey: `rankings:${raceId(job)}:${String(dependencies.clock.now())}`,
@@ -294,10 +336,18 @@ function createHandlers(
           reason: 'Central bank balance is below 2,000,000 R.',
           after: { balance: health.centralBankBalance },
         });
-        await sendAdminNotice(
-          dependencies,
-          `⚠️ 中央銀行残高が警告水準です: ${BigInt(health.centralBankBalance).toLocaleString('ja-JP')} R`,
-        );
+        await sendAdminNotice(dependencies, {
+          level: 'warning',
+          title: '中央銀行の残高が少なくなっています',
+          description: '残高が警告水準を下回りました。',
+          fields: [
+            {
+              name: '現在の残高',
+              value: `${BigInt(health.centralBankBalance).toLocaleString('ja-JP')} R`,
+            },
+            { name: '警告水準', value: '2,000,000 R', inline: true },
+          ],
+        });
       }
     },
     async warn_missing_race() {
@@ -310,7 +360,12 @@ function createHandlers(
           targetId: date,
           reason: 'No race existed at the configured warning time.',
         });
-        await sendAdminNotice(dependencies, `⚠️ ${date} のレースがまだ作成されていません。`);
+        await sendAdminNotice(dependencies, {
+          level: 'warning',
+          title: '本日のレースがまだ作成されていません',
+          description: 'レース作成画面を確認してください。',
+          fields: [{ name: '対象日', value: date }],
+        });
       }
     },
     async refresh_rankings() {
@@ -356,7 +411,12 @@ function createHandlers(
           targetId: 'litestream-r2',
           reason,
         });
-        await sendAdminNotice(dependencies, `🚨 バックアップ監視に失敗しました: ${reason}`);
+        await sendAdminNotice(dependencies, {
+          level: 'error',
+          title: 'バックアップの確認に失敗しました',
+          description: 'R2バックアップの状態を確認してください。',
+          fields: [{ name: '詳細', value: reason }],
+        });
         throw error;
       }
     },
@@ -378,7 +438,7 @@ export async function verifyBackupProbe(
 
 async function sendAdminNotice(
   dependencies: SchedulerDependencies,
-  content: string,
+  notice: AdminNotice,
 ): Promise<void> {
   if (
     dependencies.discordClient === undefined ||
@@ -389,7 +449,28 @@ async function sendAdminNotice(
   const channel = await dependencies.discordClient.channels.fetch(
     dependencies.environment.DISCORD_ADMIN_CHANNEL_ID,
   );
-  if (channel !== null && channel.isSendable()) await channel.send({ content });
+  if (channel !== null && channel.isSendable()) {
+    await channel.send(buildAdminNoticeMessage(notice, dependencies.clock.now()));
+  }
+}
+
+function formatJobType(jobType: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    simulate_race: 'レースのシミュレーション',
+    publish_race: 'レース情報の公開',
+    refresh_race_message: 'レース情報の更新',
+    open_viewer: '観戦ページの公開',
+    close_betting: '投票受付の締切',
+    mark_running: 'レース開始',
+    mark_finished: 'レース終了',
+    settle_race: 'レース精算',
+    grant_relief: '救済配布',
+    economic_integrity_check: '残高整合性の確認',
+    warn_missing_race: 'レース未作成の確認',
+    refresh_rankings: 'ランキング更新',
+    backup_check: 'バックアップの確認',
+  };
+  return labels[jobType] ?? '未登録の自動処理';
 }
 
 function runtimeSecret(value: string | undefined, nodeEnvironment: string): string {

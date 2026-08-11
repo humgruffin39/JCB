@@ -49,6 +49,7 @@ import { SIMULATION_VERSION } from '@jcb/simulation';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { createHash, randomInt } from 'node:crypto';
 import { z, ZodError } from 'zod';
+import type { AdminNotice } from './admin-notification.js';
 import { registerLocalEdgeRoutes } from './local-edge.js';
 
 const SESSION_COOKIE = 'jcb_session';
@@ -61,7 +62,7 @@ export interface ServerDependencies {
   readonly clock: Clock;
   readonly membership: GuildMembership;
   readonly discordStatus?: () => boolean;
-  readonly adminNotifier?: (message: string) => Promise<void>;
+  readonly adminNotifier?: (notice: AdminNotice) => Promise<void>;
   readonly timelineStore?: PrivateObjectStore;
 }
 
@@ -561,9 +562,15 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       targetId: race.id,
       after: race,
     });
-    await dependencies.adminNotifier?.(
-      `🔒 レースを確定しsimulationを予約しました: ${race.name} / v${String(race.version)}`,
-    );
+    await dependencies.adminNotifier?.({
+      level: 'info',
+      title: 'レースの下書きを作成しました',
+      description: '開催内容を保存しました。確定するとシミュレーションを予約します。',
+      fields: [
+        { name: 'レース', value: race.name },
+        { name: 'バージョン', value: `v${String(race.version)}`, inline: true },
+      ],
+    });
     return envelope(race);
   });
   app.patch('/api/v1/admin/races/:raceId', async (request) => {
@@ -624,6 +631,15 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
         return locked;
       })
       .immediate();
+    await dependencies.adminNotifier?.({
+      level: 'info',
+      title: 'レースを確定しました',
+      description: 'シミュレーションを予約しました。',
+      fields: [
+        { name: 'レース', value: race.name },
+        { name: 'バージョン', value: `v${String(race.version)}`, inline: true },
+      ],
+    });
     return envelope(race);
   });
   app.post('/api/v1/admin/races/:raceId/unlock', async (request) => {
@@ -664,7 +680,15 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
         });
       })
       .immediate();
-    await dependencies.adminNotifier?.(`🚫 レースを中止し全額返金しました: ${raceId} / ${reason}`);
+    await dependencies.adminNotifier?.({
+      level: 'warning',
+      title: 'レースを中止しました',
+      description: '参加者への投票額は全額返金しました。',
+      fields: [
+        { name: 'レースID', value: raceId },
+        { name: '中止理由', value: reason },
+      ],
+    });
     return envelope({ cancelled: true });
   });
   app.post('/api/v1/admin/races/:raceId/retry-simulation', async (request) => {
@@ -826,9 +850,15 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       reason: body.reason,
       ipHash: hashIp(request.ip, sessionSecret),
     });
-    await dependencies.adminNotifier?.(
-      `🚨 緊急結果閲覧が実行されました: ${raceId} / ${body.reason}`,
-    );
+    await dependencies.adminNotifier?.({
+      level: 'error',
+      title: '緊急結果閲覧を実行しました',
+      description: '通常の公開前に、管理者がレース結果を確認しました。',
+      fields: [
+        { name: 'レースID', value: raceId },
+        { name: '確認理由', value: body.reason },
+      ],
+    });
     return envelope(result);
   });
 

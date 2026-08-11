@@ -8,7 +8,7 @@ import {
   type SqliteDatabase,
 } from '@jcb/database';
 import { handlePurchaseInteraction, renderRaceMessage } from '@jcb/discord';
-import { money, type Clock } from '@jcb/domain';
+import { DomainError, money, type Clock } from '@jcb/domain';
 import { Client, Events, GatewayIntentBits, MessageFlags, type Interaction } from 'discord.js';
 import { createHash } from 'node:crypto';
 import { DiscordClientGuildMembership } from './guild-membership.js';
@@ -107,15 +107,48 @@ export function wireDiscordGateway(input: {
     } catch (error) {
       reportDiscordError(error);
       try {
-        await safeEphemeralReply(
-          interaction,
-          '処理できませんでした。時間をおいて再度お試しください。',
-        );
+        await safeEphemeralReply(interaction, discordErrorMessage(error));
       } catch (replyError) {
         reportDiscordError(replyError);
       }
     }
   }
+}
+
+export function discordErrorMessage(error: unknown): string {
+  if (error instanceof DomainError) {
+    switch (error.code) {
+      case 'BETTING_CLOSED':
+        return 'このレースの投票受付は終了しました。';
+      case 'INSUFFICIENT_FUNDS':
+        return '残高が不足しています。';
+      case 'RACE_BET_LIMIT_EXCEEDED':
+        return 'このレースの購入上限を超えています。';
+      case 'INVALID_RACE_ENTRY':
+        return 'レース情報が更新されました。最初からやり直してください。';
+      case 'INVALID_MONEY':
+        return '賭け金を確認してください。';
+      case 'DUPLICATE_OPERATION':
+        return 'この購入はすでに処理されています。';
+      case 'INVALID_SELECTION':
+        return '選択した馬券の内容を確認してください。';
+      default:
+        return '購入を処理できませんでした。時間をおいて再度お試しください。';
+    }
+  }
+  if (error instanceof Error) {
+    const messages: Readonly<Record<string, string>> = {
+      'Current guild membership is required.': '現在のギルドメンバーだけが利用できます。',
+      'Insufficient balance.': '残高が不足しています。',
+      'Betting is closed.': 'このレースの投票受付は終了しました。',
+      'Race version changed.': 'レース情報が更新されました。最初からやり直してください。',
+      'Race version changed; restart the purchase flow.':
+        'レース情報が更新されました。最初からやり直してください。',
+      'Per-race stake limit exceeded.': 'このレースの購入上限を超えています。',
+    };
+    return messages[error.message] ?? '処理できませんでした。時間をおいて再度お試しください。';
+  }
+  return '処理できませんでした。時間をおいて再度お試しください。';
 }
 
 function reportDiscordError(error: unknown): void {

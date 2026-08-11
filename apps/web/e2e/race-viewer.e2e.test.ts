@@ -82,7 +82,15 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
             }
           : path.endsWith('/edge-token')
             ? { edgeAccessToken: 'edge-test-token' }
-            : raceFixture(scheduledAt);
+            : path.endsWith('/result')
+              ? {
+                  finishOrder: [32, 33, 34, 35, 36, 37, 38, 40].map((finishFrame, index) => ({
+                    horseNumber: index + 1,
+                    position: index + 1,
+                    finishTimeMs: finishFrame * 100 + 1,
+                  })),
+                }
+              : raceFixture(scheduledAt);
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

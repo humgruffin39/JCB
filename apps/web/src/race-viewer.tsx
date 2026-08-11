@@ -59,11 +59,14 @@ export function RaceViewer({
   const [phase, setPhase] = useState<PresentationPhase>('race');
   const [isSceneReady, setIsSceneReady] = useState(false);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
+  const [viewerRetry, setViewerRetry] = useState(0);
   const [trackedHorseNumber, setTrackedHorseNumber] = useState<number>();
   const [cameraMode, setCameraMode] = useState<RaceCameraMode>('follow');
   const [finishSnapshot, setFinishSnapshot] = useState<string>();
   const [bets, setBets] = useState<readonly Bet[]>([]);
   const [result, setResult] = useState<RaceResult>();
+  const [resultError, setResultError] = useState<string>();
+  const [resultRetry, setResultRetry] = useState(0);
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
 
   useEffect(() => {
@@ -85,9 +88,14 @@ export function RaceViewer({
     if (['finished', 'settling', 'settled'].includes(race.status)) {
       void getResult(race.id)
         .then((value) => {
-          if (!cancelled) setResult(value);
+          if (!cancelled) {
+            setResult(value);
+            setResultError(undefined);
+          }
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (!cancelled) setResultError('公式結果を取得できませんでした。');
+        });
     }
     return () => {
       cancelled = true;
@@ -98,8 +106,19 @@ export function RaceViewer({
     let isCancelled = false;
     let isOpening = false;
     let hasLoaded = false;
+    let hasFailed = false;
     const open = async (): Promise<void> => {
-      if (isOpening || hasLoaded) return;
+      if (isOpening || hasLoaded || hasFailed) return;
+      if (race.status === 'cancelled') {
+        setViewer({ state: 'error', message: 'このレースは中止されました。' });
+        hasFailed = true;
+        return;
+      }
+      if (race.status === 'failed') {
+        setViewer({ state: 'error', message: 'このレースの準備に失敗しました。' });
+        hasFailed = true;
+        return;
+      }
       const authoritativeNow = Date.now() + offset;
       if (
         authoritativeNow < race.scheduledAt &&
@@ -141,6 +160,8 @@ export function RaceViewer({
         }
       } catch (error) {
         if (!isCancelled) {
+          sessionStorage.removeItem(`jcb.edge-token:${race.id}`);
+          hasFailed = true;
           setViewer({
             state: 'error',
             message: error instanceof Error ? error.message : 'レース映像を読み込めません',
@@ -156,7 +177,7 @@ export function RaceViewer({
       isCancelled = true;
       window.clearInterval(interval);
     };
-  }, [offset, race.id, race.scheduledAt, race.status]);
+  }, [offset, race.id, race.scheduledAt, race.status, viewerRetry]);
 
   useEffect(() => {
     if (viewer.state !== 'ready' || phase !== 'race' || !isSceneReady || hasPlaybackStarted) {
@@ -226,13 +247,20 @@ export function RaceViewer({
     let cancelled = false;
     void getResult(race.id)
       .then((value) => {
-        if (!cancelled) setResult(value);
+        if (!cancelled) {
+          setResult(value);
+          setResultError(undefined);
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) {
+          setResultError('公式結果を取得できませんでした。通信状態を確認してください。');
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [phase, race.id, result, viewer]);
+  }, [phase, race.id, result, resultRetry, viewer]);
 
   const timelineFinishOrder = useMemo(() => {
     if (viewer.state !== 'ready') return [];
@@ -363,12 +391,22 @@ export function RaceViewer({
           ) : null}
           {phase === 'photo' ? <PhotoFinish /> : null}
           {phase === 'results' ? (
-            <ResultsScreen
-              entries={race.entries}
-              finishOrder={finalOrder}
-              bets={bets}
-              onReplay={restart}
-            />
+            result === undefined ? (
+              <ResultUnavailable
+                message={resultError}
+                onRetry={() => {
+                  setResultError(undefined);
+                  setResultRetry((value) => value + 1);
+                }}
+              />
+            ) : (
+              <ResultsScreen
+                entries={race.entries}
+                finishOrder={result.finishOrder}
+                bets={bets}
+                onReplay={restart}
+              />
+            )
           ) : null}
           {phase === 'race' && isSceneReady ? (
             <PlaybackControls
@@ -399,7 +437,13 @@ export function RaceViewer({
           ) : null}
         </>
       ) : (
-        <BroadcastState state={viewer.state} message={viewer.message} />
+        <BroadcastState
+          state={viewer.state}
+          message={viewer.message}
+          onRetry={
+            viewer.state === 'error' ? () => setViewerRetry((value) => value + 1) : undefined
+          }
+        />
       )}
       {connectionError === undefined ? null : (
         <p className="broadcast-connection" role="status">
@@ -414,6 +458,24 @@ function PhotoFinish() {
   return (
     <div className="photo-finish" role="status" aria-label="写真判定" aria-live="assertive">
       <div className="photo-flash" />
+    </div>
+  );
+}
+
+function ResultUnavailable({
+  message,
+  onRetry,
+}: {
+  readonly message: string | undefined;
+  readonly onRetry: () => void;
+}) {
+  return (
+    <div className="results-screen" role="alert" aria-live="assertive">
+      <h2>公式結果を表示できません</h2>
+      <p>{message ?? '公式結果を確認しています。'}</p>
+      <button className="replay-button" type="button" onClick={onRetry}>
+        結果を再取得
+      </button>
     </div>
   );
 }
@@ -636,13 +698,26 @@ function CourseProgressIndicator({ progress }: { readonly progress: number }) {
   );
 }
 
-function BroadcastState({ state, message }: { readonly state: string; readonly message: string }) {
+function BroadcastState({
+  state,
+  message,
+  onRetry,
+}: {
+  readonly state: string;
+  readonly message: string;
+  readonly onRetry?: (() => void) | undefined;
+}) {
   return (
     <div
       className={`broadcast-state broadcast-state--${state}`}
       role={state === 'error' ? 'alert' : 'status'}
     >
       <strong>{message}</strong>
+      {state === 'error' && onRetry !== undefined ? (
+        <button className="replay-button" type="button" onClick={onRetry}>
+          再試行
+        </button>
+      ) : null}
     </div>
   );
 }

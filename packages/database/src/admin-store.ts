@@ -66,7 +66,8 @@ export class SqliteAdminStore {
     };
   }
 
-  public listRaceOperations(): readonly Record<string, string | number | null>[] {
+  public listRaceOperations(limit = 500): readonly Record<string, string | number | null>[] {
+    const boundedLimit = Math.min(500, Math.max(1, limit));
     return (
       this.database
         .prepare(
@@ -112,9 +113,9 @@ export class SqliteAdminStore {
                   (SELECT timeline_sha256 FROM race_simulations rs
                    WHERE rs.race_id = r.id AND rs.race_version = r.version
                      AND rs.kind = 'official') AS timelineSha256
-           FROM races r ORDER BY r.scheduled_at DESC`,
+           FROM races r ORDER BY r.scheduled_at DESC LIMIT ?`,
         )
-        .all() as Record<string, unknown>[]
+        .all(boundedLimit) as Record<string, unknown>[]
     ).map(normalizeRow) as Record<string, string | number | null>[];
   }
 
@@ -198,11 +199,12 @@ export class SqliteAdminStore {
     };
   }
 
-  public systemObjects(): {
+  public systemObjects(limit = 500): {
     readonly discordMessages: readonly Record<string, string | number | null>[];
     readonly timelineObjects: readonly Record<string, string | number | null>[];
     readonly objectPublications: readonly Record<string, string | number | null>[];
   } {
+    const boundedLimit = Math.min(500, Math.max(1, limit));
     const discordMessages = (
       this.database
         .prepare(
@@ -210,9 +212,9 @@ export class SqliteAdminStore {
                   dm.channel_id AS channelId, dm.message_id AS messageId,
                   dm.updated_at AS updatedAt
            FROM discord_messages dm LEFT JOIN races r ON r.id = dm.race_id
-           ORDER BY dm.updated_at DESC`,
+           ORDER BY dm.updated_at DESC LIMIT ?`,
         )
-        .all() as Record<string, unknown>[]
+        .all(boundedLimit) as Record<string, unknown>[]
     ).map(normalizeRow) as Record<string, string | number | null>[];
     const timelineObjects = (
       this.database
@@ -223,9 +225,9 @@ export class SqliteAdminStore {
                   rs.timeline_sha256 AS sha256, rs.completed_at AS completedAt
            FROM race_simulations rs JOIN races r ON r.id = rs.race_id
            WHERE rs.kind = 'official' AND rs.timeline_object_key IS NOT NULL
-           ORDER BY rs.completed_at DESC`,
+           ORDER BY rs.completed_at DESC LIMIT ?`,
         )
-        .all() as Record<string, unknown>[]
+        .all(boundedLimit) as Record<string, unknown>[]
     ).map(normalizeRow) as Record<string, string | number | null>[];
     const objectPublications = (
       this.database
@@ -234,9 +236,9 @@ export class SqliteAdminStore {
                   attempt_count AS attemptCount, next_attempt_at AS nextAttemptAt,
                   last_error_redacted AS lastError, locked_at AS lockedAt,
                   locked_by AS lockedBy, created_at AS createdAt, updated_at AS updatedAt
-           FROM object_publications ORDER BY updated_at DESC LIMIT 500`,
+           FROM object_publications ORDER BY updated_at DESC LIMIT ?`,
         )
-        .all() as Record<string, unknown>[]
+        .all(boundedLimit) as Record<string, unknown>[]
     ).map(normalizeRow) as Record<string, string | number | null>[];
     return { discordMessages, timelineObjects, objectPublications };
   }

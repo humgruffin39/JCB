@@ -21,6 +21,7 @@ export function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
   const isRace =
     !isAdmin && (state.status === 'race' || window.location.pathname.startsWith('/races/'));
+  const isState = !isAdmin && !isRace;
 
   useEffect(() => {
     if (isAdmin) return;
@@ -47,7 +48,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell${isAdmin ? ' app-shell--admin' : ''}${isRace ? ' app-shell--race' : ''}`}
+      className={`app-shell${isAdmin ? ' app-shell--admin' : ''}${isRace ? ' app-shell--race' : ''}${isState ? ' app-shell--state' : ''}`}
     >
       {isRace || isAdmin ? null : (
         <header className="masthead">

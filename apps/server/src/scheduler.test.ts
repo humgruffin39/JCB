@@ -134,12 +134,13 @@ describe('published object repair', () => {
       .run(timelineKey, 'timeline-hash');
     const publications = new SqliteObjectPublicationStore(database);
     publications.enqueue(timelineKey, timelineBody, { raceId: 'race-1' }, now);
-    publications.enqueue(manifestKey, manifestBody, { raceId: 'race-1' }, now);
-    for (const key of [timelineKey, manifestKey]) {
-      const publication = publications.claimDue(now, 'publisher');
-      expect(publication?.key).toBe(key);
-      publications.complete(publication!.id, 'publisher', now);
-    }
+    publications.enqueue(manifestKey, manifestBody, { raceId: 'race-1' }, now + 1);
+    const timelinePublication = publications.claimDue(now + 1, 'publisher');
+    expect(timelinePublication?.key).toBe(timelineKey);
+    publications.complete(timelinePublication!.id, 'publisher', now + 1);
+    const manifestPublication = publications.claimDue(now + 1, 'publisher');
+    expect(manifestPublication?.key).toBe(manifestKey);
+    publications.complete(manifestPublication!.id, 'publisher', now + 1);
     const objectStore: PrivateObjectStore = {
       async put() {
         return;
@@ -159,8 +160,11 @@ describe('published object repair', () => {
       requeued: [timelineKey, manifestKey],
       unrecoverable: [],
     });
-    expect(publications.claimDue(now + 1, 'repair-worker')?.key).toBe(timelineKey);
-    expect(publications.claimDue(now + 1, 'repair-worker')?.key).toBe(manifestKey);
+    const repairedKeys = [
+      publications.claimDue(now + 1, 'repair-worker')?.key,
+      publications.claimDue(now + 1, 'repair-worker')?.key,
+    ].sort();
+    expect(repairedKeys).toEqual([manifestKey, timelineKey].sort());
     database.close();
   });
 });

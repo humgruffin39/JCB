@@ -15,8 +15,6 @@ describe('Discord contracts', () => {
       version: 1,
       name: 'Discord試験',
       raceDate: '2026-08-03',
-      kindLabel: '通常レース',
-      scheduledAtLabel: '08/03 22:00:00',
       distanceM: 1200,
       surfaceLabel: '芝',
       horses: Array.from({ length: 8 }, (_, index) => ({
@@ -26,11 +24,14 @@ describe('Discord contracts', () => {
       })),
       trifectaPoolTotal: money(15_000n),
       carryover: money(0n),
-      bettingClosesAtLabel: '08/03 21:59:30',
-      statusLabel: '販売中',
       canBuy: true,
       canView: false,
     });
+    const description = message.embeds[0].data.description ?? '';
+    expect(description).toContain('開催日: 2026-08-03 / 1200m / 芝');
+    expect(description).not.toContain('発走');
+    expect(description).not.toContain('締切');
+    expect(description).not.toContain('通常レース');
     expect(message.components[0].components).toHaveLength(4);
     expect(
       message.components[0].components.some((component) => {

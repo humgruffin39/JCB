@@ -2,6 +2,7 @@ import { DomainError } from '@jcb/domain';
 import { describe, expect, it } from 'vitest';
 import {
   createViewerLinkReply,
+  betStatusLabel,
   discordErrorMessage,
   isMissingDiscordMessage,
 } from './discord-gateway.js';
@@ -40,5 +41,15 @@ describe('Discord error messages', () => {
       style: 5,
       url,
     });
+  });
+});
+
+describe('Discord bet status labels', () => {
+  it('translates internal purchased-bet statuses into Japanese', () => {
+    expect(betStatusLabel('open')).toBe('受付中');
+    expect(betStatusLabel('won')).toBe('的中');
+    expect(betStatusLabel('lost')).toBe('外れ');
+    expect(betStatusLabel('refunded')).toBe('返金済み');
+    expect(betStatusLabel('unexpected')).toBe('状態不明');
   });
 });

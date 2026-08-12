@@ -11,15 +11,11 @@ export interface DiscordRaceCard {
   readonly version: number;
   readonly name: string;
   readonly raceDate: string;
-  readonly kindLabel: string;
-  readonly scheduledAtLabel: string;
   readonly distanceM: number;
   readonly surfaceLabel: string;
   readonly horses: readonly DiscordRaceHorse[];
   readonly trifectaPoolTotal: Money;
   readonly carryover: Money;
-  readonly bettingClosesAtLabel: string;
-  readonly statusLabel: string;
   readonly canBuy: boolean;
   readonly canView: boolean;
 }

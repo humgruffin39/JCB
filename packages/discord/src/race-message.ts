@@ -10,9 +10,7 @@ export function renderRaceMessage(card: DiscordRaceCard): {
     .setTitle(card.name)
     .setDescription(
       [
-        `開催日: ${card.raceDate} / ${card.kindLabel}`,
-        `発走: ${card.scheduledAtLabel} / 締切: ${card.bettingClosesAtLabel}`,
-        `${String(card.distanceM)}m / ${card.surfaceLabel}`,
+        `開催日: ${card.raceDate} / ${String(card.distanceM)}m / ${card.surfaceLabel}`,
         '',
         ...card.horses.map(
           (horse) =>

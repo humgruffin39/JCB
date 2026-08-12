@@ -106,7 +106,7 @@ export function wireDiscordGateway(input: {
             : bets
                 .map(
                   (bet) =>
-                    `${bet.poolType === 'win' ? '単勝' : '三連単'} ${bet.selectionCode} / ${bet.stake} R / ${bet.status}`,
+                    `${bet.poolType === 'win' ? '単勝' : '三連単'} ${bet.selectionCode} / ${bet.stake} R / 状態: ${betStatusLabel(bet.status)}`,
                 )
                 .join('\n'),
         );
@@ -120,6 +120,17 @@ export function wireDiscordGateway(input: {
       }
     }
   }
+}
+
+const BET_STATUS_LABELS: Readonly<Record<string, string>> = {
+  open: '受付中',
+  won: '的中',
+  lost: '外れ',
+  refunded: '返金済み',
+};
+
+export function betStatusLabel(status: string): string {
+  return BET_STATUS_LABELS[status] ?? '状態不明';
 }
 
 export function discordErrorMessage(error: unknown): string {
@@ -183,13 +194,6 @@ export async function publishRaceMessage(input: {
     version: detail.version,
     name: detail.name,
     raceDate: detail.raceDate,
-    kindLabel:
-      detail.kind === 'midweek'
-        ? 'ミッドウィーク'
-        : detail.kind === 'saturday_night'
-          ? 'サタデーナイト'
-          : '通常レース',
-    scheduledAtLabel: formatJst(detail.scheduledAt),
     distanceM: detail.distanceM,
     surfaceLabel: detail.surface === 'turf' ? '芝' : 'ダート',
     horses: detail.entries.map((entry) => ({
@@ -199,8 +203,6 @@ export async function publishRaceMessage(input: {
     })),
     trifectaPoolTotal: money(BigInt(detail.trifectaPoolTotal)),
     carryover: money(BigInt(detail.carryover)),
-    bettingClosesAtLabel: formatJst(detail.bettingClosesAt),
-    statusLabel: detail.status,
     canBuy: detail.status === 'betting_open' && input.clock.now() < detail.bettingClosesAt,
     canView: input.clock.now() >= detail.viewerOpensAt,
   });

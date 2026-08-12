@@ -34,6 +34,7 @@ export interface AuthenticatedSession {
 export interface AuthenticateOptions {
   readonly csrf?: boolean;
   readonly admin?: boolean;
+  readonly raceId?: string;
 }
 
 export type Authenticate = (

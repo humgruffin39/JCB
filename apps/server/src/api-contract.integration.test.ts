@@ -146,6 +146,15 @@ describe('server API contract', () => {
     expect(result.json()).toMatchObject({
       error: { code: 'RACE_NOT_FINISHED' },
     });
+    const otherRace = await app.inject({
+      method: 'GET',
+      url: '/api/v1/races/another-race/result',
+      headers: { cookie: cookie! },
+    });
+    expect(otherRace.statusCode).toBe(403);
+    expect(otherRace.json()).toMatchObject({
+      error: { code: 'RACE_ACCESS_REQUIRED' },
+    });
     const ticketAdmin = await app.inject({
       method: 'GET',
       url: '/api/v1/admin/health',

@@ -31,13 +31,13 @@ export function registerViewerRoutes(app: FastifyInstance, context: ServerRouteC
     });
   });
   app.get('/api/v1/races/:raceId', async (request) => {
-    await authenticate(request);
     const { raceId } = raceIdParamsSchema.parse(request.params);
+    await authenticate(request, { raceId });
     return envelope(viewerStore.getRaceDetail(raceId));
   });
   app.get('/api/v1/races/:raceId/odds', async (request) => {
-    await authenticate(request);
     const { raceId } = raceIdParamsSchema.parse(request.params);
+    await authenticate(request, { raceId });
     const query = z
       .object({
         poolType: z.enum(['win', 'trifecta']).default('win'),
@@ -47,13 +47,13 @@ export function registerViewerRoutes(app: FastifyInstance, context: ServerRouteC
     return envelope(viewerStore.getOdds(raceId, query.poolType, query.selectionCode));
   });
   app.get('/api/v1/races/:raceId/my-bets', async (request) => {
-    const session = await authenticate(request);
     const { raceId } = raceIdParamsSchema.parse(request.params);
+    const session = await authenticate(request, { raceId });
     return envelope(viewerStore.getMyBets(raceId, session.discordUserId));
   });
   app.get('/api/v1/races/:raceId/result', async (request) => {
-    await authenticate(request);
     const { raceId } = raceIdParamsSchema.parse(request.params);
+    await authenticate(request, { raceId });
     try {
       return envelope(viewerStore.getResult(raceId));
     } catch (error) {
@@ -64,8 +64,8 @@ export function registerViewerRoutes(app: FastifyInstance, context: ServerRouteC
     }
   });
   app.post('/api/v1/races/:raceId/edge-token', async (request) => {
-    const session = await authenticate(request, { csrf: true });
     const { raceId } = raceIdParamsSchema.parse(request.params);
+    const session = await authenticate(request, { csrf: true, raceId });
     const privateKey = dependencies.environment.EDGE_TOKEN_PRIVATE_KEY;
     const guildId = dependencies.environment.DISCORD_GUILD_ID;
     if (privateKey === undefined || guildId === undefined) {

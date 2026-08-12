@@ -21,6 +21,7 @@ export type WebAuthenticationMethod = 'ticket' | 'discord_oauth';
 export interface ValidSession {
   readonly id: string;
   readonly discordUserId: string;
+  readonly raceId?: string;
   readonly expiresAt: Timestamp;
   readonly lastGuildCheckAt: Timestamp;
   readonly authenticationMethod: WebAuthenticationMethod;
@@ -50,6 +51,7 @@ interface TicketRow {
 interface SessionRow {
   readonly id: string;
   readonly discordUserId: string;
+  readonly raceId: string | null;
   readonly expiresAt: bigint;
   readonly lastGuildCheckAt: bigint;
   readonly revokedAt: bigint | null;
@@ -181,7 +183,8 @@ export class SqliteAuthStore {
   public validateSession(sessionToken: string, csrfToken?: string): ValidSession {
     const row = this.database
       .prepare(
-        `SELECT id, discord_user_id AS discordUserId, expires_at AS expiresAt,
+        `SELECT id, discord_user_id AS discordUserId, race_id AS raceId,
+                expires_at AS expiresAt,
                 last_guild_check_at AS lastGuildCheckAt, revoked_at AS revokedAt,
                 csrf_token_hash AS csrfTokenHash, auth_method AS authenticationMethod,
                 reauthenticated_at AS reauthenticatedAt
@@ -197,6 +200,7 @@ export class SqliteAuthStore {
     return {
       id: row.id,
       discordUserId: row.discordUserId,
+      ...(row.raceId === null ? {} : { raceId: row.raceId }),
       expiresAt: timestamp(Number(row.expiresAt)),
       lastGuildCheckAt: timestamp(Number(row.lastGuildCheckAt)),
       authenticationMethod: row.authenticationMethod,
@@ -266,9 +270,9 @@ export class SqliteAuthStore {
     this.database
       .prepare(
         `INSERT INTO web_sessions
-         (id, token_hash, csrf_token_hash, discord_user_id, auth_method, expires_at,
-          last_guild_check_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, token_hash, csrf_token_hash, discord_user_id, auth_method, race_id,
+          expires_at, last_guild_check_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         ulid(),
@@ -276,6 +280,7 @@ export class SqliteAuthStore {
         hashOpaqueToken(csrfToken),
         discordUserId,
         authenticationMethod,
+        raceId ?? null,
         BigInt(expiresAt),
         BigInt(this.now()),
         BigInt(this.now()),

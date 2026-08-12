@@ -81,6 +81,17 @@ export function createServerRouteContext(
       }
       throw httpError(401, 'AUTH_REQUIRED', 'Authentication required.');
     }
+    if (
+      options.raceId !== undefined &&
+      session.authenticationMethod === 'ticket' &&
+      session.raceId !== options.raceId
+    ) {
+      throw httpError(
+        403,
+        'RACE_ACCESS_REQUIRED',
+        'このレースのDiscordリンクから開いてください。',
+      );
+    }
     if (now() - session.lastGuildCheckAt >= GUILD_MEMBERSHIP_CACHE_MILLISECONDS) {
       if (!(await dependencies.membership.isCurrentMember(session.discordUserId))) {
         authStore.revoke(sessionToken);

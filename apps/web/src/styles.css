@@ -760,6 +760,41 @@ main {
   gap: var(--space-2);
 }
 
+[data-sonner-toaster] {
+  --normal-bg: #151515;
+  --normal-border: #363636;
+  --normal-text: #f0f0f0;
+}
+
+[data-sonner-toast].admin-toast {
+  width: min(22rem, calc(100vw - 2rem));
+  min-height: 2.75rem;
+  padding: var(--space-2) 2.5rem var(--space-2) var(--space-3);
+  color: #f0f0f0 !important;
+  background: #151515 !important;
+  border: 0.0625rem solid #363636 !important;
+  border-radius: 0.35rem !important;
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 28%) !important;
+  font: 600 0.78rem/1.4 var(--font-display);
+}
+
+[data-sonner-toast].admin-toast [data-title] {
+  color: inherit;
+}
+
+[data-sonner-toast].admin-toast [data-close-button] {
+  color: #a0a0a0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  opacity: 1;
+}
+
+[data-sonner-toast].admin-toast [data-close-button]:hover,
+[data-sonner-toast].admin-toast [data-close-button]:focus-visible {
+  color: #fff !important;
+  background: #2a2a2a !important;
+}
+
 .terminal-tabs,
 .inline-actions,
 .form-actions {
@@ -862,13 +897,6 @@ main {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: var(--space-2);
-}
-
-.admin-message {
-  grid-column: 1 / -1;
-  min-height: 1.5rem;
-  margin: 0;
-  color: var(--green);
 }
 
 .data-table-wrap {
@@ -1368,10 +1396,6 @@ main {
   border-left-width: 0.15rem;
 }
 
-.app-shell--admin .admin-message {
-  min-height: 0;
-}
-
 .race-admin-list h3,
 .race-admin-list p {
   margin: 0;
@@ -1444,10 +1468,6 @@ main {
   .admin-surface-grid,
   .health-groups {
     grid-template-columns: 1fr;
-  }
-
-  .admin-message {
-    grid-column: 1;
   }
 }
 

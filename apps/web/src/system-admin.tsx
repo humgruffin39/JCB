@@ -8,6 +8,7 @@ import {
   jobTypeLabel,
   processStatusLabel,
 } from './admin-labels.js';
+import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { SettingsAdmin } from './settings-admin.js';
 import { AdministratorAdmin } from './administrator-admin.js';
@@ -29,6 +30,7 @@ export function SystemAdmin() {
   const [retryingPublication, setRetryingPublication] = useState<string>();
   const [section, setSection] = useState<SystemSection>('status');
   const previousSection = useRef(section);
+  const { success } = useAdminToast();
   const refresh = useCallback(async () => {
     if (section === 'status') {
       const nextHealth = await apiRequest<unknown>('/api/v1/admin/health');
@@ -70,6 +72,7 @@ export function SystemAdmin() {
           method: 'POST',
           body: '{}',
         });
+        success('自動処理の再試行を予約しました。');
         await refreshNow();
       } catch (caught) {
         setOperationError(
@@ -91,6 +94,7 @@ export function SystemAdmin() {
           `/api/v1/admin/object-publications/${encodeURIComponent(publicationId)}/retry`,
           { method: 'POST', body: '{}' },
         );
+        success('公開データの再試行を予約しました。');
         await refreshNow();
       } catch (caught) {
         setOperationError(

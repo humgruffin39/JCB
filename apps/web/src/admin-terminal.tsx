@@ -3,6 +3,7 @@ import { HorseAdmin } from './horse-admin.js';
 import { RaceAdmin } from './race-admin.js';
 import { SystemAdmin } from './system-admin.js';
 import { CurrencyAdmin } from './currency-admin.js';
+import { AdminToastProvider } from './admin-toaster.js';
 
 type AdminSection = 'horses' | 'races' | 'currency' | 'system';
 
@@ -35,53 +36,55 @@ export function AdminTerminal() {
     return () => window.removeEventListener('jcb:auth-expired', handleAuthExpired);
   }, []);
   return (
-    <div className="admin-terminal">
-      <h1 className="visually-hidden">管理</h1>
-      <nav className="terminal-tabs" aria-label="管理メニュー" role="tablist">
-        {sections.map((tab, index) => (
-          <button
-            key={tab.id}
-            ref={(element) => {
-              tabRefs.current[tab.id] = element;
-            }}
-            type="button"
-            id={`admin-tab-${tab.id}`}
-            role="tab"
-            aria-selected={section === tab.id}
-            aria-controls="admin-panel"
-            tabIndex={section === tab.id ? 0 : -1}
-            onClick={() => setSection(tab.id)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-                event.preventDefault();
-                moveTab(index + 1);
-              } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-                event.preventDefault();
-                moveTab(index - 1);
-              } else if (event.key === 'Home') {
-                event.preventDefault();
-                moveTab(0);
-              } else if (event.key === 'End') {
-                event.preventDefault();
-                moveTab(sections.length - 1);
-              }
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-      <div id="admin-panel" role="tabpanel" aria-labelledby={`admin-tab-${section}`} tabIndex={0}>
-        {section === 'horses' ? (
-          <HorseAdmin />
-        ) : section === 'races' ? (
-          <RaceAdmin />
-        ) : section === 'currency' ? (
-          <CurrencyAdmin />
-        ) : (
-          <SystemAdmin />
-        )}
+    <AdminToastProvider>
+      <div className="admin-terminal">
+        <h1 className="visually-hidden">管理</h1>
+        <nav className="terminal-tabs" aria-label="管理メニュー" role="tablist">
+          {sections.map((tab, index) => (
+            <button
+              key={tab.id}
+              ref={(element) => {
+                tabRefs.current[tab.id] = element;
+              }}
+              type="button"
+              id={`admin-tab-${tab.id}`}
+              role="tab"
+              aria-selected={section === tab.id}
+              aria-controls="admin-panel"
+              tabIndex={section === tab.id ? 0 : -1}
+              onClick={() => setSection(tab.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  moveTab(index + 1);
+                } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  moveTab(index - 1);
+                } else if (event.key === 'Home') {
+                  event.preventDefault();
+                  moveTab(0);
+                } else if (event.key === 'End') {
+                  event.preventDefault();
+                  moveTab(sections.length - 1);
+                }
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+        <div id="admin-panel" role="tabpanel" aria-labelledby={`admin-tab-${section}`} tabIndex={0}>
+          {section === 'horses' ? (
+            <HorseAdmin />
+          ) : section === 'races' ? (
+            <RaceAdmin />
+          ) : section === 'currency' ? (
+            <CurrencyAdmin />
+          ) : (
+            <SystemAdmin />
+          )}
+        </div>
       </div>
-    </div>
+    </AdminToastProvider>
   );
 }

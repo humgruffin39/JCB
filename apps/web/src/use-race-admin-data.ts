@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest, getPublicSettings } from './api.js';
+import { useAdminToast } from './admin-toaster.js';
 import { useAdminPolling } from './use-admin-polling.js';
 import {
   DEFAULT_SCHEDULE,
@@ -16,8 +17,6 @@ export interface UseRaceAdminData {
   readonly refreshError: string | undefined;
   readonly formOptionsError: string;
   readonly operationError: string;
-  readonly message: string;
-  readonly clearMessage: () => void;
   readonly pendingOperation: string | undefined;
   readonly refresh: () => Promise<void>;
   readonly transition: (race: AdminRace, operation: 'lock' | 'unlock') => Promise<void>;
@@ -33,8 +32,8 @@ export function useRaceAdminData(): UseRaceAdminData {
   const [schedule, setSchedule] = useState<ScheduleSettings>(DEFAULT_SCHEDULE);
   const [formOptionsError, setFormOptionsError] = useState('');
   const [operationError, setOperationError] = useState('');
-  const [message, setMessage] = useState('');
   const [pendingOperation, setPendingOperation] = useState<string>();
+  const { success } = useAdminToast();
 
   const refreshRaces = useCallback(async () => {
     const requestId = raceRequestId.current + 1;
@@ -91,7 +90,7 @@ export function useRaceAdminData(): UseRaceAdminData {
     setOperationError('');
     try {
       await action();
-      setMessage(successMessage);
+      success(successMessage);
       await refresh();
       return true;
     } catch (caught) {
@@ -172,8 +171,6 @@ export function useRaceAdminData(): UseRaceAdminData {
     refreshError,
     formOptionsError,
     operationError,
-    message,
-    clearMessage: () => setMessage(''),
     pendingOperation,
     refresh,
     transition,

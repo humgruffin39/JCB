@@ -3,6 +3,7 @@ import { useCallback, useRef, useState, type FormEvent } from 'react';
 import { conditionLabel, horseStatusLabel } from './admin-labels.js';
 import { AbilitySlider } from './ability-slider.js';
 import { AdminDialog } from './admin-dialog.js';
+import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { PreferenceSlider } from './preference-slider.js';
 import { useAdminPolling } from './use-admin-polling.js';
@@ -68,7 +69,7 @@ export function HorseAdmin() {
     readonly horse: Horse;
     readonly record: HorsePerformance;
   }>();
-  const [message, setMessage] = useState('');
+  const { success } = useAdminToast();
   const refresh = useCallback(async () => {
     setHorses(await apiRequest<readonly Horse[]>('/api/v1/admin/horses'));
   }, []);
@@ -176,7 +177,7 @@ export function HorseAdmin() {
           onSaved={async (savedMessage) => {
             setEditing(undefined);
             setHorseFormOpen(false);
-            setMessage(savedMessage);
+            success(savedMessage);
             await refreshNow();
           }}
           onCancel={() => {
@@ -185,11 +186,6 @@ export function HorseAdmin() {
           }}
         />
       ) : null}
-      {message === '' ? null : (
-        <p className="admin-message" role="status">
-          {message}
-        </p>
-      )}
       {performance === undefined ? null : (
         <HorsePerformancePanel
           horse={performance.horse}

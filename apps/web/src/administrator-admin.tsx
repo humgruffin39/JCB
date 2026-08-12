@@ -1,6 +1,7 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
+import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
@@ -14,9 +15,9 @@ export function AdministratorAdmin() {
     readonly z.infer<typeof administratorSchema>[]
   >([]);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [removalTarget, setRemovalTarget] = useState<string>();
   const [isAdding, setIsAdding] = useState(false);
+  const { success } = useAdminToast();
   const refresh = useCallback(async () => {
     setAdministrators(
       administratorSchema.array().parse(await apiRequest<unknown>('/api/v1/admin/administrators')),
@@ -40,7 +41,7 @@ export function AdministratorAdmin() {
       });
       element.reset();
       setError('');
-      setMessage('管理者を追加しました。');
+      success('管理者を追加しました。');
       try {
         await refreshNow();
       } catch (caught) {
@@ -64,7 +65,7 @@ export function AdministratorAdmin() {
         body: JSON.stringify({ reason }),
       });
       setError('');
-      setMessage('管理者権限を外しました。');
+      success('管理者権限を外しました。');
       setRemovalTarget(undefined);
       try {
         await refreshNow();
@@ -127,11 +128,6 @@ export function AdministratorAdmin() {
         {error === '' ? null : (
           <p className="field-error" role="alert">
             {error}
-          </p>
-        )}
-        {message === '' ? null : (
-          <p className="admin-message" role="status">
-            {message}
           </p>
         )}
         <button type="submit" className="form-submit" disabled={isAdding}>

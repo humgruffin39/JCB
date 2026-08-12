@@ -6,6 +6,7 @@ import {
   poolTypeLabel,
   referenceTypeLabel,
 } from './admin-labels.js';
+import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
@@ -33,12 +34,12 @@ type CurrencySection = 'overview' | 'bets' | 'settlements' | 'profit-loss' | 'le
 export function CurrencyAdmin() {
   const [economy, setEconomy] = useState<EconomyOperations>();
   const [ledger, setLedger] = useState<readonly OperationRow[]>([]);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [adjustmentDraft, setAdjustmentDraft] = useState<AdjustmentDraft>();
   const [section, setSection] = useState<CurrencySection>('overview');
   const previousSection = useRef(section);
   const adjustmentForm = useRef<HTMLFormElement>(null);
+  const { success } = useAdminToast();
 
   const refresh = useCallback(async () => {
     if (section === 'ledger') {
@@ -83,7 +84,7 @@ export function CurrencyAdmin() {
     });
     setAdjustmentDraft(undefined);
     adjustmentForm.current?.reset();
-    setMessage('中央銀行との複式台帳取引で残高を補正しました。');
+    success('残高を補正しました。');
     try {
       await refreshNow();
     } catch (caught) {
@@ -136,11 +137,6 @@ export function CurrencyAdmin() {
       {refreshError === undefined ? null : (
         <p className="field-error" role="alert">
           {refreshError} 通貨データを更新できません。
-        </p>
-      )}
-      {message === '' ? null : (
-        <p className="admin-message" role="status">
-          {message}
         </p>
       )}
       <div

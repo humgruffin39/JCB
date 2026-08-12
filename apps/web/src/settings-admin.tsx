@@ -2,6 +2,7 @@ import { gameSettingsSchema, type GameSettings } from '@jcb/config';
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
+import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
@@ -21,11 +22,11 @@ type SettingsResponse = z.infer<typeof responseSchema>;
 
 export function SettingsAdmin() {
   const [data, setData] = useState<SettingsResponse>();
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [formKey, setFormKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const formDirty = useRef(false);
+  const { success } = useAdminToast();
   const refresh = useCallback(async () => {
     const parsed = responseSchema.parse(await apiRequest<unknown>('/api/v1/admin/settings'));
     setData(parsed);
@@ -48,7 +49,7 @@ export function SettingsAdmin() {
         body: JSON.stringify({ settings, reason }),
       });
       setError('');
-      setMessage('設定を保存しました。以後に確定するレースと新しい更新周期へ反映されます。');
+      success('設定を保存しました。');
       formDirty.current = false;
       formElement.reset();
       try {
@@ -61,7 +62,6 @@ export function SettingsAdmin() {
         );
       }
     } catch (caught) {
-      setMessage('');
       setError(
         caught instanceof Error
           ? caught.message
@@ -301,11 +301,6 @@ export function SettingsAdmin() {
           変更理由
           <textarea name="reason" minLength={5} maxLength={300} required />
         </label>
-        {message === '' ? null : (
-          <p className="admin-message" role="status">
-            {message}
-          </p>
-        )}
         {error === '' ? null : (
           <p className="field-error" role="alert">
             {error}

@@ -8,6 +8,7 @@ import {
 import { RaceForm } from './race-admin-form.js';
 import { RaceAdminList } from './race-admin-list.js';
 import type { AdminRace } from './race-admin-model.js';
+import { useAdminToast } from './admin-toaster.js';
 import { useRaceAdminData } from './use-race-admin-data.js';
 
 export function RaceAdmin() {
@@ -19,8 +20,6 @@ export function RaceAdmin() {
     refreshError,
     formOptionsError,
     operationError,
-    message,
-    clearMessage,
     pendingOperation,
     refresh,
     transition,
@@ -34,7 +33,7 @@ export function RaceAdmin() {
   const [raceFormOpen, setRaceFormOpen] = useState(false);
   const raceFormReturnFocus = useRef<HTMLElement | null>(null);
   const [revealing, setRevealing] = useState<AdminRace>();
-  const [formMessage, setFormMessage] = useState('');
+  const { success } = useAdminToast();
 
   function openRaceForm(race: AdminRace | undefined, trigger: HTMLElement): void {
     setEditing(race);
@@ -102,8 +101,7 @@ export function RaceAdmin() {
           returnFocusRef={raceFormReturnFocus}
           {...(editing === undefined ? {} : { race: editing })}
           onSaved={async () => {
-            clearMessage();
-            setFormMessage(
+            success(
               editing === undefined ? 'レースを下書き保存しました。' : '下書きを更新しました。',
             );
             setEditing(undefined);
@@ -116,11 +114,6 @@ export function RaceAdmin() {
           }}
         />
       ) : null}
-      {message === '' && formMessage === '' ? null : (
-        <p className="admin-message" role="status">
-          {message === '' ? formMessage : message}
-        </p>
-      )}
 
       {cancelling === undefined ? null : (
         <CancellationDialog

@@ -8,8 +8,7 @@ import {
   refreshCsrfToken,
 } from './api.js';
 
-const DISCORD_RACE_CHANNEL_URL =
-  'https://discord.com/channels/1329013463175139380/1533526967217815735';
+const ACCESS_REDIRECT_URL = 'https://youtu.be/dQw4w9WgXcQ';
 
 const AdminTerminal = lazy(async () => {
   const module = await import('./admin-terminal.js');
@@ -22,7 +21,7 @@ const RaceTerminal = lazy(async () => {
 
 type AppState =
   | { readonly status: 'loading' }
-  | { readonly status: 'needs-discord'; readonly reason?: 'session-expired' }
+  | { readonly status: 'needs-discord' }
   | { readonly status: 'error'; readonly message: string }
   | { readonly status: 'race'; readonly raceId: string };
 
@@ -44,7 +43,7 @@ export function App() {
         const key = sessionStorage.key(index);
         if (key?.startsWith('jcb.edge-token:')) sessionStorage.removeItem(key);
       }
-      setState({ status: 'needs-discord', reason: 'session-expired' });
+      setState({ status: 'needs-discord' });
     };
     window.addEventListener('jcb:auth-expired', handleAuthExpired);
     void initialize().then((nextState) => {
@@ -55,6 +54,10 @@ export function App() {
       window.removeEventListener('jcb:auth-expired', handleAuthExpired);
     };
   }, [isAdmin]);
+
+  if (!isAdmin && state.status === 'needs-discord') {
+    return <AccessRedirect />;
+  }
 
   return (
     <div
@@ -73,7 +76,7 @@ export function App() {
         ) : state.status === 'loading' ? (
           <LoadingState />
         ) : state.status === 'needs-discord' ? (
-          <AccessState sessionExpired={state.reason === 'session-expired'} />
+          <AccessRedirect />
         ) : state.status === 'error' ? (
           <ErrorState message={state.message} />
         ) : (
@@ -169,27 +172,16 @@ function LoadingState() {
   );
 }
 
-function AccessState({ sessionExpired = false }: { readonly sessionExpired?: boolean }) {
-  return (
-    <section className="terminal-state">
-      <h2>{sessionExpired ? '認証の有効期限が切れました' : 'Discordから開いてください'}</h2>
-      <p>
-        Discordの{' '}
-        <a
-          className="channel-link"
-          href={DISCORD_RACE_CHANNEL_URL}
-          target="_blank"
-          rel="noreferrer"
-        >
-          #競馬
-        </a>{' '}
-        の「観戦する」から、一回限りのリンクを発行してください。
-      </p>
-      <a className="primary-link" href={DISCORD_RACE_CHANNEL_URL} target="_blank" rel="noreferrer">
-        #競馬を開く
-      </a>
-    </section>
-  );
+function AccessRedirect() {
+  const isRedirecting = useRef(false);
+
+  useEffect(() => {
+    if (isRedirecting.current) return;
+    isRedirecting.current = true;
+    window.location.replace(ACCESS_REDIRECT_URL);
+  }, []);
+
+  return null;
 }
 
 function ErrorState({ message }: { readonly message: string }) {

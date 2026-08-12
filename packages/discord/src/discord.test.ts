@@ -31,7 +31,13 @@ describe('Discord contracts', () => {
       canBuy: true,
       canView: false,
     });
-    expect(message.components[0].components).toHaveLength(5);
+    expect(message.components[0].components).toHaveLength(4);
+    expect(
+      message.components[0].components.some((component) => {
+        const json = component.toJSON();
+        return 'custom_id' in json && json.custom_id.startsWith('jcb:detail:');
+      }),
+    ).toBe(false);
     for (const component of message.components[0].components) {
       const json = component.toJSON();
       if ('custom_id' in json && json.custom_id !== undefined) {

@@ -164,9 +164,7 @@ function AccessState({ sessionExpired = false }: { readonly sessionExpired?: boo
   return (
     <section className="terminal-state">
       <h2>{sessionExpired ? '認証の有効期限が切れました' : 'Discordから開いてください'}</h2>
-      <p>
-        レースチャンネルの「詳細を見る」または「観戦する」から、一回限りのリンクを発行してください。
-      </p>
+      <p>レースチャンネルの「観戦する」から、一回限りのリンクを発行してください。</p>
       <a className="primary-link" href="https://discord.com/app" target="_blank" rel="noreferrer">
         Discordを開く
       </a>

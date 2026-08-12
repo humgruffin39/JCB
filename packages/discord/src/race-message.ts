@@ -36,10 +36,6 @@ export function renderRaceMessage(card: DiscordRaceCard): {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('jcb:balance').setLabel('残高').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`jcb:detail:${card.raceId}`)
-      .setLabel('詳細を見る')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
       .setCustomId(`jcb:view:${card.raceId}`)
       .setLabel('観戦する')
       .setStyle(ButtonStyle.Success)

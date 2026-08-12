@@ -807,21 +807,34 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     const runAt = now();
     const scheduledAt = timestamp(runAt + 3_000);
     const finishAt = timestamp(scheduledAt + Number(timing.timelineDurationMs));
-    let manifestPublication: Uint8Array | undefined;
-    if (dependencies.timelineStore !== undefined) {
-      const stored = await dependencies.timelineStore.get(`race-manifests/${raceId}.json`);
-      if (stored !== undefined && dependencies.environment.MANIFEST_PRIVATE_KEY !== undefined) {
-        const signed = signedManifestSchema.parse(JSON.parse(Buffer.from(stored).toString('utf8')));
-        manifestPublication = Buffer.from(
-          JSON.stringify(
-            signReleaseManifest(
-              { ...signed.manifest, scheduledStart: scheduledAt },
-              dependencies.environment.MANIFEST_PRIVATE_KEY,
-            ),
+    if (
+      dependencies.timelineStore === undefined ||
+      dependencies.environment.MANIFEST_PRIVATE_KEY === undefined
+    ) {
+      throw httpError(
+        503,
+        'REHEARSAL_PUBLISHING_UNAVAILABLE',
+        'Rehearsal publishing is not configured.',
+      );
+    }
+    const stored = await dependencies.timelineStore.get(`race-manifests/${raceId}.json`);
+    if (stored === undefined) {
+      throw httpError(409, 'RACE_MANIFEST_UNAVAILABLE', 'The race release manifest is missing.');
+    }
+    let manifestPublication: Uint8Array;
+    try {
+      const signed = signedManifestSchema.parse(JSON.parse(Buffer.from(stored).toString('utf8')));
+      manifestPublication = Buffer.from(
+        JSON.stringify(
+          signReleaseManifest(
+            { ...signed.manifest, scheduledStart: scheduledAt },
+            dependencies.environment.MANIFEST_PRIVATE_KEY,
           ),
-          'utf8',
-        );
-      }
+        ),
+        'utf8',
+      );
+    } catch {
+      throw httpError(409, 'RACE_MANIFEST_INVALID', 'The race release manifest is invalid.');
     }
     const run = dependencies.database.transaction(() => {
       dependencies.database
@@ -855,14 +868,12 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
           `finished:${raceId}:${String(race.version)}`,
           `settle:${raceId}:${String(race.version)}`,
         );
-      if (manifestPublication !== undefined) {
-        new SqliteObjectPublicationStore(dependencies.database).enqueue(
-          `race-manifests/${raceId}.json`,
-          manifestPublication,
-          { raceId, type: 'release-manifest' },
-          runAt,
-        );
-      }
+      new SqliteObjectPublicationStore(dependencies.database).enqueue(
+        `race-manifests/${raceId}.json`,
+        manifestPublication,
+        { raceId, type: 'release-manifest' },
+        runAt,
+      );
       jobStore.enqueue({
         jobType: 'publish_race',
         deduplicationKey: `publish:${raceId}:rehearsal:${String(runAt)}`,

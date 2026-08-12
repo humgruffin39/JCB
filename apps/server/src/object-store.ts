@@ -6,7 +6,8 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import type { PrivateObjectStore } from '@jcb/application';
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 
 export class R2PrivateObjectStore implements PrivateObjectStore {
@@ -106,7 +107,13 @@ export class FilePrivateObjectStore implements PrivateObjectStore {
     void metadata;
     const path = this.safePath(key);
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, body);
+    const temporaryPath = `${path}.tmp-${randomUUID()}`;
+    try {
+      await writeFile(temporaryPath, body, { flag: 'wx' });
+      await rename(temporaryPath, path);
+    } finally {
+      await unlink(temporaryPath).catch(() => undefined);
+    }
   }
 
   public async get(key: string): Promise<Uint8Array | undefined> {

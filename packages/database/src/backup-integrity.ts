@@ -62,6 +62,7 @@ export async function assertPublishedRaceObjects(
        FROM race_simulations rs
        JOIN races r ON r.id = rs.race_id
        WHERE rs.kind = 'official'
+         AND rs.race_version = r.version
          AND rs.status = 'completed'
          AND rs.timeline_object_key IS NOT NULL
          AND rs.timeline_sha256 IS NOT NULL

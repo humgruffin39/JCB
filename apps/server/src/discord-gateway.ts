@@ -9,7 +9,16 @@ import {
 } from '@jcb/database';
 import { handlePurchaseInteraction, renderRaceMessage } from '@jcb/discord';
 import { DomainError, money, type Clock } from '@jcb/domain';
-import { Client, Events, GatewayIntentBits, MessageFlags, type Interaction } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Client,
+  Events,
+  GatewayIntentBits,
+  MessageFlags,
+  type Interaction,
+} from 'discord.js';
 import { createHash } from 'node:crypto';
 import { DiscordClientGuildMembership } from './guild-membership.js';
 import { SqliteDiscordPurchaseGateway } from './discord-purchase-gateway.js';
@@ -79,10 +88,8 @@ export function wireDiscordGateway(input: {
         const issued = authStore.issueLoginTicket(interaction.user.id, raceId);
         const url = new URL('/auth/ticket', input.environment.PUBLIC_WEB_ORIGIN);
         url.hash = new URLSearchParams({ ticket: issued.ticket, raceId }).toString();
-        await safeEphemeralReply(
-          interaction,
-          `[${action === 'view' ? '観戦画面を開く' : 'レース詳細を開く'}](${url.toString()})\nこのURLは一度だけ使え、5分で失効します。`,
-        );
+        const reply = createViewerLinkReply(url.toString());
+        await safeEphemeralReply(interaction, reply.content, reply.components);
         return;
       }
       if (action === 'balance') {
@@ -230,12 +237,30 @@ function messageNonce(content: string): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 25);
 }
 
-async function safeEphemeralReply(interaction: Interaction, content: string): Promise<void> {
+export function createViewerLinkReply(url: string): {
+  readonly content: string;
+  readonly components: readonly [ActionRowBuilder<ButtonBuilder>];
+} {
+  const button = new ButtonBuilder()
+    .setLabel('観戦画面を開く')
+    .setStyle(ButtonStyle.Link)
+    .setURL(url);
+  return {
+    content: 'このURLは一度だけ使え、5分で失効します。',
+    components: [new ActionRowBuilder<ButtonBuilder>().addComponents(button)],
+  };
+}
+
+async function safeEphemeralReply(
+  interaction: Interaction,
+  content: string,
+  components: readonly ActionRowBuilder<ButtonBuilder>[] = [],
+): Promise<void> {
   if (!interaction.isRepliable()) return;
   if (interaction.deferred || interaction.replied) {
     await interaction.editReply({ content, components: [] });
   } else {
-    await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content, components, flags: MessageFlags.Ephemeral });
   }
 }
 

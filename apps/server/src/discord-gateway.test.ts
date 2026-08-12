@@ -1,6 +1,10 @@
 import { DomainError } from '@jcb/domain';
 import { describe, expect, it } from 'vitest';
-import { discordErrorMessage, isMissingDiscordMessage } from './discord-gateway.js';
+import {
+  createViewerLinkReply,
+  discordErrorMessage,
+  isMissingDiscordMessage,
+} from './discord-gateway.js';
 
 describe('Discord error messages', () => {
   it('maps purchase domain errors to concise Japanese guidance', () => {
@@ -23,5 +27,18 @@ describe('Discord error messages', () => {
     expect(isMissingDiscordMessage({ status: 404 })).toBe(true);
     expect(isMissingDiscordMessage({ status: 503 })).toBe(false);
     expect(isMissingDiscordMessage(new Error('network timeout'))).toBe(false);
+  });
+
+  it('returns a viewer link button without exposing the URL in the message body', () => {
+    const url = 'https://example.com/auth/ticket#ticket=one-time';
+    const reply = createViewerLinkReply(url);
+
+    expect(reply.content).toBe('このURLは一度だけ使え、5分で失効します。');
+    expect(reply.content).not.toContain(url);
+    expect(reply.components[0]?.components[0]?.data).toMatchObject({
+      label: '観戦画面を開く',
+      style: 5,
+      url,
+    });
   });
 });

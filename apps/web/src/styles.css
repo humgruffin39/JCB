@@ -197,6 +197,21 @@ textarea {
   min-height: 4rem;
 }
 
+.app-shell--admin .admin-auth-state {
+  min-height: min(30rem, 70vh);
+  padding: var(--space-8);
+  background: var(--surface-0);
+  border-radius: 0;
+}
+
+.app-shell--admin .admin-auth-state .primary-link {
+  min-height: 2.25rem;
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 0.25rem;
+  font-size: 0.82rem;
+}
+
 .masthead,
 .footer-strip {
   display: flex;

@@ -60,7 +60,7 @@ export function App() {
       )}
       <main id="main">
         {isAdmin ? (
-          <Suspense fallback={<LoadingState />}>
+          <Suspense fallback={<LoadingState admin />}>
             <AdminGate />
           </Suspense>
         ) : state.status === 'loading' ? (
@@ -105,15 +105,13 @@ function AdminGate() {
   }, []);
 
   if (status === 'authorized') return <AdminTerminal />;
-  if (status === 'checking') return <LoadingState />;
+  if (status === 'checking') return <LoadingState admin />;
   return (
-    <section className="terminal-state">
-      <h2>管理者ログイン</h2>
-      <p>所属ギルドと管理者許可リストを確認した後、管理制御盤を開きます。</p>
+    <div className="terminal-state admin-auth-state">
       <a className="primary-link" href={apiAbsoluteUrl('/api/v1/auth/discord/start')}>
-        Discordで認証する
+        認証する
       </a>
-    </section>
+    </div>
   );
 }
 
@@ -155,11 +153,15 @@ export function raceIdFromPathname(pathname: string): string | undefined {
   return pathMatch === null ? undefined : decodeURIComponent(pathMatch[1]!);
 }
 
-function LoadingState() {
+function LoadingState({ admin = false }: { readonly admin?: boolean }) {
   return (
-    <section className="terminal-state" aria-live="polite" aria-busy="true">
+    <section
+      className={`terminal-state${admin ? ' admin-auth-state' : ''}`}
+      aria-live="polite"
+      aria-busy="true"
+    >
       <h2>読み込み中</h2>
-      <p>認証とレース情報を確認しています。</p>
+      {admin ? null : <p>認証とレース情報を確認しています。</p>}
     </section>
   );
 }

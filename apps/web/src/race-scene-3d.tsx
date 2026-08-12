@@ -6,12 +6,14 @@ import {
   type RaceCameraMode,
   type RaceWorldState,
 } from './race-world.js';
+import { createRaceDramaFrame } from './race-drama.js';
 import type { HorseCoatColor } from './race-horse-model.js';
 import type { RaceSurface } from './race-environment.js';
 
 export function RaceScene3D({
-  frame,
-  positionMs,
+  frames,
+  durationMs,
+  playbackPosition,
   finishOrder,
   isPhoto,
   trackedHorseNumber,
@@ -25,8 +27,9 @@ export function RaceScene3D({
   surface,
   onReady,
 }: {
-  readonly frame: TimelineFrameContract;
-  readonly positionMs: number;
+  readonly frames: readonly TimelineFrameContract[];
+  readonly durationMs: number;
+  readonly playbackPosition: { readonly current: number };
   readonly finishOrder: readonly FinishPosition[];
   readonly isPhoto: boolean;
   readonly trackedHorseNumber: number | undefined;
@@ -45,7 +48,17 @@ export function RaceScene3D({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<RaceWorld | undefined>(undefined);
-  const stateRef = useRef<RaceWorldState>({ frame, positionMs, finishOrder, isPhoto });
+  const stateRef = useRef<RaceWorldState>({
+    frame: frames[0]!,
+    positionMs: playbackPosition.current,
+    finishOrder,
+    isPhoto,
+  });
+  const framesRef = useRef(frames);
+  const durationRef = useRef(durationMs);
+  const playbackPositionRef = useRef(playbackPosition);
+  const finishOrderRef = useRef(finishOrder);
+  const isPhotoRef = useRef(isPhoto);
   const onReadyRef = useRef(onReady);
   const onTrackHorseRef = useRef(onTrackHorse);
   const onCameraModeChangeRef = useRef(onCameraModeChange);
@@ -54,7 +67,11 @@ export function RaceScene3D({
   const trackedHorseNumberRef = useRef(trackedHorseNumber);
   const cameraModeRef = useRef(cameraMode);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  stateRef.current = { frame, positionMs, finishOrder, isPhoto };
+  framesRef.current = frames;
+  durationRef.current = durationMs;
+  playbackPositionRef.current = playbackPosition;
+  finishOrderRef.current = finishOrder;
+  isPhotoRef.current = isPhoto;
   onReadyRef.current = onReady;
   onTrackHorseRef.current = onTrackHorse;
   onCameraModeChangeRef.current = onCameraModeChange;
@@ -116,6 +133,18 @@ export function RaceScene3D({
         const render = (time: number) => {
           const deltaSeconds = Math.min(0.05, Math.max(0, (time - previousTime) / 1_000));
           previousTime = time;
+          const positionMs = playbackPositionRef.current.current;
+          stateRef.current = {
+            frame: createRaceDramaFrame(
+              framesRef.current,
+              positionMs,
+              finishOrderRef.current,
+              durationRef.current,
+            ),
+            positionMs,
+            finishOrder: finishOrderRef.current,
+            isPhoto: isPhotoRef.current,
+          };
           world?.update(stateRef.current, deltaSeconds);
           animationFrame = requestAnimationFrame(render);
         };

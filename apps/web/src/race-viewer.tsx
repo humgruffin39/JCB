@@ -72,7 +72,21 @@ export function RaceViewer({
   const [result, setResult] = useState<RaceResult>();
   const [resultError, setResultError] = useState<string>();
   const [resultRetry, setResultRetry] = useState(0);
+  const playbackPositionRef = useRef(0);
+  const displayedPositionRef = useRef(0);
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
+
+  const updatePlaybackPosition = (nextPosition: number, immediate = false): void => {
+    playbackPositionRef.current = nextPosition;
+    if (
+      immediate ||
+      Math.abs(nextPosition - displayedPositionRef.current) >= 100 ||
+      nextPosition === 0
+    ) {
+      displayedPositionRef.current = nextPosition;
+      setPosition(nextPosition);
+    }
+  };
 
   useEffect(() => {
     void estimateServerOffset()
@@ -202,15 +216,19 @@ export function RaceViewer({
     }
     const timer = window.setTimeout(() => {
       if (isReplay) {
-        replayAnchor.current = { local: performance.now(), position };
+        replayAnchor.current = {
+          local: performance.now(),
+          position: playbackPositionRef.current,
+        };
       } else {
-        setPosition(
+        updatePlaybackPosition(
           synchronizedPosition(
             Date.now(),
             offset,
             race.scheduledAt,
             viewer.duration + POST_FINISH_RUNOUT_MS,
           ),
+          true,
         );
       }
       setHasPlaybackStarted(true);
@@ -234,9 +252,11 @@ export function RaceViewer({
       if (isReplay) {
         if (isPaused) return;
         const elapsed = performance.now() - replayAnchor.current.local;
-        setPosition(Math.min(playbackEndMs, replayAnchor.current.position + elapsed));
+        updatePlaybackPosition(Math.min(playbackEndMs, replayAnchor.current.position + elapsed));
       } else {
-        setPosition(synchronizedPosition(Date.now(), offset, race.scheduledAt, playbackEndMs));
+        updatePlaybackPosition(
+          synchronizedPosition(Date.now(), offset, race.scheduledAt, playbackEndMs),
+        );
       }
     }, 50);
     return () => window.clearInterval(interval);
@@ -322,7 +342,7 @@ export function RaceViewer({
     setIsReplay(true);
     setIsPaused(false);
     setHasPlaybackStarted(false);
-    setPosition(0);
+    updatePlaybackPosition(0, true);
     setFinishSnapshot(undefined);
     setFinishSnapshotUnavailable(false);
   };
@@ -382,8 +402,9 @@ export function RaceViewer({
         <>
           <RaceScene3D
             key={`${race.id}:${String(race.distanceM)}:${race.surface}`}
-            frame={currentFrame ?? viewer.frames[0]!}
-            positionMs={position}
+            frames={viewer.frames}
+            durationMs={viewer.duration}
+            playbackPosition={playbackPositionRef}
             finishOrder={finalOrder}
             isPhoto={phase === 'photo'}
             trackedHorseNumber={trackedHorseNumber}
@@ -441,10 +462,18 @@ export function RaceViewer({
               onPause={() => {
                 if (!isReplay) {
                   setIsReplay(true);
-                  replayAnchor.current = { local: performance.now(), position };
+                  replayAnchor.current = {
+                    local: performance.now(),
+                    position: playbackPositionRef.current,
+                  };
                 }
                 setIsPaused((value) => {
-                  if (value) replayAnchor.current = { local: performance.now(), position };
+                  if (value) {
+                    replayAnchor.current = {
+                      local: performance.now(),
+                      position: playbackPositionRef.current,
+                    };
+                  }
                   return !value;
                 });
               }}

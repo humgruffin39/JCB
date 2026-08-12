@@ -10,10 +10,11 @@ import {
   openDatabase,
   SqliteGameStore,
   SqliteJobStore,
+  SqliteObjectPublicationStore,
   SqliteRacePreparationRepository,
   type HorseWrite,
 } from '@jcb/database';
-import { startScheduler, verifyBackupProbe } from './scheduler.js';
+import { cleanupOrphanedTimelineObjects, startScheduler, verifyBackupProbe } from './scheduler.js';
 
 const repositoryRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const migrationsDirectory = join(repositoryRoot, 'packages', 'database', 'migrations');
@@ -54,6 +55,46 @@ describe('backup health probe', () => {
       ['last_r2_access_at', new Date(checkedAt).toISOString()],
       ['last_backup_success_at', new Date(latest).toISOString()],
     ]);
+  });
+});
+
+describe('timeline object cleanup', () => {
+  it('preserves active publications and removes old cancelled or unreferenced objects', async () => {
+    const now = 1_800_000_000_000;
+    const database = openDatabase(':memory:');
+    applyMigrations(database, migrationsDirectory, now);
+    const publications = new SqliteObjectPublicationStore(database);
+    publications.enqueue('timelines/active.bin', new Uint8Array([1]), { raceId: 'active' }, now);
+    publications.enqueue(
+      'timelines/cancelled.bin',
+      new Uint8Array([2]),
+      { raceId: 'cancelled' },
+      now,
+    );
+    publications.cancelForRace('cancelled', now);
+    const deleted: string[] = [];
+    const objectStore: PrivateObjectStore = {
+      async put() {
+        return;
+      },
+      async get() {
+        return undefined;
+      },
+      async delete(key) {
+        deleted.push(key);
+      },
+      async list() {
+        return [
+          { key: 'timelines/active.bin', lastModifiedAt: now - 10_000 },
+          { key: 'timelines/cancelled.bin', lastModifiedAt: now - 10_000 },
+          { key: 'timelines/orphan.bin', lastModifiedAt: now - 10_000 },
+        ];
+      },
+    };
+
+    await expect(cleanupOrphanedTimelineObjects(database, objectStore, now, 0)).resolves.toBe(2);
+    expect(deleted.sort()).toEqual(['timelines/cancelled.bin', 'timelines/orphan.bin']);
+    database.close();
   });
 });
 

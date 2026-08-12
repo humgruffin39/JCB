@@ -31,6 +31,14 @@ describe('system job scheduling', () => {
         )
         .get() as { runAt: bigint } | undefined;
       expect(second?.runAt).toBe(first?.runAt);
+      const restoreDrill = database
+        .prepare(
+          `SELECT job_type AS jobType, run_at AS runAt FROM scheduled_jobs
+           WHERE deduplication_key = 'restore-drill:2026-08'`,
+        )
+        .get() as { jobType: string; runAt: bigint } | undefined;
+      expect(restoreDrill?.jobType).toBe('restore_drill');
+      expect(restoreDrill?.runAt).toBe(BigInt(firstNow));
     } finally {
       database.close();
     }

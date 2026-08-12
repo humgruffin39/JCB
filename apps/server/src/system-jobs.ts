@@ -53,6 +53,17 @@ export function scheduleSystemJobs(sqlite: SqliteDatabase, now: Timestamp): void
     payload: {},
     runAt: now,
   });
+  const month = toJstDateKey(now).slice(0, 7);
+  const restoreDrillDate = `${month}-01`;
+  const restoreDrillTime = jstDateTimeToTimestamp(restoreDrillDate, '03:00:00');
+  const restoreDrillKey = `restore-drill:${month}`;
+  const existingRestoreDrill = jobs.getByDeduplicationKey(restoreDrillKey);
+  jobs.enqueue({
+    jobType: 'restore_drill',
+    deduplicationKey: restoreDrillKey,
+    payload: { month },
+    runAt: existingRestoreDrill?.runAt ?? (restoreDrillTime < now ? now : restoreDrillTime),
+  });
 }
 
 function addJstDays(date: string, days: number): string {

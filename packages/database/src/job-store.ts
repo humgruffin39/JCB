@@ -34,6 +34,7 @@ const MAX_ATTEMPTS: Readonly<Record<JobType, number>> = {
   settle_race: 10,
   refresh_rankings: 8,
   backup_check: 5,
+  restore_drill: 3,
   economic_integrity_check: 5,
 };
 

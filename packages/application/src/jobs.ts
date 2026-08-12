@@ -14,6 +14,7 @@ export const JOB_TYPES = [
   'settle_race',
   'refresh_rankings',
   'backup_check',
+  'restore_drill',
   'economic_integrity_check',
 ] as const;
 

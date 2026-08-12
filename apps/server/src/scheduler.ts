@@ -18,8 +18,16 @@ import {
   type RaceRecord,
   type SqliteDatabase,
 } from '@jcb/database';
-import { timestamp, toJstDateKey, type Clock, type Timestamp } from '@jcb/domain';
+import {
+  jstDateTimeToTimestamp,
+  timestamp,
+  toJstDateKey,
+  type Clock,
+  type Timestamp,
+} from '@jcb/domain';
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { Client } from 'discord.js';
 import type { BackupProbe } from './backup-probe.js';
 import { publishRaceMessage } from './discord-gateway.js';
@@ -31,6 +39,7 @@ const POLL_INTERVAL_MILLISECONDS = 30_000;
 const STALE_LOCK_MILLISECONDS = 5 * 60 * 1000;
 const BACKUP_MAXIMUM_AGE_MILLISECONDS = 65 * 60 * 1_000;
 const ORPHAN_TIMELINE_GRACE_MILLISECONDS = 2 * 60 * 60 * 1_000;
+const execFileAsync = promisify(execFile);
 
 export interface SchedulerDependencies {
   readonly database: SqliteDatabase;
@@ -489,6 +498,22 @@ function createHandlers(
         throw error;
       }
     },
+    async restore_drill() {
+      if (dependencies.environment.NODE_ENV !== 'production') return;
+      const month = toJstDateKey(dependencies.clock.now()).slice(0, 7);
+      const nextMonth = nextMonthKey(month);
+      jobStore.enqueue({
+        jobType: 'restore_drill',
+        deduplicationKey: `restore-drill:${nextMonth}`,
+        payload: { month: nextMonth },
+        runAt: jstDateTimeToTimestamp(`${nextMonth}-01`, '03:00:00'),
+      });
+      await execFileAsync('/app/scripts/restore-drill.sh', [], {
+        env: process.env,
+        timeout: 15 * 60 * 1_000,
+        maxBuffer: 2 * 1_024 * 1_024,
+      });
+    },
   };
 }
 
@@ -636,8 +661,26 @@ function formatJobType(jobType: string): string {
     warn_missing_race: 'レース未作成の確認',
     refresh_rankings: 'ランキング更新',
     backup_check: 'バックアップの確認',
+    restore_drill: 'バックアップの復旧テスト',
   };
   return labels[jobType] ?? '未登録の自動処理';
+}
+
+function nextMonthKey(month: string): string {
+  const [yearText, monthText] = month.split('-');
+  const year = Number(yearText);
+  const monthNumber = Number(monthText);
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(monthNumber) ||
+    monthNumber < 1 ||
+    monthNumber > 12
+  ) {
+    throw new Error('Invalid restore drill month.');
+  }
+  const nextYear = monthNumber === 12 ? year + 1 : year;
+  const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
+  return `${String(nextYear).padStart(4, '0')}-${String(nextMonth).padStart(2, '0')}`;
 }
 
 function runtimeSecrets(

@@ -59,6 +59,7 @@ const JOB_TYPE_LABELS: Readonly<Record<string, string>> = {
   warn_missing_race: 'レース未作成の確認',
   refresh_rankings: 'ランキング更新',
   backup_check: 'バックアップの確認',
+  restore_drill: 'バックアップの復旧テスト',
 };
 
 const ACCOUNT_TYPE_LABELS: Readonly<Record<string, string>> = {

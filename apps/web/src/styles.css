@@ -786,15 +786,31 @@ main {
 
 [data-sonner-toast].admin-toast::before {
   position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 0.125rem;
+  content: '';
+  background: #fff;
+  pointer-events: none;
+  animation: admin-toast-progress 4.2s linear forwards;
+  z-index: 1;
+}
+
+[data-sonner-toast].admin-toast::after {
+  position: absolute;
   right: 0;
   bottom: 0;
   left: 0;
   height: 0.125rem;
   content: '';
-  background: #fff;
-  opacity: 0.35;
+  background: rgb(255 255 255 / 35%);
   pointer-events: none;
-  animation: admin-toast-progress 4.2s linear forwards;
+  z-index: 0;
+}
+
+[data-sonner-toast].admin-toast[data-expanded='true']::before {
+  animation-play-state: paused;
 }
 
 [data-sonner-toast].admin-toast [data-title] {
@@ -803,11 +819,11 @@ main {
 
 @keyframes admin-toast-progress {
   from {
-    opacity: 0.35;
+    width: 0;
   }
 
   to {
-    opacity: 1;
+    width: 100%;
   }
 }
 

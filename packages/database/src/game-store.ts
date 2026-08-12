@@ -12,7 +12,6 @@ import { SqliteGameUserStore } from './game-user-store.js';
 import type {
   HorseRecord,
   HorseWrite,
-  RaceEntryDraftInput,
   RaceDraftInput,
   RaceDraftPatch,
   RaceLockSettings,

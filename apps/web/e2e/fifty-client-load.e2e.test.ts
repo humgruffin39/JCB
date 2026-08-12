@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-test('serves the read-only terminal to 50 concurrent clients', async ({ browser }, testInfo) => {
+test('renders 50 concurrent read-only terminals within the browser UI budget', async ({
+  browser,
+}, testInfo) => {
   test.setTimeout(90_000);
   test.skip(
     testInfo.project.name !== 'desktop',

@@ -1,4 +1,5 @@
 import {
+  decryptAesGcm,
   deriveTimelineKey,
   sha256,
   verifyEdgeAccessToken,
@@ -40,12 +41,34 @@ export function registerLocalEdgeRoutes(
     if (sha256(ciphertext) !== manifest.ciphertextSha256) {
       return sendError(reply, 409, 'TIMELINE_INTEGRITY_INVALID');
     }
-    const key = deriveTimelineKey(
+    const masterSecrets = [
       requireConfigured(dependencies.environment.TIMELINE_MASTER_SECRET, 'TIMELINE_MASTER_SECRET'),
-      raceId,
-      manifest.simulationVersion,
-      manifest.raceVersion,
-    );
+      ...(dependencies.environment.TIMELINE_MASTER_SECRET_PREVIOUS === undefined
+        ? []
+        : [dependencies.environment.TIMELINE_MASTER_SECRET_PREVIOUS]),
+    ];
+    const payload = {
+      ciphertext: Buffer.from(ciphertext).toString('base64'),
+      iv: manifest.iv,
+      authTag: manifest.authTag,
+    };
+    let key: Buffer | undefined;
+    for (const masterSecret of masterSecrets) {
+      const candidate = deriveTimelineKey(
+        masterSecret,
+        raceId,
+        manifest.simulationVersion,
+        manifest.raceVersion,
+      );
+      try {
+        decryptAesGcm(payload, candidate);
+        key = candidate;
+        break;
+      } catch {
+        continue;
+      }
+    }
+    if (key === undefined) return sendError(reply, 409, 'TIMELINE_KEY_INVALID');
     reply.header('cache-control', 'private, max-age=60');
     return {
       apiVersion: 'v1',

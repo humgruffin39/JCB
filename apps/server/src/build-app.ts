@@ -149,8 +149,9 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
   const viewerStore = new SqliteViewerStore(dependencies.database);
   const adminStore = new SqliteAdminStore(dependencies.database, now);
   adminStore.ensureSetting('game_settings', DEFAULT_GAME_SETTINGS);
-  const resultMasterSecret = requireRuntimeSecret(
+  const resultMasterSecrets = requireRuntimeSecrets(
     dependencies.environment.RESULT_MASTER_SECRET,
+    dependencies.environment.RESULT_MASTER_SECRET_PREVIOUS,
     dependencies.environment.NODE_ENV,
     'RESULT_MASTER_SECRET',
   );
@@ -159,7 +160,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     dependencies.environment.NODE_ENV,
     'SESSION_SECRET',
   );
-  const lifecycle = new SqliteRaceLifecycleStore(dependencies.database, now, resultMasterSecret);
+  const lifecycle = new SqliteRaceLifecycleStore(dependencies.database, now, resultMasterSecrets);
   const jobStore = new SqliteJobStore(
     dependencies.database,
     () => {
@@ -1089,14 +1090,27 @@ function secureRandomUnit(): number {
   return randomInt(0, 4_294_967_296) / 4_294_967_296;
 }
 
+function requireRuntimeSecrets(
+  value: string | undefined,
+  previousValue: string | undefined,
+  nodeEnvironment: string,
+  name: string,
+): readonly string[] {
+  if (value !== undefined) {
+    return previousValue === undefined || previousValue === value
+      ? [value]
+      : [value, previousValue];
+  }
+  if (nodeEnvironment === 'production') throw new Error(`${name} is required.`);
+  return [Buffer.alloc(32, 7).toString('base64')];
+}
+
 function requireRuntimeSecret(
   value: string | undefined,
   nodeEnvironment: string,
   name: string,
 ): string {
-  if (value !== undefined) return value;
-  if (nodeEnvironment === 'production') throw new Error(`${name} is required.`);
-  return Buffer.alloc(32, 7).toString('base64');
+  return requireRuntimeSecrets(value, undefined, nodeEnvironment, name)[0]!;
 }
 
 function httpError(statusCode: number, code: string, message: string): Error {

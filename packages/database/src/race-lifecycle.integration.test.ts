@@ -1,7 +1,13 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { prepareRace, type PrivateObjectStore, type ProbabilityGenerator } from '@jcb/application';
+import {
+  deriveResultKey,
+  encryptAesGcm,
+  prepareRace,
+  type PrivateObjectStore,
+  type ProbabilityGenerator,
+} from '@jcb/application';
 import { money, timestamp } from '@jcb/domain';
 import { generateProbabilities } from '@jcb/odds';
 import { openDatabase } from './connection.js';
@@ -84,6 +90,18 @@ describe('race lifecycle and settlement', () => {
       resultMasterSecret,
       manifestPrivateKey: privateKey,
     });
+    const legacySimulationVersion = 'sim-v0';
+    const legacyEncryptedResult = encryptAesGcm(
+      Buffer.from(JSON.stringify(completion.official), 'utf8'),
+      deriveResultKey(resultMasterSecret, race.id, legacySimulationVersion, 1),
+    );
+    database
+      .prepare(
+        `UPDATE race_simulations
+         SET simulation_version = ?, encrypted_result_blob = ?
+         WHERE race_id = ? AND race_version = 1 AND kind = 'official'`,
+      )
+      .run(legacySimulationVersion, JSON.stringify(legacyEncryptedResult), race.id);
     const winner = completion.official.finishOrder[0]!.horseNumber;
     const winningTrifecta = completion.official.finishOrder
       .slice(0, 3)

@@ -1,3 +1,4 @@
+import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { z } from 'zod';
 
 const discordId = z.string().regex(/^\d+$/);
@@ -31,7 +32,9 @@ export const environmentSchema = z.object({
   INITIAL_ADMIN_DISCORD_IDS: z.string().default(''),
   SESSION_SECRET: optionalSecret,
   TIMELINE_MASTER_SECRET: optionalSecret,
+  TIMELINE_MASTER_SECRET_PREVIOUS: optionalSecret,
   RESULT_MASTER_SECRET: optionalSecret,
+  RESULT_MASTER_SECRET_PREVIOUS: optionalSecret,
   EDGE_TOKEN_PRIVATE_KEY: optionalPem,
   EDGE_TOKEN_PUBLIC_KEY: optionalPem,
   MANIFEST_PRIVATE_KEY: optionalPem,
@@ -76,6 +79,24 @@ export function parseEnvironment(source: NodeJS.ProcessEnv): Environment {
         throw new Error(`${key} is required in production.`);
       }
     }
+    validateBase64Secret(parsed.SESSION_SECRET, 'SESSION_SECRET');
+    validateBase64Secret(parsed.TIMELINE_MASTER_SECRET, 'TIMELINE_MASTER_SECRET');
+    validateBase64Secret(parsed.RESULT_MASTER_SECRET, 'RESULT_MASTER_SECRET');
+    if (parsed.TIMELINE_MASTER_SECRET_PREVIOUS !== undefined) {
+      validateBase64Secret(
+        parsed.TIMELINE_MASTER_SECRET_PREVIOUS,
+        'TIMELINE_MASTER_SECRET_PREVIOUS',
+      );
+    }
+    if (parsed.RESULT_MASTER_SECRET_PREVIOUS !== undefined) {
+      validateBase64Secret(parsed.RESULT_MASTER_SECRET_PREVIOUS, 'RESULT_MASTER_SECRET_PREVIOUS');
+    }
+    validateEd25519KeyPair(
+      parsed.EDGE_TOKEN_PRIVATE_KEY,
+      parsed.EDGE_TOKEN_PUBLIC_KEY,
+      'EDGE_TOKEN',
+    );
+    validateEd25519KeyPair(parsed.MANIFEST_PRIVATE_KEY, parsed.MANIFEST_PUBLIC_KEY, 'MANIFEST');
     if (
       parsed.INITIAL_ADMIN_DISCORD_IDS.split(',')
         .map((id) => id.trim())
@@ -98,6 +119,44 @@ export function parseEnvironment(source: NodeJS.ProcessEnv): Environment {
     }
   }
   return parsed;
+}
+
+function validateBase64Secret(value: string | undefined, name: string): void {
+  if (
+    value === undefined ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(value) ||
+    value.length % 4 === 1 ||
+    Buffer.from(value, 'base64').byteLength < 32
+  ) {
+    throw new Error(`${name} must be a base64-encoded secret of at least 32 bytes.`);
+  }
+}
+
+function validateEd25519KeyPair(
+  privateKeyValue: string | undefined,
+  publicKeyValue: string | undefined,
+  name: string,
+): void {
+  try {
+    if (privateKeyValue === undefined || publicKeyValue === undefined) throw new Error('missing');
+    const privateKey = createPrivateKey(privateKeyValue);
+    const configuredPublicKey = createPublicKey(publicKeyValue);
+    if (
+      privateKey.asymmetricKeyType !== 'ed25519' ||
+      configuredPublicKey.asymmetricKeyType !== 'ed25519'
+    ) {
+      throw new Error('wrong key type');
+    }
+    const derivedPublicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
+    const configuredPublicKeyBytes = configuredPublicKey.export({ type: 'spki', format: 'der' });
+    if (!Buffer.from(derivedPublicKey).equals(Buffer.from(configuredPublicKeyBytes))) {
+      throw new Error('key pair mismatch');
+    }
+  } catch {
+    throw new Error(
+      `${name}_PRIVATE_KEY and ${name}_PUBLIC_KEY must be a matching Ed25519 key pair.`,
+    );
+  }
 }
 
 const timeOfDay = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/);

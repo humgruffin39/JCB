@@ -1,3 +1,4 @@
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import {
   DEFAULT_GAME_SETTINGS,
   gameSettingsSchema,
@@ -5,6 +6,15 @@ import {
   parseBackupRetentionDays,
   renderLitestreamConfig,
 } from './index.js';
+
+const edgeKeys = generateKeyPairSync('ed25519', {
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+});
+const manifestKeys = generateKeyPairSync('ed25519', {
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+});
 
 function validProductionEnvironment(): NodeJS.ProcessEnv {
   return {
@@ -20,13 +30,13 @@ function validProductionEnvironment(): NodeJS.ProcessEnv {
     DISCORD_RANKING_CHANNEL_ID: '100000000000000004',
     DISCORD_ADMIN_CHANNEL_ID: '100000000000000005',
     INITIAL_ADMIN_DISCORD_IDS: '100000000000000006',
-    SESSION_SECRET: 'session-secret',
-    TIMELINE_MASTER_SECRET: 'timeline-secret',
-    RESULT_MASTER_SECRET: 'result-secret',
-    EDGE_TOKEN_PRIVATE_KEY: 'edge-private-key',
-    EDGE_TOKEN_PUBLIC_KEY: 'edge-public-key',
-    MANIFEST_PRIVATE_KEY: 'manifest-private-key',
-    MANIFEST_PUBLIC_KEY: 'manifest-public-key',
+    SESSION_SECRET: randomBytes(32).toString('base64'),
+    TIMELINE_MASTER_SECRET: randomBytes(32).toString('base64'),
+    RESULT_MASTER_SECRET: randomBytes(32).toString('base64'),
+    EDGE_TOKEN_PRIVATE_KEY: edgeKeys.privateKey,
+    EDGE_TOKEN_PUBLIC_KEY: edgeKeys.publicKey,
+    MANIFEST_PRIVATE_KEY: manifestKeys.privateKey,
+    MANIFEST_PUBLIC_KEY: manifestKeys.publicKey,
     R2_ACCOUNT_ID: 'r2-account',
     R2_ACCESS_KEY_ID: 'r2-access-key',
     R2_SECRET_ACCESS_KEY: 'r2-secret-key',
@@ -71,6 +81,21 @@ describe('production environment', () => {
         CORS_ORIGINS: 'http://localhost:5173',
       }),
     ).toThrow('PUBLIC_WEB_ORIGIN must be explicitly configured for production.');
+  });
+
+  it('rejects weak secrets and mismatched signing keys', () => {
+    expect(() =>
+      parseEnvironment({
+        ...validProductionEnvironment(),
+        TIMELINE_MASTER_SECRET: 'too-short',
+      }),
+    ).toThrow('TIMELINE_MASTER_SECRET must be a base64-encoded secret of at least 32 bytes.');
+    expect(() =>
+      parseEnvironment({
+        ...validProductionEnvironment(),
+        MANIFEST_PUBLIC_KEY: edgeKeys.publicKey,
+      }),
+    ).toThrow('MANIFEST_PRIVATE_KEY and MANIFEST_PUBLIC_KEY must be a matching Ed25519 key pair.');
   });
 });
 

@@ -2,6 +2,7 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import {
   createEdgeAccessToken,
   decryptAesGcm,
+  decryptAesGcmWithKeys,
   deriveResultKey,
   deriveTimelineKey,
   encryptAesGcm,
@@ -30,6 +31,19 @@ describe('result secrecy', () => {
     expect(() =>
       decryptAesGcm({ ...encrypted, ciphertext: bytes.toString('base64') }, key),
     ).toThrow();
+  });
+
+  it('supports decrypting with a current key followed by a previous key', () => {
+    const previousSecret = randomBytes(32).toString('base64');
+    const currentSecret = randomBytes(32).toString('base64');
+    const previousKey = deriveResultKey(previousSecret, 'race-1', 'sim-v1', 1);
+    const currentKey = deriveResultKey(currentSecret, 'race-1', 'sim-v1', 1);
+    const encrypted = encryptAesGcm(Buffer.from('rotated result'), previousKey);
+
+    expect(
+      Buffer.from(decryptAesGcmWithKeys(encrypted, [currentKey, previousKey])).toString('utf8'),
+    ).toBe('rotated result');
+    expect(() => decryptAesGcmWithKeys(encrypted, [currentKey])).toThrow();
   });
 
   it('signs manifests and race-bound access tokens with Ed25519', () => {

@@ -64,6 +64,22 @@ export function decryptAesGcm(payload: EncryptedPayload, key: Uint8Array): Uint8
   ]);
 }
 
+export function decryptAesGcmWithKeys(
+  payload: EncryptedPayload,
+  keys: readonly Uint8Array[],
+): Uint8Array {
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      return decryptAesGcm(payload, key);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError instanceof Error) throw lastError;
+  throw new Error('AES-256-GCM payload could not be decrypted with the configured keys.');
+}
+
 export function signReleaseManifest(
   manifestInput: ReleaseManifest,
   privateKey: KeyLike | string,

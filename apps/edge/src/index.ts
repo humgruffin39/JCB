@@ -25,6 +25,7 @@ interface ReadableBucket {
 export interface Bindings {
   readonly TIMELINE_BUCKET: ReadableBucket;
   readonly TIMELINE_MASTER_SECRET: string;
+  readonly TIMELINE_MASTER_SECRET_PREVIOUS?: string;
   readonly EDGE_TOKEN_PUBLIC_KEY: string;
   readonly MANIFEST_PUBLIC_KEY: string;
   readonly DISCORD_GUILD_ID: string;
@@ -117,12 +118,23 @@ export async function handleEdgeRequest(
       headers.set('x-content-type-options', 'nosniff');
       return new Response(timelineBytes, { status: 200, headers });
     }
-    const timelineKey = await deriveTimelineKey(
-      environment.TIMELINE_MASTER_SECRET,
-      raceId,
-      manifest.simulationVersion,
-      manifest.raceVersion,
-    );
+    const timelineKey =
+      environment.TIMELINE_MASTER_SECRET_PREVIOUS === undefined
+        ? await deriveTimelineKey(
+            environment.TIMELINE_MASTER_SECRET,
+            raceId,
+            manifest.simulationVersion,
+            manifest.raceVersion,
+          )
+        : await deriveVerifiedTimelineKey(
+            [environment.TIMELINE_MASTER_SECRET, environment.TIMELINE_MASTER_SECRET_PREVIOUS],
+            raceId,
+            manifest.simulationVersion,
+            manifest.raceVersion,
+            manifest.iv,
+            manifest.authTag,
+            await new Response(timelineObject.body).arrayBuffer(),
+          );
     headers.set('content-type', 'application/json; charset=utf-8');
     return new Response(
       JSON.stringify({
@@ -228,6 +240,43 @@ async function deriveTimelineKey(
     256,
   );
   return new Uint8Array(bits);
+}
+
+async function deriveVerifiedTimelineKey(
+  masterSecrets: readonly string[],
+  raceId: string,
+  simulationVersion: string,
+  raceVersion: number,
+  iv: string,
+  authTag: string,
+  ciphertext: ArrayBuffer,
+): Promise<Uint8Array> {
+  const ciphertextWithTag = new Uint8Array(
+    ciphertext.byteLength + base64ToBytes(authTag).byteLength,
+  );
+  ciphertextWithTag.set(new Uint8Array(ciphertext));
+  ciphertextWithTag.set(base64ToBytes(authTag), ciphertext.byteLength);
+  for (const masterSecret of masterSecrets) {
+    const keyBytes = await deriveTimelineKey(masterSecret, raceId, simulationVersion, raceVersion);
+    try {
+      const key = await crypto.subtle.importKey(
+        'raw',
+        webBuffer(keyBytes),
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt'],
+      );
+      await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: webBuffer(base64ToBytes(iv)), tagLength: 128 },
+        key,
+        webBuffer(ciphertextWithTag),
+      );
+      return keyBytes;
+    } catch {
+      continue;
+    }
+  }
+  throw new EdgeRequestError(409, 'TIMELINE_KEY_INVALID');
 }
 
 async function importEd25519PublicKey(value: string): Promise<CryptoKey> {

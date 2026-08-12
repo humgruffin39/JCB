@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { decryptAesGcm, deriveResultKey, type EncryptedPayload } from '@jcb/application';
+import { decryptAesGcmWithKeys, deriveResultKey, type EncryptedPayload } from '@jcb/application';
 import {
   identifier,
   money,
@@ -18,11 +18,7 @@ import {
   type SettlementResult,
 } from '@jcb/economy';
 import { currentOddsTenths, formatOdds } from '@jcb/odds';
-import {
-  SIMULATION_VERSION,
-  verifyOfficialSimulationResult,
-  type OfficialSimulationResult,
-} from '@jcb/simulation';
+import { verifyOfficialSimulationResult, type OfficialSimulationResult } from '@jcb/simulation';
 import { SqliteLedgerStore } from './ledger-store.js';
 
 interface RaceLifecycleRow {
@@ -74,10 +70,13 @@ export class SqliteRaceLifecycleStore {
   public constructor(
     private readonly database: Database.Database,
     private readonly now: () => number,
-    private readonly resultMasterSecret: string,
+    resultMasterSecret: string | readonly string[],
   ) {
+    this.resultMasterSecrets = normalizeMasterSecrets(resultMasterSecret);
     this.ledger = new SqliteLedgerStore(database, now);
   }
+
+  private readonly resultMasterSecrets: readonly string[];
 
   public closeBetting(raceId: string, at: Timestamp): void {
     const run = this.database.transaction(() => {
@@ -376,14 +375,24 @@ export class SqliteRaceLifecycleStore {
   private decryptOfficialResult(raceId: string, raceVersion: number): OfficialSimulationResult {
     const row = this.database
       .prepare(
-        `SELECT encrypted_result_blob AS encryptedResult, result_hash AS resultHash
+        `SELECT encrypted_result_blob AS encryptedResult, result_hash AS resultHash,
+                simulation_version AS simulationVersion
          FROM race_simulations
          WHERE race_id = ? AND race_version = ? AND kind = 'official' AND status = 'completed'`,
       )
-      .get(raceId, raceVersion) as { encryptedResult: string; resultHash: string } | undefined;
+      .get(raceId, raceVersion) as
+      | {
+          encryptedResult: string;
+          resultHash: string;
+          simulationVersion: string;
+        }
+      | undefined;
     if (row === undefined) throw new Error('Completed official simulation is missing.');
-    const key = deriveResultKey(this.resultMasterSecret, raceId, SIMULATION_VERSION, raceVersion);
-    const decrypted = decryptAesGcm(JSON.parse(row.encryptedResult) as EncryptedPayload, key);
+    const payload = JSON.parse(row.encryptedResult) as EncryptedPayload;
+    const keys = this.resultMasterSecrets.map((secret) =>
+      deriveResultKey(secret, raceId, row.simulationVersion, raceVersion),
+    );
+    const decrypted = decryptAesGcmWithKeys(payload, keys);
     const parsed = JSON.parse(Buffer.from(decrypted).toString('utf8')) as OfficialSimulationResult;
     if (parsed.resultHash !== row.resultHash || !verifyOfficialSimulationResult(parsed)) {
       throw new Error('Official result integrity verification failed.');
@@ -489,6 +498,14 @@ export class SqliteRaceLifecycleStore {
     if (row === undefined) throw new Error(`Account missing: ${accountType}:${ownerKey}`);
     return identifier(row.id);
   }
+}
+
+function normalizeMasterSecrets(value: string | readonly string[]): readonly string[] {
+  const secrets = typeof value === 'string' ? [value] : [...value];
+  if (secrets.length === 0 || secrets.some((secret) => secret.length === 0)) {
+    throw new Error('At least one result master secret is required.');
+  }
+  return [...new Set(secrets)];
 }
 
 function isAtOrAfter(status: RaceStatus, target: RaceStatus): boolean {

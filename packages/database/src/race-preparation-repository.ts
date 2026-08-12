@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import {
-  decryptAesGcm,
+  decryptAesGcmWithKeys,
   deriveResultKey,
   encryptAesGcm,
   sha256,
@@ -59,10 +59,13 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
   public constructor(
     private readonly database: Database.Database,
     private readonly now: () => number,
-    private readonly resultMasterSecret: string,
+    resultMasterSecret: string | readonly string[],
   ) {
+    this.resultMasterSecrets = normalizeMasterSecrets(resultMasterSecret);
     this.gameStore = new SqliteGameStore(database, now);
   }
+
+  private readonly resultMasterSecrets: readonly string[];
 
   public begin(raceId: string): RacePreparationStart {
     const run = this.database.transaction((): RacePreparationStart => {
@@ -282,28 +285,32 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
     readonly officialSeed: string;
     readonly oddsSeed: string;
   } {
-    const key = deriveResultKey(
-      this.resultMasterSecret,
-      race.id,
-      SIMULATION_VERSION,
-      Number(race.version),
-    );
     const existing = this.database
       .prepare(
-        `SELECT kind, status, seed_ciphertext AS seedCiphertext
+        `SELECT kind, status, seed_ciphertext AS seedCiphertext,
+                simulation_version AS simulationVersion
          FROM race_simulations WHERE race_id = ? AND race_version = ?`,
       )
       .all(race.id, race.version) as Array<{
       kind: 'official' | 'odds';
       status: 'running' | 'completed' | 'failed';
       seedCiphertext: string;
+      simulationVersion: string;
     }>;
     if (existing.length === 2) {
       try {
         const decrypted = new Map(
           existing.map((row) => {
             const payload = JSON.parse(row.seedCiphertext) as EncryptedPayload;
-            return [row.kind, Buffer.from(decryptAesGcm(payload, key)).toString('utf8')];
+            const versionCandidates = [row.simulationVersion, SIMULATION_VERSION].filter(
+              (version, index, versions) => versions.indexOf(version) === index,
+            );
+            const keys = this.resultMasterSecrets.flatMap((secret) =>
+              versionCandidates.map((version) =>
+                deriveResultKey(secret, race.id, version, Number(race.version)),
+              ),
+            );
+            return [row.kind, Buffer.from(decryptAesGcmWithKeys(payload, keys)).toString('utf8')];
           }),
         );
         const officialSeed = decrypted.get('official');
@@ -322,15 +329,29 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
         simulation_version, input_hash, started_at)
        VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)
        ON CONFLICT(race_id, race_version, kind) DO UPDATE SET
-         status = 'running', started_at = excluded.started_at,
+         status = 'running', seed_ciphertext = excluded.seed_ciphertext,
+         prng_version = excluded.prng_version, simulation_version = excluded.simulation_version,
+         input_hash = excluded.input_hash, started_at = excluded.started_at,
          error_code = NULL, error_detail_redacted = NULL`,
+    );
+    const officialKey = deriveResultKey(
+      this.resultMasterSecrets[0]!,
+      race.id,
+      SIMULATION_VERSION,
+      Number(race.version),
+    );
+    const oddsKey = deriveResultKey(
+      this.resultMasterSecrets[0]!,
+      race.id,
+      ODDS_VERSION,
+      Number(race.version),
     );
     insert.run(
       ulid(),
       race.id,
       race.version,
       'official',
-      JSON.stringify(encryptAesGcm(Buffer.from(seeds.officialSeed, 'utf8'), key)),
+      JSON.stringify(encryptAesGcm(Buffer.from(seeds.officialSeed, 'utf8'), officialKey)),
       PRNG_VERSION,
       SIMULATION_VERSION,
       race.inputHash,
@@ -341,7 +362,7 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
       race.id,
       race.version,
       'odds',
-      JSON.stringify(encryptAesGcm(Buffer.from(seeds.oddsSeed, 'utf8'), key)),
+      JSON.stringify(encryptAesGcm(Buffer.from(seeds.oddsSeed, 'utf8'), oddsKey)),
       PRNG_VERSION,
       ODDS_VERSION,
       race.inputHash,
@@ -349,6 +370,14 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
     );
     return seeds;
   }
+}
+
+function normalizeMasterSecrets(value: string | readonly string[]): readonly string[] {
+  const secrets = typeof value === 'string' ? [value] : [...value];
+  if (secrets.length === 0 || secrets.some((secret) => secret.length === 0)) {
+    throw new Error('At least one result master secret is required.');
+  }
+  return [...new Set(secrets)];
 }
 
 function parseSimulationSettings(value: string): {

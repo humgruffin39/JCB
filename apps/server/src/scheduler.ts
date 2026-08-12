@@ -185,12 +185,14 @@ function createHandlers(
   dependencies: SchedulerDependencies,
   jobStore: SqliteJobStore,
 ): JobHandlers {
-  const resultMasterSecret = runtimeSecret(
+  const resultMasterSecrets = runtimeSecrets(
     dependencies.environment.RESULT_MASTER_SECRET,
+    dependencies.environment.RESULT_MASTER_SECRET_PREVIOUS,
     dependencies.environment.NODE_ENV,
   );
-  const timelineMasterSecret = runtimeSecret(
+  const timelineMasterSecrets = runtimeSecrets(
     dependencies.environment.TIMELINE_MASTER_SECRET,
+    dependencies.environment.TIMELINE_MASTER_SECRET_PREVIOUS,
     dependencies.environment.NODE_ENV,
   );
   const manifestPrivateKey = requireConfigured(
@@ -201,7 +203,7 @@ function createHandlers(
   const lifecycle = new SqliteRaceLifecycleStore(
     dependencies.database,
     () => dependencies.clock.now(),
-    resultMasterSecret,
+    resultMasterSecrets,
   );
   const gameStore = new SqliteGameStore(dependencies.database, () => dependencies.clock.now());
   const adminStore = new SqliteAdminStore(dependencies.database, () => dependencies.clock.now());
@@ -272,11 +274,11 @@ function createHandlers(
             repository: new SqliteRacePreparationRepository(
               dependencies.database,
               () => dependencies.clock.now(),
-              resultMasterSecret,
+              resultMasterSecrets,
             ),
             probabilityGenerator: new WorkerProbabilityGenerator(),
-            timelineMasterSecret,
-            resultMasterSecret,
+            timelineMasterSecret: timelineMasterSecrets[0]!,
+            resultMasterSecret: resultMasterSecrets[0]!,
             manifestPrivateKey,
             seedLiquidity: seedPlan.liquidity,
           });
@@ -620,11 +622,19 @@ function formatJobType(jobType: string): string {
   return labels[jobType] ?? '未登録の自動処理';
 }
 
-function runtimeSecret(value: string | undefined, nodeEnvironment: string): string {
-  if (value !== undefined) return value;
+function runtimeSecrets(
+  value: string | undefined,
+  previousValue: string | undefined,
+  nodeEnvironment: string,
+): readonly string[] {
+  if (value !== undefined) {
+    return previousValue === undefined || previousValue === value
+      ? [value]
+      : [value, previousValue];
+  }
   if (nodeEnvironment === 'production')
     throw new Error('Required cryptographic secret is missing.');
-  return Buffer.alloc(32, 7).toString('base64');
+  return [Buffer.alloc(32, 7).toString('base64')];
 }
 
 function requireConfigured(

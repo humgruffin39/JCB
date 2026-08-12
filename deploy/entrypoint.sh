@@ -18,12 +18,21 @@ esac
 mkdir -p "$database_directory"
 chown -R node:node "$database_directory"
 
-gosu node litestream restore \
-  -if-db-not-exists \
-  -if-replica-exists \
-  -integrity-check full \
-  -config /etc/litestream.template.yml \
-  "$DATABASE_PATH"
+if [ "${ALLOW_EMPTY_DATABASE_BOOTSTRAP:-}" = "true" ]; then
+  echo "WARNING: allowing an empty production database bootstrap." >&2
+  gosu node litestream restore \
+    -if-db-not-exists \
+    -if-replica-exists \
+    -integrity-check full \
+    -config /etc/litestream.template.yml \
+    "$DATABASE_PATH"
+else
+  gosu node litestream restore \
+    -if-db-not-exists \
+    -integrity-check full \
+    -config /etc/litestream.template.yml \
+    "$DATABASE_PATH"
+fi
 
 gosu node node /app/apps/server/dist/render-litestream-config.js \
   /etc/litestream.template.yml \

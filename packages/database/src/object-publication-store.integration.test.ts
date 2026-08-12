@@ -30,7 +30,9 @@ describe('SQLite object publication outbox', () => {
       async get(key) {
         return objects.get(key);
       },
-      async delete() {},
+      async delete() {
+        return;
+      },
       async list() {
         return [];
       },
@@ -104,7 +106,9 @@ describe('SQLite object publication outbox', () => {
       async get() {
         return undefined;
       },
-      async delete() {},
+      async delete() {
+        return;
+      },
       async list() {
         return [];
       },

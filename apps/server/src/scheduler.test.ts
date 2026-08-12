@@ -98,7 +98,9 @@ describe('race scheduler recovery', () => {
         async get() {
           return undefined;
         },
-        async delete() {},
+        async delete() {
+          return;
+        },
         async list() {
           return [];
         },

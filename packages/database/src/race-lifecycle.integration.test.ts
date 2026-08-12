@@ -5,7 +5,6 @@ import {
   deriveResultKey,
   encryptAesGcm,
   prepareRace,
-  type PrivateObjectStore,
   type ProbabilityGenerator,
 } from '@jcb/application';
 import { money, timestamp } from '@jcb/domain';
@@ -15,19 +14,6 @@ import { SqliteGameStore, type HorseWrite } from './game-store.js';
 import { applyMigrations } from './migrations.js';
 import { SqliteRaceLifecycleStore } from './race-lifecycle-store.js';
 import { SqliteRacePreparationRepository } from './race-preparation-repository.js';
-
-const objectStore: PrivateObjectStore = {
-  async put() {
-    return;
-  },
-  async get() {
-    return undefined;
-  },
-  async delete() {},
-  async list() {
-    return [];
-  },
-};
 
 const horseBase: Omit<HorseWrite, 'name' | 'speed' | 'runningStyle'> = {
   status: 'active',

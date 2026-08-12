@@ -63,6 +63,7 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
     isPolling = true;
     try {
       const maintenanceNow = dependencies.clock.now();
+      schedulerAdminStore.probeDatabaseReadWrite();
       jobStore.reclaimStale(maintenanceNow, STALE_LOCK_MILLISECONDS);
       publications.reclaimStale(maintenanceNow, STALE_LOCK_MILLISECONDS);
       if (dependencies.clock.now() >= nextMaintenanceAt) {

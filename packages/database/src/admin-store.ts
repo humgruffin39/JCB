@@ -536,6 +536,10 @@ export class SqliteAdminStore {
   public health(): AdminHealth {
     return this.healthStore.health();
   }
+
+  public probeDatabaseReadWrite(): boolean {
+    return this.healthStore.probeDatabaseReadWrite();
+  }
 }
 
 function stringifyRow(row: Record<string, bigint | string | null>): Record<string, string | null> {

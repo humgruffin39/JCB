@@ -2,6 +2,8 @@ import type Database from 'better-sqlite3';
 import { ulid } from 'ulid';
 import { SqliteLedgerStore } from './ledger-store.js';
 
+const DATABASE_PROBE_MAX_AGE_MILLISECONDS = 2 * 60 * 1_000;
+
 export interface AdminHealth {
   readonly databaseReadWrite: boolean;
   readonly ledgerProjectionValid: boolean;
@@ -122,9 +124,10 @@ export class SqliteAdminHealthStore {
     const isRecent = (value: string | null, maximumAge: number): boolean =>
       value !== null &&
       Number.isFinite(Date.parse(value)) &&
+      this.now() - Date.parse(value) >= 0 &&
       this.now() - Date.parse(value) <= maximumAge;
     return {
-      databaseReadWrite: this.probeDatabaseReadWrite(),
+      databaseReadWrite: this.readDatabaseReadWriteStatus(),
       ledgerProjectionValid,
       centralBankBalance: (bank?.amount ?? 0n).toString(),
       allAccountBalanceTotal: balanceTotals.allAccounts.toString(),
@@ -149,7 +152,7 @@ export class SqliteAdminHealthStore {
     };
   }
 
-  private probeDatabaseReadWrite(): boolean {
+  public probeDatabaseReadWrite(): boolean {
     const nonce = ulid();
     try {
       return this.database
@@ -171,6 +174,17 @@ export class SqliteAdminHealthStore {
     } catch {
       return false;
     }
+  }
+
+  private readDatabaseReadWriteStatus(): boolean {
+    const row = this.database
+      .prepare("SELECT updated_at AS updatedAt FROM health_probes WHERE id = 'database'")
+      .get() as { updatedAt: bigint } | undefined;
+    return (
+      row !== undefined &&
+      this.now() - Number(row.updatedAt) >= 0 &&
+      this.now() - Number(row.updatedAt) <= DATABASE_PROBE_MAX_AGE_MILLISECONDS
+    );
   }
 
   private medianUserPools(): Readonly<Record<string, string>> {

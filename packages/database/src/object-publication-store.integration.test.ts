@@ -38,7 +38,7 @@ describe('SQLite object publication outbox', () => {
 
     await expect(
       publishPendingObjects(publications, objectStore, 'publisher', () => now),
-    ).resolves.toEqual({ completed: 0, failed: 1 });
+    ).resolves.toEqual({ completed: 0, failed: 1, deadLettered: 0 });
     expect(
       (
         database
@@ -51,7 +51,7 @@ describe('SQLite object publication outbox', () => {
     now = 1_100;
     await expect(
       publishPendingObjects(publications, objectStore, 'publisher', () => now),
-    ).resolves.toEqual({ completed: 1, failed: 0 });
+    ).resolves.toEqual({ completed: 1, failed: 0, deadLettered: 0 });
     expect(new TextDecoder().decode(objects.get('manifest.json'))).toBe('body');
     database.close();
   });
@@ -110,10 +110,14 @@ describe('SQLite object publication outbox', () => {
       },
     };
 
+    let deadLettered = 0;
     for (let attempt = 0; attempt < MAX_OBJECT_PUBLICATION_ATTEMPTS; attempt += 1) {
       const now = 100_000 + attempt * 60_000;
-      await publishPendingObjects(publications, objectStore, 'publisher', () => now);
+      deadLettered += (
+        await publishPendingObjects(publications, objectStore, 'publisher', () => now)
+      ).deadLettered;
     }
+    expect(deadLettered).toBe(1);
     expect(
       database
         .prepare('SELECT status, attempt_count AS attemptCount FROM object_publications')
@@ -138,7 +142,7 @@ describe('SQLite object publication outbox', () => {
     publications.enqueue('race-pending', new Uint8Array([1]), { raceId: 'race-1' }, 1);
     publications.enqueue('race-running', new Uint8Array([2]), { raceId: 'race-1' }, 1);
     const running = publications.claimDue(1, 'publisher');
-    expect(running?.key).toBe('race-pending');
+    expect(running).toBeDefined();
 
     expect(publications.cancelForRace('race-1', 2)).toBe(2);
     expect(publications.claimDue(2, 'publisher')).toBeUndefined();

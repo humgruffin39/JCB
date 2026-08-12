@@ -1,5 +1,5 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import {
   auditActionLabel,
@@ -28,19 +28,28 @@ export function SystemAdmin() {
   const [retryingJob, setRetryingJob] = useState<string>();
   const [retryingPublication, setRetryingPublication] = useState<string>();
   const [section, setSection] = useState<SystemSection>('status');
+  const previousSection = useRef(section);
   const refresh = useCallback(async () => {
-    const [nextHealth, nextJobs, nextAudit, nextObjects] = await Promise.all([
-      apiRequest<unknown>('/api/v1/admin/health'),
-      apiRequest<unknown>('/api/v1/admin/jobs'),
-      apiRequest<unknown>('/api/v1/admin/audit'),
-      apiRequest<typeof objects>('/api/v1/admin/system-objects'),
-    ]);
-    setHealth(z.record(z.string(), z.unknown()).parse(nextHealth));
-    setJobs(z.array(z.record(z.string(), z.string().nullable())).parse(nextJobs));
-    setAudit(z.array(z.record(z.string(), z.string().nullable())).parse(nextAudit));
-    setObjects(nextObjects);
-  }, []);
+    if (section === 'status') {
+      const nextHealth = await apiRequest<unknown>('/api/v1/admin/health');
+      setHealth(z.record(z.string(), z.unknown()).parse(nextHealth));
+    } else if (section === 'jobs') {
+      const nextJobs = await apiRequest<unknown>('/api/v1/admin/jobs');
+      setJobs(z.array(z.record(z.string(), z.string().nullable())).parse(nextJobs));
+    } else if (section === 'objects') {
+      setObjects(await apiRequest<typeof objects>('/api/v1/admin/system-objects'));
+    } else if (section === 'audit') {
+      const nextAudit = await apiRequest<unknown>('/api/v1/admin/audit');
+      setAudit(z.array(z.record(z.string(), z.string().nullable())).parse(nextAudit));
+    }
+  }, [section]);
   const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 7_500);
+
+  useEffect(() => {
+    if (previousSection.current === section) return;
+    previousSection.current = section;
+    void refreshNow().catch(() => undefined);
+  }, [refreshNow, section]);
   const systemNominal =
     health.ledgerProjectionValid === true &&
     health.databaseReadWrite === true &&

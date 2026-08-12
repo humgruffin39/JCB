@@ -67,6 +67,37 @@ export function startScheduler(dependencies: SchedulerDependencies): () => Promi
   let nextMaintenanceAt = 0;
   let isPolling = false;
 
+  const publishObjects = async (): Promise<void> => {
+    const result = await publishPendingObjects(
+      publications,
+      dependencies.timelineStore,
+      `${workerId}:objects`,
+      () => dependencies.clock.now(),
+    );
+    if (result.failed > 0) {
+      dependencies.onError?.(
+        new Error(
+          `${String(result.failed)} object publication(s) failed; ${String(result.deadLettered)} moved to dead-letter.`,
+        ),
+      );
+    }
+    if (result.deadLettered > 0) {
+      schedulerAdminStore.recordAudit({
+        action: 'object_publication.dead_lettered',
+        targetType: 'object_publication',
+        targetId: 'batch',
+        reason: `${String(result.deadLettered)} object publication(s) exhausted their retry policy.`,
+        after: { count: result.deadLettered },
+      });
+      await sendAdminNotice(dependencies, {
+        level: 'error',
+        title: '公開データを配信できませんでした',
+        description: '再試行上限に達した公開処理があります。管理画面から再試行してください。',
+        fields: [{ name: '停止した公開処理', value: String(result.deadLettered) }],
+      });
+    }
+  };
+
   const poll = async (): Promise<void> => {
     if (isPolling) return;
     isPolling = true;
@@ -88,17 +119,7 @@ export function startScheduler(dependencies: SchedulerDependencies): () => Promi
         }
         nextMaintenanceAt = dependencies.clock.now() + 60 * 60 * 1_000;
       }
-      const publicationResult = await publishPendingObjects(
-        publications,
-        dependencies.timelineStore,
-        `${workerId}:objects`,
-        () => dependencies.clock.now(),
-      );
-      if (publicationResult.failed > 0) {
-        dependencies.onError?.(
-          new Error(`${String(publicationResult.failed)} object publication(s) will be retried.`),
-        );
-      }
+      await publishObjects();
       schedulerAdminStore.recordSystemSetting(
         'scheduler_heartbeat_at',
         new Date(dependencies.clock.now()).toISOString(),
@@ -135,12 +156,7 @@ export function startScheduler(dependencies: SchedulerDependencies): () => Promi
           });
         }
       }
-      await publishPendingObjects(
-        publications,
-        dependencies.timelineStore,
-        `${workerId}:objects`,
-        () => dependencies.clock.now(),
-      );
+      await publishObjects();
     } finally {
       isPolling = false;
     }

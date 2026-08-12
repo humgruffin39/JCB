@@ -1,5 +1,5 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   accountTypeLabel,
   betStatusLabel,
@@ -37,18 +37,24 @@ export function CurrencyAdmin() {
   const [error, setError] = useState('');
   const [adjustmentDraft, setAdjustmentDraft] = useState<AdjustmentDraft>();
   const [section, setSection] = useState<CurrencySection>('overview');
+  const previousSection = useRef(section);
   const adjustmentForm = useRef<HTMLFormElement>(null);
 
   const refresh = useCallback(async () => {
-    const [nextEconomy, nextLedger] = await Promise.all([
-      apiRequest<EconomyOperations>('/api/v1/admin/economy'),
-      apiRequest<readonly OperationRow[]>('/api/v1/admin/ledger'),
-    ]);
-    setEconomy(nextEconomy);
-    setLedger(nextLedger);
-  }, []);
+    if (section === 'ledger') {
+      setLedger(await apiRequest<readonly OperationRow[]>('/api/v1/admin/ledger'));
+      return;
+    }
+    setEconomy(await apiRequest<EconomyOperations>('/api/v1/admin/economy'));
+  }, [section]);
 
   const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 7_500);
+
+  useEffect(() => {
+    if (previousSection.current === section) return;
+    previousSection.current = section;
+    void refreshNow().catch(() => undefined);
+  }, [refreshNow, section]);
 
   function adjust(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();

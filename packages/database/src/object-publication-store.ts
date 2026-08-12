@@ -128,7 +128,12 @@ export class SqliteObjectPublicationStore {
     if (cancelled === undefined) throw new Error('Object publication completion lost its lock.');
   }
 
-  public fail(publication: ObjectPublication, workerId: string, now: number, error: unknown): void {
+  public fail(
+    publication: ObjectPublication,
+    workerId: string,
+    now: number,
+    error: unknown,
+  ): 'pending' | 'dead_letter' | 'cancelled' {
     const isDeadLetter = publication.attemptCount >= MAX_OBJECT_PUBLICATION_ATTEMPTS;
     const backoff = Math.min(60_000, 1_000 * 2 ** Math.min(publication.attemptCount - 1, 6));
     const message = error instanceof Error ? error.message : 'Unknown object publication error.';
@@ -147,11 +152,12 @@ export class SqliteObjectPublicationStore {
         publication.id,
         workerId,
       );
-    if (result.changes === 1) return;
+    if (result.changes === 1) return isDeadLetter ? 'dead_letter' : 'pending';
     const cancelled = this.database
       .prepare("SELECT 1 FROM object_publications WHERE id = ? AND status = 'cancelled'")
       .get(publication.id);
-    if (cancelled === undefined) throw new Error('Object publication failure lost its lock.');
+    if (cancelled !== undefined) return 'cancelled';
+    throw new Error('Object publication failure lost its lock.');
   }
 
   public retryDeadLetter(id: string, now: number): void {
@@ -196,9 +202,14 @@ export async function publishPendingObjects(
   workerId: string,
   now: () => number,
   limit = 20,
-): Promise<{ readonly completed: number; readonly failed: number }> {
+): Promise<{
+  readonly completed: number;
+  readonly failed: number;
+  readonly deadLettered: number;
+}> {
   let completed = 0;
   let failed = 0;
+  let deadLettered = 0;
   for (let index = 0; index < limit; index += 1) {
     const publication = publications.claimDue(now(), workerId);
     if (publication === undefined) break;
@@ -207,11 +218,13 @@ export async function publishPendingObjects(
       publications.complete(publication.id, workerId, now());
       completed += 1;
     } catch (error) {
-      publications.fail(publication, workerId, now(), error);
+      if (publications.fail(publication, workerId, now(), error) === 'dead_letter') {
+        deadLettered += 1;
+      }
       failed += 1;
     }
   }
-  return { completed, failed };
+  return { completed, failed, deadLettered };
 }
 
 function mapPublication(row: PublicationRow): ObjectPublication {

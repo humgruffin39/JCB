@@ -175,7 +175,7 @@ describe('race preparation workflow', () => {
     ).toBe(2n);
     await expect(
       publishPendingObjects(publicationStore, timelineStore, 'test-publisher', () => now),
-    ).resolves.toEqual({ completed: 2, failed: 0 });
+    ).resolves.toEqual({ completed: 2, failed: 0, deadLettered: 0 });
     expect(timelineStore.objects.has(`race-manifests/${race.id}.json`)).toBe(true);
     expect(
       (

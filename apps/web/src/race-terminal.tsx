@@ -9,25 +9,47 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
   const [error, setError] = useState<string>();
   const [pollMilliseconds, setPollMilliseconds] = useState(15_000);
   const requestInFlight = useRef(false);
+  const requestGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
     if (requestInFlight.current) return;
+    const generation = ++requestGeneration.current;
     requestInFlight.current = true;
     try {
-      setRace(await getRace(raceId));
-      setError(undefined);
+      const nextRace = await getRace(raceId);
+      if (generation === requestGeneration.current) {
+        setRace(nextRace);
+        setError(undefined);
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'レース情報を更新できません。');
+      if (generation === requestGeneration.current) {
+        setError(caught instanceof Error ? caught.message : 'レース情報を更新できません。');
+      }
     } finally {
-      requestInFlight.current = false;
+      if (generation === requestGeneration.current) requestInFlight.current = false;
     }
   }, [raceId]);
 
   useEffect(() => {
+    let cancelled = false;
     void getPublicSettings()
-      .then((settings) => setPollMilliseconds(settings.webOddsPollMilliseconds))
-      .catch(() => setPollMilliseconds(15_000));
+      .then((settings) => {
+        if (!cancelled) setPollMilliseconds(settings.webOddsPollMilliseconds);
+      })
+      .catch(() => {
+        if (!cancelled) setPollMilliseconds(15_000);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      requestGeneration.current += 1;
+      requestInFlight.current = false;
+    };
+  }, [raceId]);
 
   useEffect(() => {
     void refresh();

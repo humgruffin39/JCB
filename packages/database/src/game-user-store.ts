@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
-import { DomainError, identifier, money, type AccountId } from '@jcb/domain';
+import { DomainError, identifier, money } from '@jcb/domain';
+import type { AccountId } from '@jcb/domain';
 import { transfer } from '@jcb/economy';
 import { ulid } from 'ulid';
 import { SqliteLedgerStore } from './ledger-store.js';

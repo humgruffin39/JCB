@@ -1,11 +1,5 @@
 import type Database from 'better-sqlite3';
-import {
-  identifier,
-  raceKindForJstDate,
-  timestamp,
-  transitionRace,
-  type RaceEntry,
-} from '@jcb/domain';
+import { identifier, raceKindForJstDate, transitionRace, type RaceEntry } from '@jcb/domain';
 import { hashSimulationInput } from '@jcb/simulation';
 import { ulid } from 'ulid';
 import {

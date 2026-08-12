@@ -1,20 +1,16 @@
-import type { TimelineFrameContract } from '@jcb/contracts';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
   getBattleCameraShot,
   getFinishCameraShot,
   selectBroadcastCameraShot,
-  type BroadcastCameraShot,
   type BroadcastShotId,
 } from './race-camera-director.js';
 import {
-  COURSE_LENGTH,
   courseLengthForDistance,
   raceProgressToCourseProgress,
   sampleCourse,
   sampleCourseWithRunout,
-  type CourseSample,
 } from './race-course.js';
 import { RaceEnvironment, type RaceSurface } from './race-environment.js';
 import {
@@ -26,37 +22,32 @@ import {
   type HorseRig,
 } from './race-horse-model.js';
 import { racingLineOffset } from './race-lines.js';
+import {
+  isPostFinishPoseReady,
+  MIN_VISUAL_FINISH_SPEED_MPS,
+  postFinishCourseProgress,
+} from './race-world-finish.js';
+import type { RaceCameraMode, RaceWorldState } from './race-world-types.js';
+import { calculateFinishSnapshotCamera, readRenderTargetDataUrl } from './race-world-snapshot.js';
+import { createRaceWorldScene } from './race-world-scene.js';
+
+export type {
+  FinishPosition,
+  FinishSnapshotCamera,
+  RaceCameraMode,
+  RaceWorldState,
+} from './race-world-types.js';
+export {
+  isPostFinishPoseReady,
+  MIN_VISUAL_FINISH_SPEED_MPS,
+  POST_FINISH_RUNOUT_DISTANCE_M,
+  POST_FINISH_RUNOUT_MS,
+  postFinishCourseProgress,
+} from './race-world-finish.js';
+export { calculateFinishSnapshotCamera } from './race-world-snapshot.js';
 
 const HORSE_NOSE_OFFSET = 1.05;
-const FINISH_ROOT_PROGRESS = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET);
-export const POST_FINISH_RUNOUT_DISTANCE_M = 32;
-const MIN_VISUAL_FINISH_SPEED_MPS = 4;
-export const POST_FINISH_RUNOUT_MS = Math.ceil(
-  (POST_FINISH_RUNOUT_DISTANCE_M / MIN_VISUAL_FINISH_SPEED_MPS) * 1_000,
-);
-const FINISH_POSITION_SETTLE_TOLERANCE_M = 0.25;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
-
-export interface FinishPosition {
-  readonly horseNumber: number;
-  readonly position: number;
-  readonly finishTimeMs: number;
-}
-
-export interface RaceWorldState {
-  readonly frame: TimelineFrameContract;
-  readonly positionMs: number;
-  readonly finishOrder: readonly FinishPosition[];
-  readonly isPhoto: boolean;
-}
-
-export type RaceCameraMode = 'follow' | 'horse';
-
-export interface FinishSnapshotCamera {
-  readonly cameraPosition: THREE.Vector3;
-  readonly targetPosition: THREE.Vector3;
-  readonly fieldOfView: number;
-}
 
 interface AnimatedHorse {
   readonly rig: HorseRig;
@@ -74,14 +65,14 @@ interface AnimatedHorse {
 
 export class RaceWorld {
   private readonly renderer: THREE.WebGLRenderer;
-  private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(31, 1, 0.1, 800);
+  private readonly scene: THREE.Scene;
+  private readonly camera: THREE.PerspectiveCamera;
   private readonly environment: RaceEnvironment;
   private readonly sky: THREE.Mesh;
   private readonly orbit: OrbitControls;
   private readonly horses: readonly AnimatedHorse[];
   private readonly sun: THREE.DirectionalLight;
-  private readonly sunTarget = new THREE.Object3D();
+  private readonly sunTarget: THREE.Object3D;
   private readonly cameraTarget = new THREE.Vector3();
   private readonly raycaster = new THREE.Raycaster();
   private readonly courseLength: number;
@@ -115,6 +106,13 @@ export class RaceWorld {
   ) {
     this.renderer = renderer;
     this.environment = environment;
+    const worldScene = createRaceWorldScene(renderer, environment);
+    this.scene = worldScene.scene;
+    this.camera = worldScene.camera;
+    this.sky = worldScene.sky;
+    this.orbit = worldScene.orbit;
+    this.sun = worldScene.sun;
+    this.sunTarget = worldScene.sunTarget;
     this.courseLength = courseLengthForDistance(distanceM);
     this.finishRootProgress = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET, distanceM);
     this.horses = rigs.map((rig) => ({
@@ -131,42 +129,11 @@ export class RaceWorld {
       visualCourseSpeedMps: undefined,
     }));
 
-    this.scene.background = new THREE.Color(0x94b8c9);
-    this.scene.fog = new THREE.Fog(0xa7bfbe, 140, 620);
-    this.sky = createSky();
-    this.camera.add(this.sky);
-    this.scene.add(this.camera, environment.group);
-
-    this.orbit = new OrbitControls(this.camera, renderer.domElement);
-    this.orbit.enableDamping = true;
-    this.orbit.dampingFactor = 0.08;
-    this.orbit.enablePan = false;
-    this.orbit.screenSpacePanning = true;
-    this.orbit.minDistance = 5;
-    this.orbit.maxDistance = 420;
-    this.orbit.minPolarAngle = 0.12;
-    this.orbit.maxPolarAngle = Math.PI * 0.49;
-    this.orbit.zoomToCursor = true;
     this.orbit.addEventListener('start', this.handleOrbitStart);
     renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
     renderer.domElement.addEventListener('pointerup', this.handlePointerUp);
     renderer.domElement.addEventListener('pointercancel', this.handlePointerCancel);
     renderer.domElement.addEventListener('contextmenu', this.handleContextMenu);
-
-    const hemisphere = new THREE.HemisphereLight(0xd7ecf1, 0x4c522e, 2.25);
-    this.scene.add(hemisphere);
-    this.sun = new THREE.DirectionalLight(0xfff2d2, 3.5);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    this.sun.shadow.camera.left = -24;
-    this.sun.shadow.camera.right = 24;
-    this.sun.shadow.camera.top = 18;
-    this.sun.shadow.camera.bottom = -12;
-    this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 90;
-    this.sun.shadow.bias = -0.00035;
-    this.sun.target = this.sunTarget;
-    this.scene.add(this.sun, this.sunTarget);
 
     for (const horse of this.horses) this.scene.add(horse.rig.root);
   }
@@ -779,159 +746,4 @@ export class RaceWorld {
   private readonly handleContextMenu = (event: MouseEvent): void => {
     event.preventDefault();
   };
-}
-
-export function calculateFinishSnapshotCamera(
-  finishLine: Pick<CourseSample, 'position' | 'tangent' | 'normal'>,
-  horsePositions: readonly THREE.Vector3[],
-  aspect: number,
-  shot: BroadcastCameraShot = getFinishCameraShot(),
-  fallbackHorsePosition?: THREE.Vector3,
-): FinishSnapshotCamera {
-  const tangent = finishLine.tangent.clone().normalize();
-  const normal = finishLine.normal.clone().normalize();
-  const validPositions = horsePositions.filter((position) =>
-    [position.x, position.y, position.z].every(Number.isFinite),
-  );
-  const candidates = [...validPositions]
-    .sort(
-      (left, right) =>
-        right.clone().sub(finishLine.position).dot(tangent) -
-        left.clone().sub(finishLine.position).dot(tangent),
-    )
-    .slice(0, 3);
-  const fallback = fallbackHorsePosition ?? finishLine.position;
-  const positions = candidates.length > 0 ? candidates : [fallback];
-  const along = positions.map((position) => position.clone().sub(finishLine.position).dot(tangent));
-  const across = positions.map((position) => position.clone().sub(finishLine.position).dot(normal));
-  const minimumAlong = Math.min(...along);
-  const maximumAlong = Math.max(...along);
-  const centerAlong = (minimumAlong + maximumAlong) / 2;
-  const centerAcross = across.reduce((sum, value) => sum + value, 0) / across.length;
-  const targetPosition = finishLine.position
-    .clone()
-    .addScaledVector(tangent, centerAlong)
-    .addScaledVector(normal, centerAcross);
-  targetPosition.y = shot.lookHeight;
-
-  const normalDistance = Math.max(10, Math.abs(shot.normalOffset));
-  const framingMargin = 4.5;
-  const halfWidth = Math.max(6, (maximumAlong - minimumAlong) / 2 + framingMargin);
-  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
-  const requiredFieldOfView =
-    (2 * Math.atan(halfWidth / (normalDistance * safeAspect)) * 180) / Math.PI;
-  const portraitCompensation = THREE.MathUtils.clamp(1.65 / safeAspect, 1, 1.42);
-  const fieldOfView = THREE.MathUtils.clamp(
-    Math.max(shot.fieldOfView * portraitCompensation, requiredFieldOfView),
-    18,
-    56,
-  );
-  const cameraPosition = finishLine.position
-    .clone()
-    .addScaledVector(tangent, centerAlong + shot.tangentOffset)
-    .addScaledVector(normal, centerAcross + shot.normalOffset);
-  cameraPosition.y = shot.height;
-  return { cameraPosition, targetPosition, fieldOfView };
-}
-
-export function postFinishCourseProgress(
-  positionMs: number,
-  visualFinishTimeMs: number,
-  finishSpeedMps = 18,
-  finishRootProgress = FINISH_ROOT_PROGRESS,
-  courseLength = COURSE_LENGTH,
-): number {
-  const elapsedSeconds = Math.max(0, positionMs - visualFinishTimeMs) / 1_000;
-  return (
-    finishRootProgress +
-    Math.min(POST_FINISH_RUNOUT_DISTANCE_M, elapsedSeconds * Math.max(0, finishSpeedMps)) /
-      courseLength
-  );
-}
-
-export function isPostFinishPoseReady(
-  positionMs: number,
-  visualFinishTimeMs: number,
-  finishSpeedMps: number,
-  displayedProgress: number,
-  targetProgress: number,
-  courseLength = COURSE_LENGTH,
-): boolean {
-  const targetStopped = hasReachedPostFinishStop(positionMs, visualFinishTimeMs, finishSpeedMps);
-  const displayedDistanceFromTarget =
-    Math.abs(displayedProgress - targetProgress) * Math.max(1, courseLength);
-  return targetStopped && displayedDistanceFromTarget <= FINISH_POSITION_SETTLE_TOLERANCE_M;
-}
-
-function hasReachedPostFinishStop(
-  positionMs: number,
-  visualFinishTimeMs: number,
-  finishSpeedMps: number,
-): boolean {
-  const speed = Math.max(0, finishSpeedMps);
-  if (speed === 0) return true;
-  const elapsedSeconds = Math.max(0, positionMs - visualFinishTimeMs) / 1_000;
-  return elapsedSeconds * speed >= POST_FINISH_RUNOUT_DISTANCE_M;
-}
-
-function readRenderTargetDataUrl(
-  renderer: THREE.WebGLRenderer,
-  renderTarget: THREE.WebGLRenderTarget,
-  width: number,
-  height: number,
-): string | undefined {
-  const pixels = new Uint8Array(width * height * 4);
-  renderer.readRenderTargetPixels(renderTarget, 0, 0, width, height, pixels);
-  const flippedPixels = new Uint8ClampedArray(pixels.length);
-  const rowLength = width * 4;
-  for (let row = 0; row < height; row += 1) {
-    const sourceOffset = (height - row - 1) * rowLength;
-    const targetOffset = row * rowLength;
-    flippedPixels.set(pixels.subarray(sourceOffset, sourceOffset + rowLength), targetOffset);
-  }
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (context === null) return undefined;
-  const imageData = context.createImageData(width, height);
-  imageData.data.set(flippedPixels);
-  context.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/jpeg', 0.92);
-}
-
-function createSky(): THREE.Mesh {
-  const geometry = new THREE.SphereGeometry(360, 32, 16);
-  const material = new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    depthWrite: false,
-    uniforms: {
-      topColor: { value: new THREE.Color(0x609abe) },
-      horizonColor: { value: new THREE.Color(0xdbe5df) },
-      bottomColor: { value: new THREE.Color(0x8ba67d) },
-    },
-    vertexShader: `
-      varying vec3 vPosition;
-      void main() {
-        vPosition = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 topColor;
-      uniform vec3 horizonColor;
-      uniform vec3 bottomColor;
-      varying vec3 vPosition;
-      void main() {
-        float h = normalize(vPosition).y;
-        vec3 color = h > 0.0
-          ? mix(horizonColor, topColor, smoothstep(0.0, 0.72, h))
-          : mix(horizonColor, bottomColor, smoothstep(0.0, -0.35, h));
-        gl_FragColor = vec4(color, 1.0);
-      }
-    `,
-  });
-  const sky = new THREE.Mesh(geometry, material);
-  sky.frustumCulled = false;
-  return sky;
 }

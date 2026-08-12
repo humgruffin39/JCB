@@ -1,30 +1,32 @@
-import {
-  apiErrorSchema,
-  betResponseSchema,
-  edgeReleaseResponseSchema,
-  timelineSchema,
-  type TimelineFrameContract,
-} from '@jcb/contracts';
-import { LocateFixed, Pause, Play, Video, Volume2, VolumeX } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { apiRequest, EDGE_ORIGIN, estimateServerOffset, getResult } from './api.js';
+import { betResponseSchema } from '@jcb/contracts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { apiRequest, estimateServerOffset, getResult } from './api.js';
 import type { getRace } from './api.js';
 import { synchronizedPosition } from './playback-clock.js';
-import { PodiumHorsePreview } from './podium-horse-preview.js';
-import { createRaceDramaFrame } from './race-drama.js';
-import { SADDLECLOTH_COLORS } from './race-horse-model.js';
 import { RaceScene3D } from './race-scene-3d.js';
-import { POST_FINISH_RUNOUT_MS } from './race-world.js';
-import type { RaceCameraMode } from './race-world.js';
+import { POST_FINISH_RUNOUT_MS } from './race-world-finish.js';
+import type { RaceCameraMode } from './race-world-types.js';
+import { BroadcastHud, BroadcastState } from './race-viewer-hud.js';
+import { PlaybackControls } from './race-viewer-controls.js';
+import {
+  FinishSnapshot,
+  PhotoFinish,
+  ResultUnavailable,
+  ResultsScreen,
+} from './race-viewer-results.js';
+import {
+  selectCurrentFrame,
+  selectFinalOrder,
+  selectOrderedHorses,
+  selectTimelineFinishOrder,
+} from './race-viewer-selectors.js';
+import { loadTimeline, type TimelineFrame } from './race-timeline-loader.js';
+
+export { SoundControls, VolumeSlider } from './race-viewer-controls.js';
 
 type RaceDetail = Awaited<ReturnType<typeof getRace>>;
 type RaceResult = Awaited<ReturnType<typeof getResult>>;
-type TimelineFrame = TimelineFrameContract;
 type Bet = ReturnType<typeof betResponseSchema.parse>;
-interface LoadedTimeline {
-  readonly frames: readonly TimelineFrame[];
-  readonly duration: number;
-}
 
 type ViewerStatus =
   | { readonly state: 'waiting'; readonly message: string }
@@ -300,42 +302,19 @@ export function RaceViewer({
     };
   }, [phase, race.id, result, resultRetry, viewer]);
 
-  const timelineFinishOrder = useMemo(() => {
-    if (viewer.state !== 'ready') return [];
-    const estimates = race.entries.map((entry) => {
-      let finishTimeMs = viewer.duration;
-      for (let index = 1; index < viewer.frames.length; index += 1) {
-        const previousFrame = viewer.frames[index - 1]!;
-        const nextFrame = viewer.frames[index]!;
-        const previousHorse = previousFrame.horses.find(
-          (horse) => horse.horseNumber === entry.horseNumber,
-        );
-        const nextHorse = nextFrame.horses.find((horse) => horse.horseNumber === entry.horseNumber);
-        if (previousHorse === undefined || nextHorse === undefined || nextHorse.progress < 1)
-          continue;
-        const progressDelta = nextHorse.progress - previousHorse.progress;
-        const fraction =
-          progressDelta <= 0
-            ? 1
-            : Math.max(0, Math.min(1, (1 - previousHorse.progress) / progressDelta));
-        finishTimeMs = previousFrame.timeMs + (nextFrame.timeMs - previousFrame.timeMs) * fraction;
-        break;
-      }
-      return { horseNumber: entry.horseNumber, finishTimeMs };
-    });
-    return estimates
-      .sort((left, right) => left.finishTimeMs - right.finishTimeMs)
-      .map((horse, index) => ({ ...horse, position: index + 1 }));
-  }, [race.entries, viewer]);
-  const finalOrder = result?.finishOrder ?? timelineFinishOrder;
+  const timelineFinishOrder = useMemo(
+    () =>
+      viewer.state === 'ready'
+        ? selectTimelineFinishOrder(race.entries, viewer.frames, viewer.duration)
+        : [],
+    [race.entries, viewer],
+  );
+  const finalOrder = selectFinalOrder(result?.finishOrder, timelineFinishOrder);
   const currentFrame = useMemo(() => {
     if (viewer.state !== 'ready') return undefined;
-    return createRaceDramaFrame(viewer.frames, position, finalOrder, viewer.duration);
+    return selectCurrentFrame(viewer.frames, position, finalOrder, viewer.duration);
   }, [finalOrder, position, viewer]);
-  const orderedHorses = useMemo(
-    () => [...(currentFrame?.horses ?? [])].sort((left, right) => left.rank - right.rank),
-    [currentFrame],
-  );
+  const orderedHorses = useMemo(() => selectOrderedHorses(currentFrame), [currentFrame]);
 
   const restart = () => {
     setPhase('race');
@@ -353,49 +332,15 @@ export function RaceViewer({
       aria-label={`${race.name} レース観戦`}
     >
       {phase === 'race' && viewer.state === 'ready' && isSceneReady ? (
-        <header className="broadcast-hud">
-          <div className="broadcast-title">
-            <h1>{race.name}</h1>
-            <small>
-              {String(race.distanceM)}m・{race.surface === 'turf' ? '芝' : 'ダート'}
-            </small>
-          </div>
-          {viewer.state === 'ready' ? (
-            <ol className="running-order" aria-label="現在の走行順">
-              {orderedHorses.map((horse) => (
-                <li key={horse.horseNumber}>
-                  <button
-                    type="button"
-                    aria-label={`${String(horse.horseNumber)}番を追尾`}
-                    aria-pressed={trackedHorseNumber === horse.horseNumber}
-                    title={`${String(horse.horseNumber)}番を追尾`}
-                    style={
-                      {
-                        '--horse-number-fill':
-                          SADDLECLOTH_COLORS[horse.horseNumber - 1]?.background ?? '#f4f1df',
-                        '--horse-number-text':
-                          SADDLECLOTH_COLORS[horse.horseNumber - 1]?.foreground ?? '#111111',
-                      } as CSSProperties
-                    }
-                    onClick={() =>
-                      setTrackedHorseNumber((current) =>
-                        current === horse.horseNumber ? undefined : horse.horseNumber,
-                      )
-                    }
-                  >
-                    <strong>{String(horse.horseNumber)}</strong>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          ) : null}
-          <div className="broadcast-race-status">
-            <CourseProgressIndicator progress={orderedHorses[0]?.progress ?? 0} />
-            <div className="broadcast-clock">
-              <output aria-label="再生位置">{(position / 1000).toFixed(1)}s</output>
-            </div>
-          </div>
-        </header>
+        <BroadcastHud
+          raceName={race.name}
+          distanceM={race.distanceM}
+          surface={race.surface}
+          orderedHorses={orderedHorses}
+          position={position}
+          trackedHorseNumber={trackedHorseNumber}
+          onTrackHorse={setTrackedHorseNumber}
+        />
       ) : null}
 
       {viewer.state === 'ready' ? (
@@ -424,11 +369,7 @@ export function RaceViewer({
             }}
           />
           {phase === 'photo' && finishSnapshot !== undefined ? (
-            <img
-              className="finish-snapshot"
-              src={finishSnapshot}
-              alt="1位がゴールした瞬間のフィニッシュ写真"
-            />
+            <FinishSnapshot snapshot={finishSnapshot} />
           ) : null}
           {phase === 'photo' ? <PhotoFinish /> : null}
           {phase === 'results' ? (
@@ -509,356 +450,8 @@ export function RaceViewer({
   );
 }
 
-function PhotoFinish() {
-  return (
-    <div className="photo-finish" role="status" aria-label="写真判定" aria-live="assertive">
-      <div className="photo-flash" />
-    </div>
-  );
-}
-
-function ResultUnavailable({
-  message,
-  onRetry,
-}: {
-  readonly message: string | undefined;
-  readonly onRetry: () => void;
-}) {
-  return (
-    <div className="results-screen" role="alert" aria-live="assertive">
-      <h2>公式結果を表示できません</h2>
-      <p>{message ?? '公式結果を確認しています。'}</p>
-      <button className="replay-button" type="button" onClick={onRetry}>
-        結果を再取得
-      </button>
-    </div>
-  );
-}
-
-function ResultsScreen({
-  entries,
-  finishOrder,
-  bets,
-  betsLoading,
-  betsError,
-  onRetryBets,
-  onReplay,
-}: {
-  readonly entries: RaceDetail['entries'];
-  readonly finishOrder: readonly {
-    readonly horseNumber: number;
-    readonly position: number;
-    readonly finishTimeMs: number;
-  }[];
-  readonly bets: readonly Bet[];
-  readonly betsLoading: boolean;
-  readonly betsError: string | undefined;
-  readonly onRetryBets: () => void;
-  readonly onReplay: () => void;
-}) {
-  const topThree = finishOrder.slice(0, 3);
-  return (
-    <div className="results-screen" role="region" aria-label="確定結果">
-      <ol className="podium">
-        {topThree.map((finish) => {
-          const entry = entries.find((value) => value.horseNumber === finish.horseNumber);
-          const saddlecloth = getSaddleclothStyle(finish.horseNumber);
-          return (
-            <li
-              className={`podium-card podium-card--${String(finish.position)}`}
-              key={finish.horseNumber}
-            >
-              <span className="podium-place">{String(finish.position)}着</span>
-              <PodiumHorsePreview
-                horseNumber={finish.horseNumber}
-                coatColor={entry?.coatColor ?? 'chestnut'}
-              />
-              <div className="podium-name">
-                <span className="podium-horse-number" style={saddlecloth}>
-                  {String(finish.horseNumber)}
-                </span>
-                <strong>{entry?.name ?? `${String(finish.horseNumber)}番`}</strong>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-      <section className="payout-board" aria-labelledby="payout-heading">
-        <div>
-          <h3 id="payout-heading">払戻</h3>
-        </div>
-        {betsLoading ? (
-          <p>購入情報を確認しています。</p>
-        ) : betsError !== undefined ? (
-          <>
-            <p>{betsError}</p>
-            <button className="replay-button" type="button" onClick={onRetryBets}>
-              購入情報を再取得
-            </button>
-          </>
-        ) : bets.length === 0 ? (
-          <p>購入した馬券はありません</p>
-        ) : (
-          <ul>
-            {bets.map((bet) => (
-              <li key={bet.id}>
-                <div className="ticket-selection">
-                  <span className="ticket-type">{bet.poolType === 'win' ? '単勝' : '三連単'}</span>
-                  <span
-                    className="ticket-horses"
-                    aria-label={`${bet.selectionCode.replaceAll('-', '番、')}番`}
-                  >
-                    {bet.selectionCode.split('-').map((horseNumber) => (
-                      <span
-                        className="ticket-horse-number"
-                        style={getSaddleclothStyle(Number(horseNumber))}
-                        key={horseNumber}
-                        aria-hidden="true"
-                      >
-                        {horseNumber}
-                      </span>
-                    ))}
-                  </span>
-                </div>
-                <div className="ticket-payout">
-                  <strong>{BigInt(bet.payout) > 0n ? formatRupees(bet.payout) : 'はずれ'}</strong>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <button className="replay-button" type="button" onClick={onReplay}>
-        もう一度見る
-      </button>
-    </div>
-  );
-}
-
-function getSaddleclothStyle(horseNumber: number): CSSProperties {
-  const colors = SADDLECLOTH_COLORS[horseNumber - 1] ?? SADDLECLOTH_COLORS[0];
-  return {
-    '--horse-number-fill': colors.background,
-    '--horse-number-text': colors.foreground,
-  } as CSSProperties;
-}
-
-function PlaybackControls({
-  isPaused,
-  cameraMode,
-  onPause,
-  onToggleCamera,
-}: {
-  readonly isPaused: boolean;
-  readonly cameraMode: RaceCameraMode;
-  readonly onPause: () => void;
-  readonly onToggleCamera: () => void;
-}) {
-  return (
-    <div className="broadcast-controls">
-      <button
-        className="broadcast-icon-button broadcast-camera-button"
-        type="button"
-        aria-label={cameraMode === 'follow' ? '1位を追尾' : '放送カメラに戻す'}
-        aria-pressed={cameraMode === 'horse'}
-        title={cameraMode === 'follow' ? '1位を追尾' : '放送カメラに戻す'}
-        onClick={onToggleCamera}
-      >
-        {cameraMode === 'follow' ? (
-          <LocateFixed aria-hidden="true" />
-        ) : (
-          <Video aria-hidden="true" />
-        )}
-      </button>
-      <button
-        className="broadcast-icon-button"
-        type="button"
-        aria-label={isPaused ? '再生' : '一時停止'}
-        title={isPaused ? '再生' : '一時停止'}
-        onClick={onPause}
-      >
-        {isPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
-      </button>
-    </div>
-  );
-}
-
-export function SoundControls({
-  isMuted,
-  volume,
-  onMute,
-  onVolume,
-}: {
-  readonly isMuted: boolean;
-  readonly volume: number;
-  readonly onMute: () => void;
-  readonly onVolume: (value: number) => void;
-}) {
-  const isSilent = isMuted || volume === 0;
-  return (
-    <>
-      <button
-        className="broadcast-icon-button"
-        type="button"
-        aria-label={isSilent ? '音声をオン' : '音声をオフ'}
-        aria-pressed={!isSilent}
-        title={isSilent ? '音声をオン' : '音声をオフ'}
-        onClick={onMute}
-      >
-        {isSilent ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-      </button>
-      <VolumeSlider value={volume} onChange={onVolume} />
-    </>
-  );
-}
-
-export function VolumeSlider({
-  value,
-  onChange,
-}: {
-  readonly value: number;
-  readonly onChange: (value: number) => void;
-}) {
-  const progress = `${String(Math.round(value * 100))}%`;
-
-  return (
-    <label className="volume-slider" style={{ '--volume-progress': progress } as CSSProperties}>
-      <span className="sr-only">音量</span>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.01}
-        value={value}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-      />
-      <span className="volume-slider__visual" aria-hidden="true">
-        <span className="volume-slider__track">
-          <span className="volume-slider__fill" />
-        </span>
-        <span className="volume-slider__thumb" />
-      </span>
-    </label>
-  );
-}
-
-function CourseProgressIndicator({ progress }: { readonly progress: number }) {
-  const clampedProgress = Math.max(0, Math.min(1, progress));
-  const percentage = Math.round(clampedProgress * 100);
-  return (
-    <svg
-      className="course-progress"
-      viewBox="0 0 80 42"
-      role="img"
-      aria-label={`先頭はコースの${String(percentage)}パーセント地点`}
-    >
-      <path
-        className="course-progress__base"
-        pathLength="1"
-        d="M18 7H62A14 14 0 0 1 62 35H18A14 14 0 0 1 18 7Z"
-      />
-      <path
-        className="course-progress__run"
-        pathLength="1"
-        strokeDasharray={`${String(clampedProgress)} 1`}
-        d="M18 7H62A14 14 0 0 1 62 35H18A14 14 0 0 1 18 7Z"
-      />
-      <path className="course-progress__finish" d="M17 3V11" />
-    </svg>
-  );
-}
-
-function BroadcastState({
-  state,
-  message,
-  onRetry,
-}: {
-  readonly state: string;
-  readonly message: string;
-  readonly onRetry?: (() => void) | undefined;
-}) {
-  return (
-    <div
-      className={`broadcast-state broadcast-state--${state}`}
-      role={state === 'error' ? 'alert' : 'status'}
-    >
-      <strong>{message}</strong>
-      {state === 'error' && onRetry !== undefined ? (
-        <button className="replay-button" type="button" onClick={onRetry}>
-          再試行
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-async function loadTimeline(
-  raceId: string,
-  raceVersion: number,
-  token: string,
-): Promise<LoadedTimeline> {
-  const headers = { authorization: `Bearer ${token}` };
-  const releaseResponse = await fetch(
-    `${EDGE_ORIGIN}/edge/v1/races/${encodeURIComponent(raceId)}/release`,
-    { headers },
-  );
-  if (!releaseResponse.ok) {
-    const parsedError = apiErrorSchema.safeParse(await releaseResponse.json());
-    throw new Error(
-      parsedError.success && parsedError.data.error.code === 'RACE_NOT_STARTED'
-        ? '発走時刻前です'
-        : 'レース映像の解放情報を取得できません',
-    );
-  }
-  const release = edgeReleaseResponseSchema.parse(await releaseResponse.json()).result;
-  if (release.raceId !== raceId || release.raceVersion !== raceVersion) {
-    throw new Error('レース情報の版が一致しません');
-  }
-  const timelineResponse = await fetch(`${EDGE_ORIGIN}${release.timelinePath}`, { headers });
-  if (!timelineResponse.ok) throw new Error('暗号化されたレース映像を取得できません');
-  const ciphertext = new Uint8Array(await timelineResponse.arrayBuffer());
-  const authTag = base64Bytes(release.authTag);
-  const combined = new Uint8Array(ciphertext.length + authTag.length);
-  combined.set(ciphertext);
-  combined.set(authTag, ciphertext.length);
-  const key = await crypto.subtle.importKey(
-    'raw',
-    webBuffer(base64Bytes(release.timelineKey)),
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt'],
-  );
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: webBuffer(base64Bytes(release.iv)), tagLength: 128 },
-    key,
-    combined.buffer,
-  );
-  const decompressed = new Response(
-    new Blob([plaintext]).stream().pipeThrough(new DecompressionStream('gzip')),
-  );
-  return {
-    frames: timelineSchema.parse((await decompressed.json()) as unknown),
-    duration: release.timelineDuration,
-  };
-}
-
-function base64Bytes(value: string): Uint8Array {
-  const binary = atob(value);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function webBuffer(value: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(value.byteLength);
-  copy.set(value);
-  return copy.buffer;
-}
-
 function formatCountdown(milliseconds: number): string {
   const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
   const minutes = Math.floor(seconds / 60);
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
-function formatRupees(value: string): string {
-  return `${BigInt(value).toLocaleString('ja-JP')} R`;
 }

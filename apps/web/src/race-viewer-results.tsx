@@ -1,0 +1,158 @@
+import { type CSSProperties } from 'react';
+import { PodiumHorsePreview } from './podium-horse-preview.js';
+import { SADDLECLOTH_COLORS } from './race-horse-model.js';
+import type { FinishOrder } from './race-viewer-selectors.js';
+import type { getRace } from './api.js';
+
+type RaceDetail = Awaited<ReturnType<typeof getRace>>;
+export interface Bet {
+  readonly id: string;
+  readonly poolType: 'win' | 'trifecta';
+  readonly selectionCode: string;
+  readonly stake: string;
+  readonly status: 'open' | 'won' | 'lost' | 'refunded';
+  readonly payout: string;
+  readonly createdAt: number;
+}
+
+export function PhotoFinish() {
+  return (
+    <div className="photo-finish" role="status" aria-label="写真判定" aria-live="assertive">
+      <div className="photo-flash" />
+    </div>
+  );
+}
+
+export function FinishSnapshot({ snapshot }: { readonly snapshot: string }) {
+  return (
+    <img className="finish-snapshot" src={snapshot} alt="1位がゴールした瞬間のフィニッシュ写真" />
+  );
+}
+
+export function ResultUnavailable({
+  message,
+  onRetry,
+}: {
+  readonly message: string | undefined;
+  readonly onRetry: () => void;
+}) {
+  return (
+    <div className="results-screen" role="alert" aria-live="assertive">
+      <h2>公式結果を表示できません</h2>
+      <p>{message ?? '公式結果を確認しています。'}</p>
+      <button className="replay-button" type="button" onClick={onRetry}>
+        結果を再取得
+      </button>
+    </div>
+  );
+}
+
+export interface ResultsScreenProps {
+  readonly entries: RaceDetail['entries'];
+  readonly finishOrder: readonly FinishOrder[];
+  readonly bets: readonly Bet[];
+  readonly betsLoading: boolean;
+  readonly betsError: string | undefined;
+  readonly onRetryBets: () => void;
+  readonly onReplay: () => void;
+}
+
+export function ResultsScreen({
+  entries,
+  finishOrder,
+  bets,
+  betsLoading,
+  betsError,
+  onRetryBets,
+  onReplay,
+}: ResultsScreenProps) {
+  const topThree = finishOrder.slice(0, 3);
+  return (
+    <div className="results-screen" role="region" aria-label="確定結果">
+      <ol className="podium">
+        {topThree.map((finish) => {
+          const entry = entries.find((value) => value.horseNumber === finish.horseNumber);
+          const saddlecloth = getSaddleclothStyle(finish.horseNumber);
+          return (
+            <li
+              className={`podium-card podium-card--${String(finish.position)}`}
+              key={finish.horseNumber}
+            >
+              <span className="podium-place">{String(finish.position)}着</span>
+              <PodiumHorsePreview
+                horseNumber={finish.horseNumber}
+                coatColor={entry?.coatColor ?? 'chestnut'}
+              />
+              <div className="podium-name">
+                <span className="podium-horse-number" style={saddlecloth}>
+                  {String(finish.horseNumber)}
+                </span>
+                <strong>{entry?.name ?? `${String(finish.horseNumber)}番`}</strong>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <section className="payout-board" aria-labelledby="payout-heading">
+        <div>
+          <h3 id="payout-heading">払戻</h3>
+        </div>
+        {betsLoading ? (
+          <p>購入情報を確認しています。</p>
+        ) : betsError !== undefined ? (
+          <>
+            <p>{betsError}</p>
+            <button className="replay-button" type="button" onClick={onRetryBets}>
+              購入情報を再取得
+            </button>
+          </>
+        ) : bets.length === 0 ? (
+          <p>購入した馬券はありません</p>
+        ) : (
+          <ul>
+            {bets.map((bet) => (
+              <li key={bet.id}>
+                <div className="ticket-selection">
+                  <span className="ticket-type">{bet.poolType === 'win' ? '単勝' : '三連単'}</span>
+                  <span
+                    className="ticket-horses"
+                    aria-label={`${bet.selectionCode.replaceAll('-', '番、')}番`}
+                  >
+                    {bet.selectionCode.split('-').map((horseNumber) => (
+                      <span
+                        className="ticket-horse-number"
+                        style={getSaddleclothStyle(Number(horseNumber))}
+                        key={horseNumber}
+                        aria-hidden="true"
+                      >
+                        {horseNumber}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+                <div className="ticket-payout">
+                  <strong>{BigInt(bet.payout) > 0n ? formatRupees(bet.payout) : 'はずれ'}</strong>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <button className="replay-button" type="button" onClick={onReplay}>
+        もう一度見る
+      </button>
+    </div>
+  );
+}
+
+export function getSaddleclothStyle(horseNumber: number): CSSProperties {
+  const colors = SADDLECLOTH_COLORS[horseNumber - 1] ?? SADDLECLOTH_COLORS[0];
+  return {
+    '--horse-number-fill': colors.background,
+    '--horse-number-text': colors.foreground,
+  } as CSSProperties;
+}
+
+export function formatRupees(value: string): string {
+  return `${BigInt(value).toLocaleString('ja-JP')} R`;
+}

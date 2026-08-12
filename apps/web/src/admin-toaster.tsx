@@ -27,7 +27,6 @@ export function AdminToastProvider({ children }: { readonly children: ReactNode 
       <Toaster
         position="bottom-right"
         theme="dark"
-        closeButton
         expand={false}
         gap={8}
         visibleToasts={3}
@@ -36,11 +35,9 @@ export function AdminToastProvider({ children }: { readonly children: ReactNode 
         icons={{ success: null, error: null }}
         containerAriaLabel="管理画面の通知"
         toastOptions={{
-          closeButtonAriaLabel: '通知を閉じる',
           classNames: {
             toast: 'admin-toast',
             title: 'admin-toast__title',
-            closeButton: 'admin-toast__close',
           },
         }}
       />

@@ -58,7 +58,7 @@ input,
 select,
 textarea {
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) 2.5rem var(--space-2) var(--space-3);
   color: var(--text);
   background: var(--surface-1);
   border: 0.0625rem solid var(--line);
@@ -769,7 +769,7 @@ main {
 [data-sonner-toast].admin-toast {
   width: min(22rem, calc(100vw - 2rem));
   min-height: 2.75rem;
-  padding: var(--space-2) 2.5rem var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   color: #f0f0f0 !important;
   background: #151515 !important;
   border: 0.0625rem solid #363636 !important;
@@ -780,19 +780,6 @@ main {
 
 [data-sonner-toast].admin-toast [data-title] {
   color: inherit;
-}
-
-[data-sonner-toast].admin-toast [data-close-button] {
-  color: #a0a0a0 !important;
-  background: transparent !important;
-  border: 0 !important;
-  opacity: 1;
-}
-
-[data-sonner-toast].admin-toast [data-close-button]:hover,
-[data-sonner-toast].admin-toast [data-close-button]:focus-visible {
-  color: #fff !important;
-  background: #2a2a2a !important;
 }
 
 .terminal-tabs,

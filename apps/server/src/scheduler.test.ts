@@ -175,7 +175,7 @@ describe('race scheduler recovery', () => {
         expect(gameStore.getRace(race.id).status).toBe('betting_open');
         expect(errors).toEqual([]);
       } finally {
-        stopScheduler();
+        await stopScheduler();
       }
     } finally {
       database.close();

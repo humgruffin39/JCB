@@ -106,7 +106,7 @@ if (!canRunRaceScheduler) {
 
 const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, 'shutting down');
-  stopScheduler();
+  await stopScheduler();
   await app.close();
   if (discordClient !== undefined) await discordClient.destroy();
   database.close();
@@ -114,7 +114,7 @@ const shutdown = async (signal: string): Promise<void> => {
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
-function noOperation(): void {
+async function noOperation(): Promise<void> {
   return;
 }
 

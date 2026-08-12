@@ -42,7 +42,7 @@ export interface SchedulerDependencies {
   readonly onError?: (error: unknown) => void;
 }
 
-export function startScheduler(dependencies: SchedulerDependencies): () => void {
+export function startScheduler(dependencies: SchedulerDependencies): () => Promise<void> {
   const workerId = `server:${process.pid.toString()}:${randomUUID()}`;
   const jobStore = new SqliteJobStore(dependencies.database, cryptoJitter, () =>
     dependencies.clock.now(),
@@ -68,11 +68,15 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
       publications.reclaimStale(maintenanceNow, STALE_LOCK_MILLISECONDS);
       if (dependencies.clock.now() >= nextMaintenanceAt) {
         maintenance.cleanup(dependencies.clock.now());
-        await cleanupOrphanedTimelineObjects(
-          dependencies.database,
-          dependencies.timelineStore,
-          dependencies.clock.now(),
-        );
+        try {
+          await cleanupOrphanedTimelineObjects(
+            dependencies.database,
+            dependencies.timelineStore,
+            dependencies.clock.now(),
+          );
+        } catch (error) {
+          dependencies.onError?.(error);
+        }
         nextMaintenanceAt = dependencies.clock.now() + 60 * 60 * 1_000;
       }
       const publicationResult = await publishPendingObjects(
@@ -133,15 +137,29 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
     }
   };
   const runPoll = (): void => {
-    void poll().catch((error: unknown) => {
+    if (activePoll !== undefined) return;
+    const currentPoll = poll().catch((error: unknown) => {
       if (dependencies.onError !== undefined) dependencies.onError(error);
       else process.emitWarning(error instanceof Error ? error : String(error));
     });
+    activePoll = currentPoll;
+    void currentPoll.then(
+      () => {
+        if (activePoll === currentPoll) activePoll = undefined;
+      },
+      () => {
+        if (activePoll === currentPoll) activePoll = undefined;
+      },
+    );
   };
+  let activePoll: Promise<void> | undefined;
   runPoll();
   const interval = setInterval(runPoll, POLL_INTERVAL_MILLISECONDS);
   interval.unref();
-  return () => clearInterval(interval);
+  return async () => {
+    clearInterval(interval);
+    await activePoll;
+  };
 }
 
 export async function cleanupOrphanedTimelineObjects(

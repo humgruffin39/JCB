@@ -58,7 +58,7 @@ input,
 select,
 textarea {
   width: 100%;
-  padding: var(--space-2) 2.5rem var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   color: var(--text);
   background: var(--surface-1);
   border: 0.0625rem solid var(--line);
@@ -764,6 +764,7 @@ main {
   --normal-bg: #151515;
   --normal-border: #363636;
   --normal-text: #f0f0f0;
+  transition: none !important;
 }
 
 [data-sonner-toast].admin-toast {
@@ -776,10 +777,38 @@ main {
   border-radius: 0.35rem !important;
   box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 28%) !important;
   font: 600 0.78rem/1.4 var(--font-display);
+  transition: none !important;
+}
+
+[data-sonner-toast].admin-toast > * {
+  transition: none !important;
+}
+
+[data-sonner-toast].admin-toast::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 0.125rem;
+  content: '';
+  background: #fff;
+  opacity: 0.35;
+  pointer-events: none;
+  animation: admin-toast-progress 4.2s linear forwards;
 }
 
 [data-sonner-toast].admin-toast [data-title] {
   color: inherit;
+}
+
+@keyframes admin-toast-progress {
+  from {
+    opacity: 0.35;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .terminal-tabs,

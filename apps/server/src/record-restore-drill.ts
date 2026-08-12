@@ -1,11 +1,13 @@
 import {
   assertDatabaseIntegrity,
+  assertPublishedRaceObjects,
   assertRecordCountsMatch,
   databaseRecordCounts,
   openDatabase,
   SqliteAdminStore,
   type DatabaseRecordCounts,
 } from '@jcb/database';
+import { R2PrivateObjectStore } from './object-store.js';
 import { resolve } from 'node:path';
 
 const restoredPath = process.argv[2];
@@ -18,9 +20,19 @@ if (resolve(restoredPath) === resolve(primaryPath)) {
 }
 
 const restored = openDatabase(restoredPath);
-const restoredCounts: DatabaseRecordCounts = (() => {
+const timelineStore = new R2PrivateObjectStore(
+  requiredEnvironment('R2_ACCOUNT_ID'),
+  requiredEnvironment('R2_ACCESS_KEY_ID'),
+  requiredEnvironment('R2_SECRET_ACCESS_KEY'),
+  requiredEnvironment('R2_TIMELINE_BUCKET'),
+);
+const restoredCounts: DatabaseRecordCounts = await (async () => {
   try {
     assertDatabaseIntegrity(restored);
+    const publishedObjectCount = await assertPublishedRaceObjects(restored, timelineStore);
+    process.stdout.write(
+      `Verified ${String(publishedObjectCount)} published race object set(s) in R2.\n`,
+    );
     return databaseRecordCounts(restored);
   } finally {
     restored.close();
@@ -46,3 +58,9 @@ try {
 }
 
 process.stdout.write(`Restore drill passed and was recorded at ${recordedAt}.\n`);
+
+function requiredEnvironment(name: string): string {
+  const value = process.env[name];
+  if (value === undefined || value.length === 0) throw new Error(`${name} is required.`);
+  return value;
+}

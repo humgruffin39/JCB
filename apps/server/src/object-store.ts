@@ -1,6 +1,12 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import type { PrivateObjectStore } from '@jcb/application';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 
 export class R2PrivateObjectStore implements PrivateObjectStore {
@@ -46,6 +52,43 @@ export class R2PrivateObjectStore implements PrivateObjectStore {
       throw error;
     }
   }
+
+  public async delete(key: string): Promise<void> {
+    try {
+      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+  }
+
+  public async list(
+    prefix: string,
+  ): Promise<readonly { key: string; lastModifiedAt: number | undefined }[]> {
+    let continuationToken: string | undefined;
+    const objects: Array<{ key: string; lastModifiedAt: number | undefined }> = [];
+    let pageCount = 0;
+    do {
+      const response = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          MaxKeys: 1_000,
+          ...(continuationToken === undefined ? {} : { ContinuationToken: continuationToken }),
+        }),
+      );
+      for (const object of response.Contents ?? []) {
+        if (object.Key === undefined) continue;
+        objects.push({
+          key: object.Key,
+          lastModifiedAt: object.LastModified?.getTime(),
+        });
+      }
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+      pageCount += 1;
+      if (pageCount > 100) throw new Error('Object listing exceeded 100 R2 pages.');
+    } while (continuationToken !== undefined);
+    return objects;
+  }
 }
 
 export class FilePrivateObjectStore implements PrivateObjectStore {
@@ -73,6 +116,43 @@ export class FilePrivateObjectStore implements PrivateObjectStore {
       if (isNotFound(error)) return undefined;
       throw error;
     }
+  }
+
+  public async delete(key: string): Promise<void> {
+    try {
+      await unlink(this.safePath(key));
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+  }
+
+  public async list(
+    prefix: string,
+  ): Promise<readonly { key: string; lastModifiedAt: number | undefined }[]> {
+    const root = prefix.length === 0 ? this.absoluteRoot : this.safePath(prefix);
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch (error) {
+      if (isNotFound(error)) return [];
+      throw error;
+    }
+    const objects: Array<{ key: string; lastModifiedAt: number | undefined }> = [];
+    for (const entry of entries) {
+      const path = resolve(root, entry.name);
+      if (entry.isDirectory()) {
+        const nestedPrefix = relative(this.absoluteRoot, path).replaceAll('\\', '/');
+        objects.push(...(await this.list(nestedPrefix)));
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const metadata = await stat(path);
+      objects.push({
+        key: relative(this.absoluteRoot, path).replaceAll('\\', '/'),
+        lastModifiedAt: metadata.mtimeMs,
+      });
+    }
+    return objects;
   }
 
   private safePath(key: string): string {

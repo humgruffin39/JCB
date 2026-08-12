@@ -30,6 +30,10 @@ describe('SQLite object publication outbox', () => {
       async get(key) {
         return objects.get(key);
       },
+      async delete() {},
+      async list() {
+        return [];
+      },
     };
 
     await expect(
@@ -99,6 +103,10 @@ describe('SQLite object publication outbox', () => {
       },
       async get() {
         return undefined;
+      },
+      async delete() {},
+      async list() {
+        return [];
       },
     };
 

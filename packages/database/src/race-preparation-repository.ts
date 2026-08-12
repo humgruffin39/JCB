@@ -192,7 +192,18 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
         winPositions: completion.winPositions,
         trifectaPositions: completion.trifectaPositions,
       });
-      new SqliteObjectPublicationStore(this.database).enqueue(
+      const publications = new SqliteObjectPublicationStore(this.database);
+      publications.enqueue(
+        completion.timelineObjectKey,
+        completion.timelineCiphertext,
+        {
+          raceId: start.raceId,
+          sha256: completion.timelineSha256,
+          codecVersion: 'json-gzip-v1',
+        },
+        Number(now),
+      );
+      publications.enqueue(
         `race-manifests/${start.raceId}.json`,
         Buffer.from(JSON.stringify(completion.signedManifest), 'utf8'),
         { raceId: start.raceId, type: 'release-manifest' },

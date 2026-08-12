@@ -30,6 +30,7 @@ import { WorkerProbabilityGenerator } from './worker-probability-generator.js';
 const POLL_INTERVAL_MILLISECONDS = 30_000;
 const STALE_LOCK_MILLISECONDS = 5 * 60 * 1000;
 const BACKUP_MAXIMUM_AGE_MILLISECONDS = 65 * 60 * 1_000;
+const ORPHAN_TIMELINE_GRACE_MILLISECONDS = 2 * 60 * 60 * 1_000;
 
 export interface SchedulerDependencies {
   readonly database: SqliteDatabase;
@@ -66,6 +67,11 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
       publications.reclaimStale(maintenanceNow, STALE_LOCK_MILLISECONDS);
       if (dependencies.clock.now() >= nextMaintenanceAt) {
         maintenance.cleanup(dependencies.clock.now());
+        await cleanupOrphanedTimelineObjects(
+          dependencies.database,
+          dependencies.timelineStore,
+          dependencies.clock.now(),
+        );
         nextMaintenanceAt = dependencies.clock.now() + 60 * 60 * 1_000;
       }
       const publicationResult = await publishPendingObjects(
@@ -135,6 +141,43 @@ export function startScheduler(dependencies: SchedulerDependencies): () => void 
   const interval = setInterval(runPoll, POLL_INTERVAL_MILLISECONDS);
   interval.unref();
   return () => clearInterval(interval);
+}
+
+export async function cleanupOrphanedTimelineObjects(
+  database: SqliteDatabase,
+  objectStore: PrivateObjectStore,
+  now: number,
+  graceMilliseconds = ORPHAN_TIMELINE_GRACE_MILLISECONDS,
+): Promise<number> {
+  const referenced = new Set<string>(
+    (
+      database
+        .prepare(
+          `SELECT timeline_object_key AS objectKey
+           FROM race_simulations
+           WHERE timeline_object_key IS NOT NULL
+           UNION
+           SELECT object_key AS objectKey
+           FROM object_publications
+           WHERE object_key LIKE 'timelines/%'`,
+        )
+        .all() as Array<{ objectKey: string }>
+    ).map((row) => row.objectKey),
+  );
+  const objects = await objectStore.list('timelines/');
+  let deleted = 0;
+  for (const object of objects) {
+    if (
+      referenced.has(object.key) ||
+      object.lastModifiedAt === undefined ||
+      now - object.lastModifiedAt < graceMilliseconds
+    ) {
+      continue;
+    }
+    await objectStore.delete(object.key);
+    deleted += 1;
+  }
+  return deleted;
 }
 
 function createHandlers(
@@ -230,7 +273,6 @@ function createHandlers(
               () => dependencies.clock.now(),
               resultMasterSecret,
             ),
-            timelineStore: dependencies.timelineStore,
             probabilityGenerator: new WorkerProbabilityGenerator(),
             timelineMasterSecret,
             resultMasterSecret,

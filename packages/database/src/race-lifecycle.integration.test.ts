@@ -17,6 +17,10 @@ const objectStore: PrivateObjectStore = {
   async get() {
     return undefined;
   },
+  async delete() {},
+  async list() {
+    return [];
+  },
 };
 
 const horseBase: Omit<HorseWrite, 'name' | 'speed' | 'runningStyle'> = {
@@ -75,7 +79,6 @@ describe('race lifecycle and settlement', () => {
     };
     const completion = await prepareRace(race.id, {
       repository: new SqliteRacePreparationRepository(database, () => now, resultMasterSecret),
-      timelineStore: objectStore,
       probabilityGenerator,
       timelineMasterSecret,
       resultMasterSecret,

@@ -36,7 +36,12 @@ export class SqliteMaintenanceStore {
         .prepare("DELETE FROM scheduled_jobs WHERE status = 'completed' AND updated_at < ?")
         .run(BigInt(now - 30 * ONE_DAY)).changes,
       completedPublications: this.database
-        .prepare("DELETE FROM object_publications WHERE status = 'completed' AND updated_at < ?")
+        .prepare(
+          `DELETE FROM object_publications
+           WHERE status = 'completed' AND updated_at < ?
+             AND object_key NOT LIKE 'race-manifests/%'
+             AND object_key NOT LIKE 'timelines/%'`,
+        )
         .run(BigInt(now - 7 * ONE_DAY)).changes,
       oldRankingSnapshots: this.database
         .prepare('DELETE FROM ranking_snapshots WHERE calculated_at < ?')

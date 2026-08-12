@@ -25,7 +25,6 @@ import {
   type SimulationInput,
 } from '@jcb/simulation';
 import type { Money, RaceKind, Timestamp } from '@jcb/domain';
-import type { PrivateObjectStore } from './object-store.js';
 
 export interface RacePreparationStart {
   readonly raceId: string;
@@ -41,6 +40,7 @@ export interface RacePreparationCompletion {
   readonly official: OfficialSimulationResult;
   readonly probabilities: ProbabilityResult;
   readonly encryptedResult: EncryptedPayload;
+  readonly timelineCiphertext: Uint8Array;
   readonly timelineObjectKey: string;
   readonly timelineSha256: string;
   readonly signedManifest: SignedManifest;
@@ -62,7 +62,6 @@ export interface ProbabilityGenerator {
 
 export interface PrepareRaceDependencies {
   readonly repository: RacePreparationRepository;
-  readonly timelineStore: PrivateObjectStore;
   readonly probabilityGenerator: ProbabilityGenerator;
   readonly timelineMasterSecret: string;
   readonly resultMasterSecret: string;
@@ -114,16 +113,12 @@ export async function prepareRace(
       },
       dependencies.manifestPrivateKey,
     );
-    await dependencies.timelineStore.put(timelineObjectKey, timelineCiphertext, {
-      raceId,
-      sha256: timelineSha256,
-      codecVersion: TIMELINE_CODEC_VERSION,
-    });
     const liquidity = dependencies.seedLiquidity ?? INITIAL_SEED_LIQUIDITY[start.raceKind];
     const completion: RacePreparationCompletion = {
       official,
       probabilities,
       encryptedResult,
+      timelineCiphertext,
       timelineObjectKey,
       timelineSha256,
       signedManifest,

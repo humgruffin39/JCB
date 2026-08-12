@@ -20,6 +20,16 @@ class TestObjectStore implements PrivateObjectStore {
   public async get(key: string): Promise<Uint8Array | undefined> {
     return this.objects.get(key);
   }
+
+  public async delete(key: string): Promise<void> {
+    this.objects.delete(key);
+  }
+
+  public async list(prefix: string) {
+    return [...this.objects.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => ({ key, lastModifiedAt: undefined }));
+  }
 }
 
 const horseBase: Omit<HorseWrite, 'name' | 'speed'> = {
@@ -140,7 +150,6 @@ describe('race preparation workflow', () => {
     };
     const completion = await prepareRace(race.id, {
       repository: new SqliteRacePreparationRepository(database, () => now, resultMasterSecret),
-      timelineStore,
       probabilityGenerator,
       timelineMasterSecret,
       resultMasterSecret,
@@ -154,7 +163,7 @@ describe('race preparation workflow', () => {
           .get(race.id) as { count: bigint }
       ).count,
     ).toBe(344n);
-    expect(timelineStore.objects.has(completion.timelineObjectKey)).toBe(true);
+    expect(timelineStore.objects.has(completion.timelineObjectKey)).toBe(false);
     expect(timelineStore.objects.has(`race-manifests/${race.id}.json`)).toBe(false);
     const publicationStore = new SqliteObjectPublicationStore(database);
     expect(
@@ -163,10 +172,10 @@ describe('race preparation workflow', () => {
           .prepare("SELECT COUNT(*) AS count FROM object_publications WHERE status = 'pending'")
           .get() as { count: bigint }
       ).count,
-    ).toBe(1n);
+    ).toBe(2n);
     await expect(
       publishPendingObjects(publicationStore, timelineStore, 'test-publisher', () => now),
-    ).resolves.toEqual({ completed: 1, failed: 0 });
+    ).resolves.toEqual({ completed: 2, failed: 0 });
     expect(timelineStore.objects.has(`race-manifests/${race.id}.json`)).toBe(true);
     expect(
       (

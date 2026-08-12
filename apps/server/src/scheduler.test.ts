@@ -98,6 +98,10 @@ describe('race scheduler recovery', () => {
         async get() {
           return undefined;
         },
+        async delete() {},
+        async list() {
+          return [];
+        },
       };
       const probabilityGenerator: ProbabilityGenerator = {
         async generate(input, seed) {
@@ -106,7 +110,6 @@ describe('race scheduler recovery', () => {
       };
       await prepareRace(race.id, {
         repository: new SqliteRacePreparationRepository(database, () => now, resultMasterSecret),
-        timelineStore,
         probabilityGenerator,
         timelineMasterSecret,
         resultMasterSecret,

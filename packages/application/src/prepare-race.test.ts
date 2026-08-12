@@ -45,7 +45,6 @@ function dependencies(repository: {
 }): PrepareRaceDependencies {
   return {
     repository,
-    timelineStore: { put: vi.fn(async () => undefined) },
     probabilityGenerator: { generate: vi.fn() },
     timelineMasterSecret: 'timeline-secret',
     resultMasterSecret: 'result-secret',

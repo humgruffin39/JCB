@@ -126,4 +126,28 @@ describe('SQLite object publication outbox', () => {
     expect(publications.claimDue(2_000_000, 'publisher')?.attemptCount).toBe(1);
     database.close();
   });
+
+  it('cancels pending and in-flight race publications without resurrecting them', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    const publications = new SqliteObjectPublicationStore(database);
+    publications.enqueue('race-pending', new Uint8Array([1]), { raceId: 'race-1' }, 1);
+    publications.enqueue('race-running', new Uint8Array([2]), { raceId: 'race-1' }, 1);
+    const running = publications.claimDue(1, 'publisher');
+    expect(running?.key).toBe('race-pending');
+
+    expect(publications.cancelForRace('race-1', 2)).toBe(2);
+    expect(publications.claimDue(2, 'publisher')).toBeUndefined();
+    expect(() => publications.complete(running!.id, 'publisher', 3)).not.toThrow();
+    expect(
+      database
+        .prepare('SELECT status FROM object_publications ORDER BY object_key')
+        .all() as Array<{ status: string }>,
+    ).toEqual([{ status: 'cancelled' }, { status: 'cancelled' }]);
+    database.close();
+  });
 });

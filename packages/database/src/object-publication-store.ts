@@ -53,7 +53,11 @@ export class SqliteObjectPublicationStore {
            FROM object_publications WHERE object_key = ?`,
         )
         .get(key) as
-        | { body: Uint8Array; metadataJson: string; status: 'pending' | 'running' | 'completed' }
+        | {
+            body: Uint8Array;
+            metadataJson: string;
+            status: 'pending' | 'running' | 'completed' | 'dead_letter' | 'cancelled';
+          }
         | undefined;
       const matches =
         existing !== undefined &&
@@ -117,7 +121,11 @@ export class SqliteObjectPublicationStore {
          WHERE id = ? AND status = 'running' AND locked_by = ?`,
       )
       .run(BigInt(now), id, workerId);
-    if (result.changes !== 1) throw new Error('Object publication completion lost its lock.');
+    if (result.changes === 1) return;
+    const cancelled = this.database
+      .prepare("SELECT 1 FROM object_publications WHERE id = ? AND status = 'cancelled'")
+      .get(id);
+    if (cancelled === undefined) throw new Error('Object publication completion lost its lock.');
   }
 
   public fail(publication: ObjectPublication, workerId: string, now: number, error: unknown): void {
@@ -139,7 +147,11 @@ export class SqliteObjectPublicationStore {
         publication.id,
         workerId,
       );
-    if (result.changes !== 1) throw new Error('Object publication failure lost its lock.');
+    if (result.changes === 1) return;
+    const cancelled = this.database
+      .prepare("SELECT 1 FROM object_publications WHERE id = ? AND status = 'cancelled'")
+      .get(publication.id);
+    if (cancelled === undefined) throw new Error('Object publication failure lost its lock.');
   }
 
   public retryDeadLetter(id: string, now: number): void {
@@ -152,6 +164,18 @@ export class SqliteObjectPublicationStore {
       )
       .run(BigInt(now), BigInt(now), id);
     if (result.changes !== 1) throw new Error('Object publication dead-letter was not found.');
+  }
+
+  public cancelForRace(raceId: string, now: number): number {
+    return this.database
+      .prepare(
+        `UPDATE object_publications
+         SET status = 'cancelled', next_attempt_at = ?, locked_at = NULL, locked_by = NULL,
+             last_error_redacted = 'Publication cancelled with the race.', updated_at = ?
+         WHERE status IN ('pending', 'running')
+           AND json_extract(metadata_json, '$.raceId') = ?`,
+      )
+      .run(BigInt(now), BigInt(now), raceId).changes;
   }
 
   public reclaimStale(now: number, staleAfterMilliseconds: number): number {

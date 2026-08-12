@@ -160,7 +160,7 @@ export async function cleanupOrphanedTimelineObjects(
            UNION
            SELECT object_key AS objectKey
            FROM object_publications
-           WHERE object_key LIKE 'timelines/%'`,
+           WHERE object_key LIKE 'timelines/%' AND status <> 'cancelled'`,
         )
         .all() as Array<{ objectKey: string }>
     ).map((row) => row.objectKey),

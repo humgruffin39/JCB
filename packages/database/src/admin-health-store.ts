@@ -27,6 +27,7 @@ export interface AdminHealth {
   readonly timelineObjectCount: number;
   readonly pendingJobs: number;
   readonly deadJobs: number;
+  readonly deadObjectPublications: number;
 }
 
 export class SqliteAdminHealthStore {
@@ -116,9 +117,15 @@ export class SqliteAdminHealthStore {
         `SELECT
            (SELECT COUNT(*) FROM discord_messages) AS discordMessages,
            (SELECT COUNT(*) FROM race_simulations
-            WHERE kind = 'official' AND timeline_object_key IS NOT NULL) AS timelineObjects`,
+            WHERE kind = 'official' AND timeline_object_key IS NOT NULL) AS timelineObjects,
+           (SELECT COUNT(*) FROM object_publications
+            WHERE status = 'dead_letter') AS deadObjectPublications`,
       )
-      .get() as { discordMessages: bigint; timelineObjects: bigint };
+      .get() as {
+      discordMessages: bigint;
+      timelineObjects: bigint;
+      deadObjectPublications: bigint;
+    };
     const schedulerHeartbeatAt = settings.scheduler_heartbeat_at ?? null;
     const r2LastAccessAt = settings.last_r2_access_at ?? null;
     const isRecent = (value: string | null, maximumAge: number): boolean =>
@@ -149,6 +156,7 @@ export class SqliteAdminHealthStore {
       timelineObjectCount: Number(operational.timelineObjects),
       pendingJobs: Number(jobs.pending ?? 0n),
       deadJobs: Number(jobs.dead ?? 0n),
+      deadObjectPublications: Number(operational.deadObjectPublications),
     };
   }
 

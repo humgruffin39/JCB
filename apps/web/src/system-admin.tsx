@@ -48,7 +48,8 @@ export function SystemAdmin() {
     health.schedulerStatus !== 'failure' &&
     health.r2AccessStatus !== 'failure' &&
     health.discordGatewayConnected === true &&
-    Number(health.deadJobs ?? 0) === 0;
+    Number(health.deadJobs ?? 0) === 0 &&
+    Number(health.deadObjectPublications ?? 0) === 0;
 
   const retryJob = (jobId: string): void => {
     if (retryingJob !== undefined) return;
@@ -406,6 +407,7 @@ const HEALTH_GROUPS = [
     keys: [
       'pendingJobs',
       'deadJobs',
+      'deadObjectPublications',
       'discordMessageCount',
       'timelineObjectCount',
       'applicationVersion',
@@ -482,6 +484,7 @@ const HEALTH_LABELS: Readonly<Record<string, string>> = {
   timelineObjectCount: '観戦データ数',
   pendingJobs: '未処理の自動処理',
   deadJobs: '停止中の自動処理',
+  deadObjectPublications: '停止中の公開処理',
   applicationVersion: 'アプリケーション版',
   simulationVersion: 'シミュレーション版',
   oddsVersion: 'オッズ版',

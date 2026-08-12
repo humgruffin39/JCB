@@ -19,6 +19,7 @@ describe('admin health probes', () => {
       const healthStore = new SqliteAdminHealthStore(database, () => now);
 
       expect(healthStore.health().databaseReadWrite).toBe(false);
+      expect(healthStore.health().deadObjectPublications).toBe(0);
       expect(database.prepare("SELECT 1 FROM health_probes WHERE id = 'database'").get()).toBe(
         undefined,
       );
@@ -31,6 +32,15 @@ describe('admin health probes', () => {
         )
         .run(JSON.stringify(new Date(now + 60_000).toISOString()), BigInt(now));
       expect(healthStore.health().schedulerStatus).toBe('failure');
+      database
+        .prepare(
+          `INSERT INTO object_publications
+           (id, object_key, body, metadata_json, status, attempt_count, next_attempt_at,
+            created_at, updated_at)
+           VALUES ('dead-1', 'dead-object', X'00', '{}', 'dead_letter', 8, ?, ?, ?)`,
+        )
+        .run(BigInt(now), BigInt(now), BigInt(now));
+      expect(healthStore.health().deadObjectPublications).toBe(1);
     } finally {
       database.close();
     }

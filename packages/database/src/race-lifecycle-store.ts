@@ -20,6 +20,7 @@ import {
 import { currentOddsTenths, formatOdds } from '@jcb/odds';
 import { verifyOfficialSimulationResult, type OfficialSimulationResult } from '@jcb/simulation';
 import { SqliteLedgerStore } from './ledger-store.js';
+import { SqliteObjectPublicationStore } from './object-publication-store.js';
 
 interface RaceLifecycleRow {
   readonly id: string;
@@ -217,6 +218,7 @@ export class SqliteRaceLifecycleStore {
       if (race.status === 'cancelled') return;
       transitionRace(race.status, 'cancelled');
       const centralBank = this.findAccount('central_bank', 'global');
+      new SqliteObjectPublicationStore(this.database).cancelForRace(raceId, Number(at));
       this.database
         .prepare(
           `UPDATE scheduled_jobs

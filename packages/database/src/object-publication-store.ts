@@ -4,6 +4,9 @@ import { ulid } from 'ulid';
 
 export const MAX_OBJECT_PUBLICATION_ATTEMPTS = 8;
 
+export type ObjectPublicationRepairStatus =
+  'requeued' | 'pending' | 'running' | 'completed' | 'dead_letter' | 'cancelled' | 'missing';
+
 export interface ObjectPublication {
   readonly id: string;
   readonly key: string;
@@ -170,6 +173,34 @@ export class SqliteObjectPublicationStore {
       )
       .run(BigInt(now), BigInt(now), id);
     if (result.changes !== 1) throw new Error('Object publication dead-letter was not found.');
+  }
+
+  public requeueForRepair(objectKey: string, now: number): ObjectPublicationRepairStatus {
+    const existing = this.database
+      .prepare('SELECT status FROM object_publications WHERE object_key = ?')
+      .get(objectKey) as
+      | {
+          status: Exclude<ObjectPublicationRepairStatus, 'requeued' | 'missing'>;
+        }
+      | undefined;
+    if (existing === undefined) return 'missing';
+    if (existing.status !== 'completed' && existing.status !== 'dead_letter') {
+      return existing.status;
+    }
+    const result = this.database
+      .prepare(
+        `UPDATE object_publications
+         SET status = 'pending', attempt_count = 0, next_attempt_at = ?,
+             locked_at = NULL, locked_by = NULL, last_error_redacted = NULL, updated_at = ?
+         WHERE object_key = ? AND status IN ('completed', 'dead_letter')`,
+      )
+      .run(BigInt(now), BigInt(now), objectKey);
+    if (result.changes === 1) return 'requeued';
+    const current = this.database
+      .prepare('SELECT status FROM object_publications WHERE object_key = ?')
+      .get(objectKey) as
+      { status: Exclude<ObjectPublicationRepairStatus, 'requeued' | 'missing'> } | undefined;
+    return current?.status ?? 'missing';
   }
 
   public cancelForRace(raceId: string, now: number): number {

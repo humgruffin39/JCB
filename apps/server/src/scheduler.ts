@@ -66,6 +66,7 @@ export function startScheduler(dependencies: SchedulerDependencies): () => Promi
   publications.reclaimStale(dependencies.clock.now(), STALE_LOCK_MILLISECONDS);
   let nextMaintenanceAt = 0;
   let isPolling = false;
+  const missingPublicationAlerts = new Set<string>();
 
   const publishObjects = async (): Promise<void> => {
     const result = await publishPendingObjects(
@@ -109,6 +110,45 @@ export function startScheduler(dependencies: SchedulerDependencies): () => Promi
       if (dependencies.clock.now() >= nextMaintenanceAt) {
         maintenance.cleanup(dependencies.clock.now());
         try {
+          const repair = await repairMissingPublishedObjects(
+            dependencies.database,
+            dependencies.timelineStore,
+            dependencies.clock.now(),
+          );
+          for (const key of [...missingPublicationAlerts]) {
+            if (!repair.unrecoverable.includes(key)) missingPublicationAlerts.delete(key);
+          }
+          const newlyUnrecoverable = repair.unrecoverable.filter(
+            (key) => !missingPublicationAlerts.has(key),
+          );
+          for (const key of repair.unrecoverable) missingPublicationAlerts.add(key);
+          if (repair.requeued.length > 0) {
+            schedulerAdminStore.recordAudit({
+              action: 'object_publication.repaired',
+              targetType: 'object_publication',
+              targetId: 'batch',
+              reason: 'Missing published objects were restored from the durable outbox.',
+              after: { keys: repair.requeued },
+            });
+          }
+          if (newlyUnrecoverable.length > 0) {
+            const reason = `Missing published objects have no durable outbox record: ${newlyUnrecoverable.join(', ')}`;
+            dependencies.onError?.(new Error(reason));
+            schedulerAdminStore.recordAudit({
+              action: 'object_publication.repair_failed',
+              targetType: 'object_publication',
+              targetId: 'batch',
+              reason,
+              after: { keys: newlyUnrecoverable },
+            });
+            await sendAdminNotice(dependencies, {
+              level: 'error',
+              title: '公開データを復元できませんでした',
+              description:
+                '観戦データまたは公開マニフェストが見つからず、再公開用データもありません。',
+              fields: [{ name: '対象', value: newlyUnrecoverable.join('\n') }],
+            });
+          }
           await cleanupOrphanedTimelineObjects(
             dependencies.database,
             dependencies.timelineStore,
@@ -222,6 +262,53 @@ export async function cleanupOrphanedTimelineObjects(
     deleted += 1;
   }
   return deleted;
+}
+
+export interface MissingPublishedObjectRepairResult {
+  readonly requeued: readonly string[];
+  readonly unrecoverable: readonly string[];
+}
+
+export async function repairMissingPublishedObjects(
+  database: SqliteDatabase,
+  objectStore: PrivateObjectStore,
+  now: number,
+): Promise<MissingPublishedObjectRepairResult> {
+  const rows = database
+    .prepare(
+      `SELECT rs.race_id AS raceId, rs.timeline_object_key AS timelineObjectKey
+       FROM race_simulations rs
+       JOIN races r ON r.id = rs.race_id
+       WHERE rs.kind = 'official'
+         AND rs.race_version = r.version
+         AND rs.status = 'completed'
+         AND rs.timeline_object_key IS NOT NULL
+         AND rs.timeline_sha256 IS NOT NULL
+         AND r.status NOT IN ('cancelled', 'failed')`,
+    )
+    .all() as Array<{ raceId: string; timelineObjectKey: string }>;
+  const expectedKeys = new Set<string>();
+  for (const row of rows) {
+    expectedKeys.add(row.timelineObjectKey);
+    expectedKeys.add(`race-manifests/${row.raceId}.json`);
+  }
+  if (expectedKeys.size === 0) return { requeued: [], unrecoverable: [] };
+
+  const objects = await Promise.all([
+    objectStore.list('timelines/'),
+    objectStore.list('race-manifests/'),
+  ]);
+  const presentKeys = new Set(objects.flat().map((object) => object.key));
+  const publications = new SqliteObjectPublicationStore(database);
+  const requeued: string[] = [];
+  const unrecoverable: string[] = [];
+  for (const key of expectedKeys) {
+    if (presentKeys.has(key)) continue;
+    const status = publications.requeueForRepair(key, now);
+    if (status === 'requeued') requeued.push(key);
+    else if (status === 'missing') unrecoverable.push(key);
+  }
+  return { requeued, unrecoverable };
 }
 
 function createHandlers(

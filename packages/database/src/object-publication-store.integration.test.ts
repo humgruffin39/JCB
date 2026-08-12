@@ -135,6 +135,29 @@ describe('SQLite object publication outbox', () => {
     database.close();
   });
 
+  it('requeues completed or dead-lettered publications when an object disappears', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    const publications = new SqliteObjectPublicationStore(database);
+    publications.enqueue('missing-completed', new Uint8Array([1]), {}, 1);
+    const completed = publications.claimDue(1, 'publisher');
+    expect(completed).toBeDefined();
+    publications.complete(completed!.id, 'publisher', 2);
+
+    expect(publications.requeueForRepair('missing-completed', 3)).toBe('requeued');
+    expect(publications.claimDue(3, 'repair-worker')?.key).toBe('missing-completed');
+    expect(publications.requeueForRepair('missing-completed', 4)).toBe('running');
+
+    publications.enqueue('still-pending', new Uint8Array([2]), {}, 1);
+    expect(publications.requeueForRepair('still-pending', 3)).toBe('pending');
+    expect(publications.requeueForRepair('not-in-outbox', 3)).toBe('missing');
+    database.close();
+  });
+
   it('cancels pending and in-flight race publications without resurrecting them', () => {
     const database = openDatabase(':memory:');
     applyMigrations(

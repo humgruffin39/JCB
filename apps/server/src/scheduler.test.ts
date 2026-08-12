@@ -14,7 +14,12 @@ import {
   SqliteRacePreparationRepository,
   type HorseWrite,
 } from '@jcb/database';
-import { cleanupOrphanedTimelineObjects, startScheduler, verifyBackupProbe } from './scheduler.js';
+import {
+  cleanupOrphanedTimelineObjects,
+  repairMissingPublishedObjects,
+  startScheduler,
+  verifyBackupProbe,
+} from './scheduler.js';
 
 const repositoryRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const migrationsDirectory = join(repositoryRoot, 'packages', 'database', 'migrations');
@@ -94,6 +99,68 @@ describe('timeline object cleanup', () => {
 
     await expect(cleanupOrphanedTimelineObjects(database, objectStore, now, 0)).resolves.toBe(2);
     expect(deleted.sort()).toEqual(['timelines/cancelled.bin', 'timelines/orphan.bin']);
+    database.close();
+  });
+});
+
+describe('published object repair', () => {
+  it('requeues missing current-race objects from the durable outbox', async () => {
+    const now = 1_800_000_000_000;
+    const database = openDatabase(':memory:');
+    applyMigrations(database, migrationsDirectory, now);
+    const timelineKey = 'timelines/race-1/verified.bin';
+    const manifestKey = 'race-manifests/race-1.json';
+    const timelineBody = new Uint8Array([1, 2, 3]);
+    const manifestBody = new Uint8Array([4, 5, 6]);
+    database
+      .prepare(
+        `INSERT INTO races
+         (id, race_date, name, kind, status, version, distance_m, going,
+          scheduled_at, betting_opens_at, betting_closes_at, viewer_opens_at,
+          created_at, updated_at)
+         VALUES ('race-1', '2026-08-12', '復旧確認', 'regular', 'settled', 1, 1200, 'firm',
+                 100000, 80000, 90000, 70000, 1000, 1000)`,
+      )
+      .run();
+    database
+      .prepare(
+        `INSERT INTO race_simulations
+         (id, race_id, race_version, kind, status, seed_ciphertext, prng_version,
+          simulation_version, input_hash, timeline_object_key, timeline_sha256,
+          started_at, completed_at)
+         VALUES ('simulation-1', 'race-1', 1, 'official', 'completed', '{}', 'prng-v1',
+                 'simulation-v1', 'input-hash', ?, ?, 1000, 1000)`,
+      )
+      .run(timelineKey, 'timeline-hash');
+    const publications = new SqliteObjectPublicationStore(database);
+    publications.enqueue(timelineKey, timelineBody, { raceId: 'race-1' }, now);
+    publications.enqueue(manifestKey, manifestBody, { raceId: 'race-1' }, now);
+    for (const key of [timelineKey, manifestKey]) {
+      const publication = publications.claimDue(now, 'publisher');
+      expect(publication?.key).toBe(key);
+      publications.complete(publication!.id, 'publisher', now);
+    }
+    const objectStore: PrivateObjectStore = {
+      async put() {
+        return;
+      },
+      async get() {
+        return undefined;
+      },
+      async delete() {
+        return;
+      },
+      async list() {
+        return [];
+      },
+    };
+
+    await expect(repairMissingPublishedObjects(database, objectStore, now + 1)).resolves.toEqual({
+      requeued: [timelineKey, manifestKey],
+      unrecoverable: [],
+    });
+    expect(publications.claimDue(now + 1, 'repair-worker')?.key).toBe(timelineKey);
+    expect(publications.claimDue(now + 1, 'repair-worker')?.key).toBe(manifestKey);
     database.close();
   });
 });

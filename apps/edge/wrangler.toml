@@ -2,6 +2,9 @@ name = "jcb-race-edge"
 main = "dist/index.js"
 compatibility_date = "2026-08-01"
 
+[vars]
+WEB_ORIGIN = "https://josanism.space,https://jcb-race-web.pages.dev"
+
 [[r2_buckets]]
 binding = "TIMELINE_BUCKET"
 bucket_name = "jcb-race-timelines"

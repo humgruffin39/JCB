@@ -44,6 +44,27 @@ describe('Cloudflare release edge', () => {
     expect(response.headers.get('access-control-allow-headers')).toBe('authorization');
   });
 
+  it('allows each explicitly configured web origin and echoes the requesting origin', async () => {
+    const alternateOrigin = 'https://josanism.space';
+    const response = await handleEdgeRequest(
+      new Request(`https://edge.example.test/edge/v1/races/${raceId}/release`, {
+        method: 'OPTIONS',
+        headers: {
+          origin: alternateOrigin,
+          'access-control-request-method': 'GET',
+          'access-control-request-headers': 'authorization',
+        },
+      }),
+      {
+        ...environment(signedManifest(now + 1_000)),
+        WEB_ORIGIN: `${webOrigin},${alternateOrigin}`,
+      },
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe(alternateOrigin);
+  });
+
   it('rejects release before the signed scheduled start', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(now);
     const response = await requestRelease(validToken(), environment(signedManifest(now + 1_000)));

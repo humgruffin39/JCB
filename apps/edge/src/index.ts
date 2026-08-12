@@ -36,24 +36,27 @@ export async function handleEdgeRequest(
   request: Request,
   environment: Bindings,
 ): Promise<Response> {
+  const allowedOrigins = configuredOrigins(environment.WEB_ORIGIN);
+  let responseOrigin = allowedOrigins[0]!;
   try {
     const requestOrigin = request.headers.get('origin');
-    if (requestOrigin !== null && requestOrigin !== environment.WEB_ORIGIN) {
-      return errorResponse(403, 'ORIGIN_NOT_ALLOWED', environment.WEB_ORIGIN);
+    responseOrigin = selectResponseOrigin(requestOrigin, allowedOrigins);
+    if (requestOrigin !== null && !allowedOrigins.includes(requestOrigin)) {
+      return errorResponse(403, 'ORIGIN_NOT_ALLOWED', responseOrigin);
     }
     if (request.method === 'OPTIONS') {
-      const headers = corsHeaders(environment.WEB_ORIGIN);
+      const headers = corsHeaders(responseOrigin);
       headers.set('access-control-allow-methods', 'GET, OPTIONS');
       headers.set('access-control-allow-headers', 'authorization');
       headers.set('access-control-max-age', '86400');
       return new Response(null, { status: 204, headers });
     }
     if (request.method !== 'GET') {
-      return errorResponse(405, 'METHOD_NOT_ALLOWED', environment.WEB_ORIGIN);
+      return errorResponse(405, 'METHOD_NOT_ALLOWED', responseOrigin);
     }
     const url = new URL(request.url);
     const match = /^\/edge\/v1\/races\/([^/]+)\/(release|timeline)$/.exec(url.pathname);
-    if (match === null) return errorResponse(404, 'NOT_FOUND', environment.WEB_ORIGIN);
+    if (match === null) return errorResponse(404, 'NOT_FOUND', responseOrigin);
     let raceId: string;
     try {
       raceId = raceIdParamsSchema.parse({ raceId: decodeURIComponent(match[1]!) }).raceId;
@@ -72,11 +75,11 @@ export async function handleEdgeRequest(
       throw new EdgeRequestError(401, 'TOKEN_INVALID');
     }
     if (claims.raceId !== raceId || claims.guildId !== environment.DISCORD_GUILD_ID) {
-      return errorResponse(403, 'TOKEN_SCOPE_MISMATCH', environment.WEB_ORIGIN);
+      return errorResponse(403, 'TOKEN_SCOPE_MISMATCH', responseOrigin);
     }
     const manifestObject = await environment.TIMELINE_BUCKET.get(`race-manifests/${raceId}.json`);
     if (manifestObject === null) {
-      return errorResponse(503, 'MANIFEST_UNAVAILABLE', environment.WEB_ORIGIN);
+      return errorResponse(503, 'MANIFEST_UNAVAILABLE', responseOrigin);
     }
     let manifest: z.infer<typeof signedManifestSchema>['manifest'];
     try {
@@ -86,14 +89,14 @@ export async function handleEdgeRequest(
       throw new EdgeRequestError(409, 'MANIFEST_INVALID');
     }
     if (manifest.raceId !== raceId) {
-      return errorResponse(409, 'MANIFEST_RACE_MISMATCH', environment.WEB_ORIGIN);
+      return errorResponse(409, 'MANIFEST_RACE_MISMATCH', responseOrigin);
     }
     if (Date.now() < manifest.scheduledStart) {
-      return errorResponse(425, 'RACE_NOT_STARTED', environment.WEB_ORIGIN);
+      return errorResponse(425, 'RACE_NOT_STARTED', responseOrigin);
     }
     const timelineObject = await environment.TIMELINE_BUCKET.get(manifest.ciphertextObjectKey);
     if (timelineObject === null) {
-      return errorResponse(503, 'TIMELINE_UNAVAILABLE', environment.WEB_ORIGIN);
+      return errorResponse(503, 'TIMELINE_UNAVAILABLE', responseOrigin);
     }
     const timelineMetadata = Object.fromEntries(
       Object.entries(timelineObject.customMetadata ?? {}).map(([key, value]) => [
@@ -105,14 +108,14 @@ export async function handleEdgeRequest(
       timelineMetadata.sha256 !== manifest.ciphertextSha256 ||
       timelineMetadata.raceid !== raceId
     ) {
-      return errorResponse(409, 'TIMELINE_METADATA_INVALID', environment.WEB_ORIGIN);
+      return errorResponse(409, 'TIMELINE_METADATA_INVALID', responseOrigin);
     }
-    const headers = corsHeaders(environment.WEB_ORIGIN);
+    const headers = corsHeaders(responseOrigin);
     headers.set('cache-control', 'private, max-age=60');
     if (match[2] === 'timeline') {
       const timelineBytes = await new Response(timelineObject.body).arrayBuffer();
       if ((await sha256Hex(timelineBytes)) !== manifest.ciphertextSha256) {
-        return errorResponse(409, 'TIMELINE_INTEGRITY_INVALID', environment.WEB_ORIGIN);
+        return errorResponse(409, 'TIMELINE_INTEGRITY_INVALID', responseOrigin);
       }
       headers.set('content-type', 'application/octet-stream');
       headers.set('x-content-type-options', 'nosniff');
@@ -155,12 +158,12 @@ export async function handleEdgeRequest(
     );
   } catch (error) {
     if (error instanceof EdgeRequestError) {
-      return errorResponse(error.status, error.code, environment.WEB_ORIGIN);
+      return errorResponse(error.status, error.code, responseOrigin);
     }
     if (error instanceof ZodError) {
-      return errorResponse(400, 'VALIDATION_FAILED', environment.WEB_ORIGIN);
+      return errorResponse(400, 'VALIDATION_FAILED', responseOrigin);
     }
-    return errorResponse(500, 'EDGE_REQUEST_FAILED', environment.WEB_ORIGIN);
+    return errorResponse(500, 'EDGE_REQUEST_FAILED', responseOrigin);
   }
 }
 
@@ -315,6 +318,22 @@ function corsHeaders(origin: string): Headers {
     'access-control-allow-credentials': 'true',
     vary: 'Origin',
   });
+}
+
+function configuredOrigins(value: string): readonly string[] {
+  const origins = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  return origins.length === 0 ? [value] : origins;
+}
+
+function selectResponseOrigin(
+  requestOrigin: string | null,
+  allowedOrigins: readonly string[],
+): string {
+  if (requestOrigin !== null && allowedOrigins.includes(requestOrigin)) return requestOrigin;
+  return allowedOrigins[0]!;
 }
 
 function stableStringify(value: unknown): string {

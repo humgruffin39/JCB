@@ -12,6 +12,7 @@ import { SqliteGameUserStore } from './game-user-store.js';
 import type {
   HorseRecord,
   HorseWrite,
+  RaceEntryDraftInput,
   RaceDraftInput,
   RaceDraftPatch,
   RaceLockSettings,
@@ -23,6 +24,7 @@ export type { PurchaseBetInput, PurchasedBet } from './game-finance-store.js';
 export type {
   HorseRecord,
   HorseWrite,
+  RaceEntryDraftInput,
   RaceDraftInput,
   RaceDraftPatch,
   RaceLockSettings,

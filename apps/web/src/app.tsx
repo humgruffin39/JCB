@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { apiAbsoluteUrl, apiRequest, exchangeTicket, getRace, refreshCsrfToken } from './api.js';
 
+const DISCORD_RACE_CHANNEL_URL =
+  'https://discord.com/channels/1329013463175139380/1533526967217815735';
+
 const AdminTerminal = lazy(async () => {
   const module = await import('./admin-terminal.js');
   return { default: module.AdminTerminal };
@@ -126,7 +129,7 @@ async function initialize(): Promise<AppState> {
       if (raceId === null || raceId === undefined) {
         return {
           status: 'error',
-          message: 'レース情報がありません。Discordから開き直してください。',
+          message: 'レース情報がありません。Discordの#競馬から開き直してください。',
         };
       }
       window.history.replaceState(null, '', `/races/${encodeURIComponent(raceId)}`);
@@ -141,8 +144,8 @@ async function initialize(): Promise<AppState> {
       status: 'error',
       message:
         error instanceof Error
-          ? `${error.message} Discordから新しいリンクを発行して開き直してください。`
-          : 'レースを読み込めません。Discordから開き直してください。',
+          ? `${error.message} Discordの#競馬から新しいリンクを発行して開き直してください。`
+          : 'レースを読み込めません。Discordの#競馬から開き直してください。',
     };
   }
 }
@@ -165,9 +168,20 @@ function AccessState({ sessionExpired = false }: { readonly sessionExpired?: boo
   return (
     <section className="terminal-state">
       <h2>{sessionExpired ? '認証の有効期限が切れました' : 'Discordから開いてください'}</h2>
-      <p>レースチャンネルの「観戦する」から、一回限りのリンクを発行してください。</p>
-      <a className="primary-link" href="https://discord.com/app" target="_blank" rel="noreferrer">
-        Discordを開く
+      <p>
+        Discordの{' '}
+        <a
+          className="channel-link"
+          href={DISCORD_RACE_CHANNEL_URL}
+          target="_blank"
+          rel="noreferrer"
+        >
+          #競馬
+        </a>{' '}
+        の「観戦する」から、一回限りのリンクを発行してください。
+      </p>
+      <a className="primary-link" href={DISCORD_RACE_CHANNEL_URL} target="_blank" rel="noreferrer">
+        #競馬を開く
       </a>
     </section>
   );

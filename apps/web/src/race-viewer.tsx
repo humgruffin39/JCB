@@ -114,7 +114,7 @@ export function RaceViewer({
           setBetsError(
             error instanceof Error
               ? error.message
-              : '購入情報を取得できません。Discordから観戦リンクを開き直してください。',
+              : '購入情報を取得できません。Discordの#競馬から観戦リンクを開き直してください。',
           );
         }
       });

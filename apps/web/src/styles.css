@@ -319,6 +319,15 @@ main {
   font-size: 0.86rem;
 }
 
+.app-shell--state .terminal-state .channel-link {
+  color: #ffffff;
+  text-underline-offset: 0.16em;
+}
+
+.app-shell--state .terminal-state .channel-link:hover {
+  opacity: 0.72;
+}
+
 .app-shell--state .terminal-state .primary-link {
   min-height: 2.25rem;
   margin: 1rem 0 0;

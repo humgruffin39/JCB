@@ -86,7 +86,11 @@ export function createServerRouteContext(
       session.authenticationMethod === 'ticket' &&
       session.raceId !== options.raceId
     ) {
-      throw httpError(403, 'RACE_ACCESS_REQUIRED', 'このレースのDiscordリンクから開いてください。');
+      throw httpError(
+        403,
+        'RACE_ACCESS_REQUIRED',
+        'このレースはDiscordの#競馬から発行したリンクで開いてください。',
+      );
     }
     if (now() - session.lastGuildCheckAt >= GUILD_MEMBERSHIP_CACHE_MILLISECONDS) {
       if (!(await dependencies.membership.isCurrentMember(session.discordUserId))) {

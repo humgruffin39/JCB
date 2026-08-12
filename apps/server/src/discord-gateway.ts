@@ -174,7 +174,9 @@ export async function publishRaceMessage(input: {
     'DISCORD_RACE_CHANNEL_ID',
   );
   const channel = await input.client.channels.fetch(channelId);
-  if (channel === null || !channel.isSendable()) throw new Error('Race channel is not sendable.');
+  if (channel === null || !channel.isSendable()) {
+    throw new Error('The #競馬 channel is not sendable.');
+  }
   const detail = new SqliteViewerStore(input.database).getRaceDetail(input.raceId);
   const options = renderRaceMessage({
     raceId: detail.id,

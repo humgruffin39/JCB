@@ -54,6 +54,7 @@ import { registerLocalEdgeRoutes } from './local-edge.js';
 const SESSION_COOKIE = 'jcb_session';
 const OAUTH_STATE_COOKIE = 'jcb_oauth_state';
 const ONE_DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
+const GUILD_MEMBERSHIP_CACHE_MILLISECONDS = 15 * 60 * 1000;
 
 export interface ServerDependencies {
   readonly database: SqliteDatabase;
@@ -188,7 +189,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       }
       throw httpError(401, 'AUTH_REQUIRED', 'Authentication required.');
     }
-    if (now() - session.lastGuildCheckAt >= ONE_DAY_MILLISECONDS) {
+    if (now() - session.lastGuildCheckAt >= GUILD_MEMBERSHIP_CACHE_MILLISECONDS) {
       if (!(await dependencies.membership.isCurrentMember(session.discordUserId))) {
         authStore.revoke(sessionToken);
         throw httpError(403, 'GUILD_MEMBERSHIP_REQUIRED', 'Current guild membership is required.');
@@ -266,7 +267,22 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request, reply) => {
       const body = ticketExchangeSchema.parse(request.body);
-      const session = authStore.exchangeLoginTicket(body.ticket);
+      let session;
+      try {
+        session = authStore.exchangeLoginTicket(body.ticket);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /Login ticket is invalid|consumed concurrently/.test(error.message)
+        ) {
+          throw httpError(
+            410,
+            'LOGIN_TICKET_INVALID',
+            'This Discord link has expired or was already used.',
+          );
+        }
+        throw error;
+      }
       if (!(await dependencies.membership.isCurrentMember(session.discordUserId))) {
         authStore.revoke(session.sessionToken);
         throw httpError(403, 'GUILD_MEMBERSHIP_REQUIRED', 'Current guild membership is required.');
@@ -355,7 +371,22 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
         throw httpError(401, 'OAUTH_STATE_BROWSER_MISMATCH', 'Discord sign-in state is invalid.');
       }
       reply.clearCookie(OAUTH_STATE_COOKIE, { path: '/api/v1/auth/discord/callback' });
-      const oauthState = authStore.consumeOAuthState(query.state);
+      let oauthState;
+      try {
+        oauthState = authStore.consumeOAuthState(query.state);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /OAuth state is invalid|consumed concurrently/.test(error.message)
+        ) {
+          throw httpError(
+            410,
+            'OAUTH_STATE_INVALID',
+            'This Discord sign-in link has expired or was already used.',
+          );
+        }
+        throw error;
+      }
       const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },

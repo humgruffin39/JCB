@@ -12,7 +12,7 @@ const RaceTerminal = lazy(async () => {
 
 type AppState =
   | { readonly status: 'loading' }
-  | { readonly status: 'needs-discord' }
+  | { readonly status: 'needs-discord'; readonly reason?: 'session-expired' }
   | { readonly status: 'error'; readonly message: string }
   | { readonly status: 'race'; readonly raceId: string };
 
@@ -24,7 +24,25 @@ export function App() {
 
   useEffect(() => {
     if (isAdmin) return;
-    void initialize().then(setState);
+    let active = true;
+    let sessionExpired = false;
+    const handleAuthExpired = () => {
+      sessionExpired = true;
+      sessionStorage.removeItem('jcb.csrf');
+      for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+        const key = sessionStorage.key(index);
+        if (key?.startsWith('jcb.edge-token:')) sessionStorage.removeItem(key);
+      }
+      setState({ status: 'needs-discord', reason: 'session-expired' });
+    };
+    window.addEventListener('jcb:auth-expired', handleAuthExpired);
+    void initialize().then((nextState) => {
+      if (active && !sessionExpired) setState(nextState);
+    });
+    return () => {
+      active = false;
+      window.removeEventListener('jcb:auth-expired', handleAuthExpired);
+    };
   }, [isAdmin]);
 
   return (
@@ -44,7 +62,7 @@ export function App() {
         ) : state.status === 'loading' ? (
           <LoadingState />
         ) : state.status === 'needs-discord' ? (
-          <AccessState />
+          <AccessState sessionExpired={state.reason === 'session-expired'} />
         ) : state.status === 'error' ? (
           <ErrorState message={state.message} />
         ) : (
@@ -142,10 +160,10 @@ function LoadingState() {
   );
 }
 
-function AccessState() {
+function AccessState({ sessionExpired = false }: { readonly sessionExpired?: boolean }) {
   return (
     <section className="terminal-state">
-      <h2>Discordから開いてください</h2>
+      <h2>{sessionExpired ? '認証の有効期限が切れました' : 'Discordから開いてください'}</h2>
       <p>
         レースチャンネルの「詳細を見る」または「観戦する」から、一回限りのリンクを発行してください。
       </p>

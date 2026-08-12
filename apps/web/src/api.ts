@@ -38,6 +38,14 @@ export class ApiRequestError extends Error {
 
 let csrfRefreshPromise: Promise<string> | undefined;
 
+const AUTH_ERROR_CODES = new Set([
+  'AUTH_REQUIRED',
+  'ADMIN_REQUIRED',
+  'GUILD_MEMBERSHIP_REQUIRED',
+  'CSRF_TOKEN_INVALID',
+  'CSRF_TOKEN_REQUIRED',
+]);
+
 export async function apiRequest<Result>(path: string, init: RequestInit = {}): Promise<Result> {
   return apiRequestInternal<Result>(path, init, true);
 }
@@ -73,19 +81,7 @@ async function apiRequestInternal<Result>(
       response.status,
       error.success ? error.data.error.code : undefined,
     );
-    if (
-      typeof window !== 'undefined' &&
-      requestError.code !== undefined &&
-      [
-        'AUTH_REQUIRED',
-        'ADMIN_REQUIRED',
-        'GUILD_MEMBERSHIP_REQUIRED',
-        'CSRF_TOKEN_INVALID',
-        'CSRF_TOKEN_REQUIRED',
-      ].includes(requestError.code)
-    ) {
-      window.dispatchEvent(new Event('jcb:auth-expired'));
-    }
+    notifyAuthExpired(requestError);
     throw requestError;
   }
   if (
@@ -134,7 +130,10 @@ export async function refreshCsrfToken(): Promise<string> {
     .finally(() => {
       csrfRefreshPromise = undefined;
     });
-  return csrfRefreshPromise;
+  return csrfRefreshPromise.catch((error: unknown) => {
+    if (error instanceof ApiRequestError) notifyAuthExpired(error);
+    throw error;
+  });
 }
 
 export async function exchangeTicket(ticket: string): Promise<{
@@ -232,5 +231,15 @@ async function readJsonBody(response: Response): Promise<unknown> {
     return JSON.parse(text) as unknown;
   } catch {
     return undefined;
+  }
+}
+
+function notifyAuthExpired(error: ApiRequestError): void {
+  if (
+    typeof window !== 'undefined' &&
+    error.code !== undefined &&
+    AUTH_ERROR_CODES.has(error.code)
+  ) {
+    window.dispatchEvent(new Event('jcb:auth-expired'));
   }
 }

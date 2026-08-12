@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPublicSettings, getRace } from './api.js';
 import { RaceViewer } from './race-viewer.js';
 
@@ -8,13 +8,18 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
   const [race, setRace] = useState<RaceDetail>();
   const [error, setError] = useState<string>();
   const [pollMilliseconds, setPollMilliseconds] = useState(15_000);
+  const requestInFlight = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     try {
       setRace(await getRace(raceId));
       setError(undefined);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'レース情報を更新できません。');
+    } finally {
+      requestInFlight.current = false;
     }
   }, [raceId]);
 

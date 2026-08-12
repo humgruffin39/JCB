@@ -66,6 +66,9 @@ export function RaceViewer({
   const [finishSnapshot, setFinishSnapshot] = useState<string>();
   const [finishSnapshotUnavailable, setFinishSnapshotUnavailable] = useState(false);
   const [bets, setBets] = useState<readonly Bet[]>([]);
+  const [betsLoading, setBetsLoading] = useState(true);
+  const [betsError, setBetsError] = useState<string>();
+  const [betsRetry, setBetsRetry] = useState(0);
   const [result, setResult] = useState<RaceResult>();
   const [resultError, setResultError] = useState<string>();
   const [resultRetry, setResultRetry] = useState(0);
@@ -79,13 +82,25 @@ export function RaceViewer({
 
   useEffect(() => {
     let cancelled = false;
+    setBetsLoading(true);
+    setBetsError(undefined);
     void apiRequest<unknown>(`/api/v1/races/${encodeURIComponent(race.id)}/my-bets`)
       .then((value) => betResponseSchema.array().parse(value))
       .then((value) => {
-        if (!cancelled) setBets(value);
+        if (!cancelled) {
+          setBets(value);
+          setBetsLoading(false);
+        }
       })
-      .catch(() => {
-        if (!cancelled) setBets([]);
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setBetsLoading(false);
+          setBetsError(
+            error instanceof Error
+              ? error.message
+              : '購入情報を取得できません。Discordから観戦リンクを開き直してください。',
+          );
+        }
       });
     if (['finished', 'settling', 'settled'].includes(race.status)) {
       void getResult(race.id)
@@ -102,7 +117,7 @@ export function RaceViewer({
     return () => {
       cancelled = true;
     };
-  }, [race.id, race.status]);
+  }, [betsRetry, race.id, race.status]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -409,6 +424,12 @@ export function RaceViewer({
                 entries={race.entries}
                 finishOrder={result.finishOrder}
                 bets={bets}
+                betsLoading={betsLoading}
+                betsError={betsError}
+                onRetryBets={() => {
+                  setBetsError(undefined);
+                  setBetsRetry((value) => value + 1);
+                }}
                 onReplay={restart}
               />
             )
@@ -489,6 +510,9 @@ function ResultsScreen({
   entries,
   finishOrder,
   bets,
+  betsLoading,
+  betsError,
+  onRetryBets,
   onReplay,
 }: {
   readonly entries: RaceDetail['entries'];
@@ -498,6 +522,9 @@ function ResultsScreen({
     readonly finishTimeMs: number;
   }[];
   readonly bets: readonly Bet[];
+  readonly betsLoading: boolean;
+  readonly betsError: string | undefined;
+  readonly onRetryBets: () => void;
   readonly onReplay: () => void;
 }) {
   const topThree = finishOrder.slice(0, 3);
@@ -531,7 +558,16 @@ function ResultsScreen({
         <div>
           <h3 id="payout-heading">払戻</h3>
         </div>
-        {bets.length === 0 ? (
+        {betsLoading ? (
+          <p>購入情報を確認しています。</p>
+        ) : betsError !== undefined ? (
+          <>
+            <p>{betsError}</p>
+            <button className="replay-button" type="button" onClick={onRetryBets}>
+              購入情報を再取得
+            </button>
+          </>
+        ) : bets.length === 0 ? (
           <p>購入した馬券はありません</p>
         ) : (
           <ul>

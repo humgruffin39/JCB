@@ -128,16 +128,11 @@ async function initialize(): Promise<AppState> {
           message: 'レース情報がありません。Discordから開き直してください。',
         };
       }
-      localStorage.setItem('jcb.last-race', raceId);
       window.history.replaceState(null, '', `/races/${encodeURIComponent(raceId)}`);
       return { status: 'race', raceId };
     }
-    const pathMatch = /^\/races\/([^/]+)/.exec(window.location.pathname);
-    const raceId =
-      pathMatch === null
-        ? localStorage.getItem('jcb.last-race')
-        : decodeURIComponent(pathMatch[1]!);
-    if (raceId === null) return { status: 'needs-discord' };
+    const raceId = raceIdFromPathname(window.location.pathname);
+    if (raceId === undefined) return { status: 'needs-discord' };
     await getRace(raceId);
     return { status: 'race', raceId };
   } catch (error) {
@@ -149,6 +144,11 @@ async function initialize(): Promise<AppState> {
           : 'レースを読み込めません。Discordから開き直してください。',
     };
   }
+}
+
+export function raceIdFromPathname(pathname: string): string | undefined {
+  const pathMatch = /^\/races\/([^/]+)/.exec(pathname);
+  return pathMatch === null ? undefined : decodeURIComponent(pathMatch[1]!);
 }
 
 function LoadingState() {

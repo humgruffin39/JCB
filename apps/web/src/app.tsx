@@ -167,6 +167,9 @@ function AccessState({ sessionExpired = false }: { readonly sessionExpired?: boo
       <p>
         レースチャンネルの「詳細を見る」または「観戦する」から、一回限りのリンクを発行してください。
       </p>
+      <a className="primary-link" href="https://discord.com/app" target="_blank" rel="noreferrer">
+        Discordを開く
+      </a>
     </section>
   );
 }

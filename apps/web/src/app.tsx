@@ -1,5 +1,12 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { apiAbsoluteUrl, apiRequest, exchangeTicket, getRace, refreshCsrfToken } from './api.js';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import {
+  ApiRequestError,
+  apiAbsoluteUrl,
+  apiRequest,
+  exchangeTicket,
+  getRace,
+  refreshCsrfToken,
+} from './api.js';
 
 const DISCORD_RACE_CHANNEL_URL =
   'https://discord.com/channels/1329013463175139380/1533526967217815735';
@@ -60,7 +67,7 @@ export function App() {
       )}
       <main id="main">
         {isAdmin ? (
-          <Suspense fallback={<LoadingState admin />}>
+          <Suspense fallback={null}>
             <AdminGate />
           </Suspense>
         ) : state.status === 'loading' ? (
@@ -86,7 +93,8 @@ export function App() {
 }
 
 function AdminGate() {
-  const [status, setStatus] = useState<'checking' | 'authorized' | 'login'>('checking');
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const isRedirecting = useRef(false);
 
   useEffect(() => {
     const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
@@ -97,22 +105,21 @@ function AdminGate() {
     }
     void apiRequest<unknown>('/api/v1/admin/health')
       .then(refreshCsrfToken)
-      .then(() => setStatus('authorized'))
-      .catch(() => {
+      .then(() => setIsAuthorized(true))
+      .catch((error: unknown) => {
         sessionStorage.removeItem('jcb.csrf');
-        setStatus('login');
+        if (
+          error instanceof ApiRequestError &&
+          (error.status === 401 || error.status === 403) &&
+          !isRedirecting.current
+        ) {
+          isRedirecting.current = true;
+          window.location.replace(apiAbsoluteUrl('/api/v1/auth/discord/start'));
+        }
       });
   }, []);
 
-  if (status === 'authorized') return <AdminTerminal />;
-  if (status === 'checking') return <LoadingState admin />;
-  return (
-    <div className="terminal-state admin-auth-state">
-      <a className="primary-link" href={apiAbsoluteUrl('/api/v1/auth/discord/start')}>
-        認証する
-      </a>
-    </div>
-  );
+  return isAuthorized ? <AdminTerminal /> : null;
 }
 
 async function initialize(): Promise<AppState> {
@@ -153,15 +160,11 @@ export function raceIdFromPathname(pathname: string): string | undefined {
   return pathMatch === null ? undefined : decodeURIComponent(pathMatch[1]!);
 }
 
-function LoadingState({ admin = false }: { readonly admin?: boolean }) {
+function LoadingState() {
   return (
-    <section
-      className={`terminal-state${admin ? ' admin-auth-state' : ''}`}
-      aria-live="polite"
-      aria-busy="true"
-    >
+    <section className="terminal-state" aria-live="polite" aria-busy="true">
       <h2>読み込み中</h2>
-      {admin ? null : <p>認証とレース情報を確認しています。</p>}
+      <p>認証とレース情報を確認しています。</p>
     </section>
   );
 }

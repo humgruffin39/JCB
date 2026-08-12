@@ -150,12 +150,25 @@ async function initialize(): Promise<AppState> {
   } catch (error) {
     return {
       status: 'error',
-      message:
-        error instanceof Error
-          ? `${error.message} Discordの#競馬から新しいリンクを発行して開き直してください。`
-          : 'レースを読み込めません。Discordの#競馬から開き直してください。',
+      message: initializationErrorMessage(error),
     };
   }
+}
+
+const INITIALIZATION_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+  LOGIN_TICKET_INVALID: 'この観戦リンクは期限切れか、すでに使用されています。',
+  AUTH_REQUIRED: '観戦にはDiscordから発行されたリンクが必要です。',
+  GUILD_MEMBERSHIP_REQUIRED: 'このDiscordサーバーのメンバーだけが観戦できます。',
+  RACE_NOT_FOUND: 'レース情報が見つかりません。',
+};
+
+export function initializationErrorMessage(error: unknown): string {
+  const knownMessage =
+    error instanceof ApiRequestError && error.code !== undefined
+      ? INITIALIZATION_ERROR_MESSAGES[error.code]
+      : undefined;
+  const message = knownMessage ?? 'レースを読み込めません。';
+  return `${message}Discordの#競馬から新しいリンクを発行して開き直してください。`;
 }
 
 export function raceIdFromPathname(pathname: string): string | undefined {

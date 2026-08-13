@@ -53,7 +53,7 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     let result: unknown;
-    if (path.endsWith('/auth/csrf')) {
+    if (path.endsWith('/auth/csrf') || path.endsWith('/auth/admin/csrf')) {
       result = { csrfToken: 'test-csrf-token' };
     } else if (path.endsWith('/admin/health')) {
       result = { databaseReadWrite: true };

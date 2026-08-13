@@ -19,7 +19,9 @@ import type {
 } from './server-types.js';
 import type { AdminNotice } from './admin-notification.js';
 
-const SESSION_COOKIE = 'jcb_session';
+const RACE_SESSION_COOKIE = 'jcb_race_session';
+const ADMIN_SESSION_COOKIE = 'jcb_admin_session';
+const LEGACY_SESSION_COOKIE = 'jcb_session';
 const GUILD_MEMBERSHIP_CACHE_MILLISECONDS = 15 * 60 * 1000;
 
 export function createServerRouteContext(
@@ -64,7 +66,7 @@ export function createServerRouteContext(
     request: FastifyRequest,
     options: AuthenticateOptions = {},
   ): Promise<AuthenticatedSession> {
-    const sessionToken = request.cookies[SESSION_COOKIE];
+    const sessionToken = sessionTokenFromRequest(request, options.admin === true);
     if (sessionToken === undefined)
       throw httpError(401, 'AUTH_REQUIRED', 'Authentication required.');
     const csrfHeader = request.headers['x-csrf-token'];
@@ -92,22 +94,24 @@ export function createServerRouteContext(
         'このレースはDiscordの#競馬から発行したリンクで開いてください。',
       );
     }
-    if (now() - session.lastGuildCheckAt >= GUILD_MEMBERSHIP_CACHE_MILLISECONDS) {
+    if (options.admin) {
+      if (!authStore.isAdmin(session.discordUserId)) {
+        authStore.revoke(sessionToken);
+        throw httpError(403, 'ADMIN_REQUIRED', 'Administrator access is required.');
+      }
+      if (session.authenticationMethod !== 'discord_oauth') {
+        throw httpError(
+          403,
+          'ADMIN_OAUTH_REQUIRED',
+          'Administrator access requires Discord OAuth authentication.',
+        );
+      }
+    } else if (now() - session.lastGuildCheckAt >= GUILD_MEMBERSHIP_CACHE_MILLISECONDS) {
       if (!(await dependencies.membership.isCurrentMember(session.discordUserId))) {
         authStore.revoke(sessionToken);
         throw httpError(403, 'GUILD_MEMBERSHIP_REQUIRED', 'Current guild membership is required.');
       }
       authStore.markGuildChecked(session.id, now());
-    }
-    if (options.admin && !authStore.isAdmin(session.discordUserId)) {
-      throw httpError(403, 'ADMIN_REQUIRED', 'Administrator access is required.');
-    }
-    if (options.admin && session.authenticationMethod !== 'discord_oauth') {
-      throw httpError(
-        403,
-        'ADMIN_OAUTH_REQUIRED',
-        'Administrator access requires Discord OAuth authentication.',
-      );
     }
     return {
       id: session.id,
@@ -134,4 +138,16 @@ export function createServerRouteContext(
   };
 }
 
-export { SESSION_COOKIE };
+export function sessionTokenFromRequest(
+  request: FastifyRequest,
+  admin: boolean,
+): string | undefined {
+  const scopedCookie = admin ? ADMIN_SESSION_COOKIE : RACE_SESSION_COOKIE;
+  return (
+    request.cookies[scopedCookie] ??
+    request.cookies[LEGACY_SESSION_COOKIE] ??
+    (admin ? request.cookies[RACE_SESSION_COOKIE] : undefined)
+  );
+}
+
+export { ADMIN_SESSION_COOKIE, LEGACY_SESSION_COOKIE, RACE_SESSION_COOKIE };

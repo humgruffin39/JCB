@@ -3,6 +3,9 @@ import { createOpaqueToken, hashOpaqueToken } from '@jcb/application';
 import { timestamp, type Timestamp } from '@jcb/domain';
 import { ulid } from 'ulid';
 
+const TICKET_SESSION_LIFETIME_MILLISECONDS = 30 * 24 * 60 * 60 * 1_000;
+const ADMIN_SESSION_LIFETIME_MILLISECONDS = 10 * 365 * 24 * 60 * 60 * 1_000;
+
 export interface IssuedLoginTicket {
   readonly ticket: string;
   readonly expiresAt: Timestamp;
@@ -114,7 +117,12 @@ export class SqliteAuthStore {
         )
         .run(BigInt(this.now()), row.id);
       if (consume.changes !== 1) throw new Error('Login ticket was consumed concurrently.');
-      return this.insertSession(row.discordUserId, 'ticket', row.raceId ?? undefined);
+      return this.insertSession(
+        row.discordUserId,
+        'ticket',
+        row.raceId ?? undefined,
+        TICKET_SESSION_LIFETIME_MILLISECONDS,
+      );
     });
     return run.immediate();
   }
@@ -177,7 +185,12 @@ export class SqliteAuthStore {
   }
 
   public createOAuthSession(discordUserId: string): ExchangedSession {
-    return this.insertSession(discordUserId, 'discord_oauth');
+    return this.insertSession(
+      discordUserId,
+      'discord_oauth',
+      undefined,
+      ADMIN_SESSION_LIFETIME_MILLISECONDS,
+    );
   }
 
   public validateSession(sessionToken: string, csrfToken?: string): ValidSession {
@@ -222,6 +235,40 @@ export class SqliteAuthStore {
     return csrfToken;
   }
 
+  public getOrRotateCsrfToken(sessionToken: string, currentToken?: string): string {
+    if (currentToken !== undefined) {
+      const row = this.database
+        .prepare(
+          `SELECT csrf_token_hash AS csrfTokenHash
+           FROM web_sessions
+           WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ?`,
+        )
+        .get(hashOpaqueToken(sessionToken), BigInt(this.now())) as
+        { csrfTokenHash: string } | undefined;
+      if (row !== undefined && hashOpaqueToken(currentToken) === row.csrfTokenHash) {
+        return currentToken;
+      }
+    }
+    return this.rotateCsrfToken(sessionToken);
+  }
+
+  public renewOAuthSession(sessionToken: string): Timestamp | undefined {
+    const expiresAt = timestamp(this.now() + ADMIN_SESSION_LIFETIME_MILLISECONDS);
+    const update = this.database
+      .prepare(
+        `UPDATE web_sessions
+         SET expires_at = ?
+         WHERE token_hash = ? AND auth_method = 'discord_oauth' AND revoked_at IS NULL
+           AND expires_at > ?
+           AND EXISTS (
+             SELECT 1 FROM admin_allowlist
+             WHERE admin_allowlist.discord_user_id = web_sessions.discord_user_id
+           )`,
+      )
+      .run(BigInt(expiresAt), hashOpaqueToken(sessionToken), BigInt(this.now()));
+    return update.changes === 1 ? expiresAt : undefined;
+  }
+
   public markReauthenticated(
     sessionId: string,
     expectedDiscordUserId: string,
@@ -263,10 +310,11 @@ export class SqliteAuthStore {
     discordUserId: string,
     authenticationMethod: WebAuthenticationMethod,
     raceId?: string,
+    lifetimeMilliseconds = TICKET_SESSION_LIFETIME_MILLISECONDS,
   ): ExchangedSession {
     const sessionToken = createOpaqueToken();
     const csrfToken = createOpaqueToken();
-    const expiresAt = timestamp(this.now() + 30 * 24 * 60 * 60 * 1_000);
+    const expiresAt = timestamp(this.now() + lifetimeMilliseconds);
     this.database
       .prepare(
         `INSERT INTO web_sessions

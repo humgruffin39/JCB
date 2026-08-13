@@ -3,9 +3,11 @@ import {
   ApiRequestError,
   apiAbsoluteUrl,
   apiRequest,
+  clearCsrfToken,
   exchangeTicket,
   getRace,
   refreshCsrfToken,
+  setCsrfToken,
 } from './api.js';
 import { initializationErrorMessage as getInitializationErrorMessage } from './public-error-message.js';
 import { PublicState } from './public-state.js';
@@ -40,7 +42,7 @@ export function App() {
     let sessionExpired = false;
     const handleAuthExpired = () => {
       sessionExpired = true;
-      sessionStorage.removeItem('jcb.csrf');
+      clearCsrfToken('race');
       for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
         const key = sessionStorage.key(index);
         if (key?.startsWith('jcb.edge-token:')) sessionStorage.removeItem(key);
@@ -105,14 +107,14 @@ function AdminGate() {
     const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const csrfToken = fragment.get('csrf');
     if (csrfToken !== null) {
-      sessionStorage.setItem('jcb.csrf', csrfToken);
+      setCsrfToken('admin', csrfToken);
       window.history.replaceState(null, '', '/admin');
     }
     void apiRequest<unknown>('/api/v1/admin/health')
-      .then(refreshCsrfToken)
+      .then(() => refreshCsrfToken('admin'))
       .then(() => setIsAuthorized(true))
       .catch((error: unknown) => {
-        sessionStorage.removeItem('jcb.csrf');
+        clearCsrfToken('admin');
         if (
           error instanceof ApiRequestError &&
           (error.status === 401 || error.status === 403) &&

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { clearCsrfToken } from './api.js';
 import { HorseAdmin } from './horse-admin.js';
 import { RaceAdmin } from './race-admin.js';
 import { SystemAdmin } from './system-admin.js';
@@ -29,7 +30,7 @@ export function AdminTerminal() {
   };
   useEffect(() => {
     const handleAuthExpired = (): void => {
-      sessionStorage.removeItem('jcb.csrf');
+      clearCsrfToken('admin');
       window.location.assign('/admin');
     };
     window.addEventListener('jcb:auth-expired', handleAuthExpired);

@@ -389,6 +389,13 @@ export class SqliteAdminStore {
         if (count.count <= 1n) throw new Error('The final administrator cannot be removed.');
         throw new Error('Administrator was not found.');
       }
+      this.database
+        .prepare(
+          `UPDATE web_sessions SET revoked_at = ?
+           WHERE discord_user_id = ? AND auth_method = 'discord_oauth'
+             AND revoked_at IS NULL`,
+        )
+        .run(BigInt(this.now()), input.discordUserId);
       this.recordAudit({
         actorUserId: input.actorUserId,
         action: 'administrator.removed',

@@ -43,6 +43,14 @@ describe('web authentication store', () => {
     expect(store.validateSession(exchanged.sessionToken, rotatedCsrfToken).discordUserId).toBe(
       '123456',
     );
+    expect(store.getOrRotateCsrfToken(exchanged.sessionToken, rotatedCsrfToken)).toBe(
+      rotatedCsrfToken,
+    );
+    const recoveredCsrfToken = store.getOrRotateCsrfToken(exchanged.sessionToken, 'stale-token');
+    expect(recoveredCsrfToken).not.toBe(rotatedCsrfToken);
+    expect(store.validateSession(exchanged.sessionToken, recoveredCsrfToken).discordUserId).toBe(
+      '123456',
+    );
     store.revoke(exchanged.sessionToken);
     expect(() => store.validateSession(exchanged.sessionToken)).toThrow();
     now += 1;
@@ -77,6 +85,41 @@ describe('web authentication store', () => {
     store.markReauthenticated(validated.id, '987654', timestamp(now));
     expect(store.validateSession(session.sessionToken).reauthenticatedAt).toBe(now);
     now += 1;
+    database.close();
+  });
+
+  it('keeps allowlisted OAuth sessions persistent and does not renew removed admins', () => {
+    let now = 3_000;
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      now,
+    );
+    database
+      .prepare(
+        `INSERT INTO admin_allowlist (discord_user_id, added_by_user_id, created_at)
+         VALUES (?, NULL, ?)`,
+      )
+      .run('admin-1', BigInt(now));
+    const store = new SqliteAuthStore(database, () => now);
+    const session = store.createOAuthSession('admin-1');
+
+    expect(session.expiresAt).toBeGreaterThan(now + 365 * 24 * 60 * 60 * 1_000);
+    now += 123_000;
+    const renewedExpiresAt = store.renewOAuthSession(session.sessionToken);
+    expect(renewedExpiresAt).toBeDefined();
+    expect(renewedExpiresAt).toBeGreaterThan(now + 365 * 24 * 60 * 60 * 1_000);
+
+    const sessionId = store.validateSession(session.sessionToken).id;
+    database
+      .prepare('UPDATE web_sessions SET expires_at = ? WHERE id = ?')
+      .run(BigInt(now - 1), sessionId);
+    expect(store.renewOAuthSession(session.sessionToken)).toBeUndefined();
+
+    database.prepare('DELETE FROM admin_allowlist WHERE discord_user_id = ?').run('admin-1');
+    expect(store.renewOAuthSession(session.sessionToken)).toBeUndefined();
+
     database.close();
   });
 });

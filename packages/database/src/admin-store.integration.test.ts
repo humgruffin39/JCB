@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_GAME_SETTINGS, gameSettingsSchema } from '@jcb/config';
 import { timestamp } from '@jcb/domain';
 import { SqliteAdminStore } from './admin-store.js';
+import { SqliteAuthStore } from './auth-store.js';
 import { openDatabase } from './connection.js';
 import { SqliteGameStore, type HorseWrite } from './game-store.js';
 import { SqliteJobStore } from './job-store.js';
@@ -136,6 +137,33 @@ describe('admin operational store', () => {
         reason: 'test final administrator protection',
       }),
     ).toThrow(/final administrator/i);
+    database.close();
+  });
+
+  it('revokes every OAuth session when an administrator is removed', () => {
+    const now = 1_000;
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      now,
+    );
+    const game = new SqliteGameStore(database, () => now);
+    const admin = new SqliteAdminStore(database, () => now);
+    const auth = new SqliteAuthStore(database, () => now);
+    game.initializeEconomy(['123456', '654321']);
+    const actor = game.registerUser('654321', '管理者B', true);
+    const removedSession = auth.createOAuthSession('123456');
+    const retainedSession = auth.createOAuthSession('654321');
+
+    admin.removeAdministrator({
+      discordUserId: '123456',
+      actorUserId: actor.id,
+      reason: '権限削除時のセッション失効',
+    });
+
+    expect(() => auth.validateSession(removedSession.sessionToken)).toThrow();
+    expect(auth.validateSession(retainedSession.sessionToken).discordUserId).toBe('654321');
     database.close();
   });
 

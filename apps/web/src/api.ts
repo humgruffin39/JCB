@@ -36,29 +36,33 @@ export class ApiRequestError extends Error {
   }
 }
 
-let csrfRefreshPromise: Promise<string> | undefined;
+type AuthScope = 'race' | 'admin';
+
+const csrfRefreshPromises = new Map<AuthScope, Promise<string>>();
 
 const AUTH_ERROR_CODES = new Set([
   'AUTH_REQUIRED',
   'ADMIN_REQUIRED',
+  'ADMIN_OAUTH_REQUIRED',
   'GUILD_MEMBERSHIP_REQUIRED',
   'CSRF_TOKEN_INVALID',
   'CSRF_TOKEN_REQUIRED',
 ]);
 
 export async function apiRequest<Result>(path: string, init: RequestInit = {}): Promise<Result> {
-  return apiRequestInternal<Result>(path, init, true);
+  return apiRequestInternal<Result>(path, init, authScopeForPath(path), true);
 }
 
 async function apiRequestInternal<Result>(
   path: string,
   init: RequestInit,
+  scope: AuthScope,
   allowCsrfRetry: boolean,
 ): Promise<Result> {
   const headers = new Headers(init.headers);
   headers.set('accept', 'application/json');
   if (init.body !== undefined) headers.set('content-type', 'application/json');
-  const csrfToken = sessionStorage.getItem('jcb.csrf');
+  const csrfToken = getCsrfToken(scope);
   if (csrfToken !== null) headers.set('x-csrf-token', csrfToken);
   const response = await fetchWithTimeout(`${API_ORIGIN}${path}`, {
     ...init,
@@ -73,8 +77,8 @@ async function apiRequestInternal<Result>(
       error.success &&
       ['CSRF_TOKEN_INVALID', 'CSRF_TOKEN_REQUIRED'].includes(error.data.error.code)
     ) {
-      if (sessionStorage.getItem('jcb.csrf') === csrfToken) await refreshCsrfToken();
-      return apiRequestInternal<Result>(path, init, false);
+      if (getCsrfToken(scope) === csrfToken) await refreshCsrfToken(scope);
+      return apiRequestInternal<Result>(path, init, scope, false);
     }
     const requestError = new ApiRequestError(
       error.success ? error.data.error.message : `API error ${String(response.status)}`,
@@ -96,10 +100,17 @@ async function apiRequestInternal<Result>(
   return body.result as Result;
 }
 
-export async function refreshCsrfToken(): Promise<string> {
-  csrfRefreshPromise ??= fetchWithTimeout(`${API_ORIGIN}/api/v1/auth/csrf`, {
+export async function refreshCsrfToken(scope: AuthScope = 'race'): Promise<string> {
+  const existingPromise = csrfRefreshPromises.get(scope);
+  if (existingPromise !== undefined) return existingPromise;
+  const endpoint = scope === 'admin' ? '/api/v1/auth/admin/csrf' : '/api/v1/auth/csrf';
+  const currentToken = getCsrfToken(scope);
+  const headers = new Headers({ accept: 'application/json' });
+  if (currentToken !== null) headers.set('x-csrf-token', currentToken);
+  const refreshPromise = fetchWithTimeout(`${API_ORIGIN}${endpoint}`, {
     credentials: 'include',
-    headers: { accept: 'application/json' },
+    cache: 'no-store',
+    headers,
   })
     .then(async (response) => {
       const body = await readJsonBody(response);
@@ -124,13 +135,14 @@ export async function refreshCsrfToken(): Promise<string> {
       ) {
         throw new ApiRequestError('API response contract is invalid.', response.status);
       }
-      sessionStorage.setItem('jcb.csrf', body.result.csrfToken);
+      setCsrfToken(scope, body.result.csrfToken);
       return body.result.csrfToken;
     })
     .finally(() => {
-      csrfRefreshPromise = undefined;
+      csrfRefreshPromises.delete(scope);
     });
-  return csrfRefreshPromise.catch((error: unknown) => {
+  csrfRefreshPromises.set(scope, refreshPromise);
+  return refreshPromise.catch((error: unknown) => {
     if (error instanceof ApiRequestError) notifyAuthExpired(error);
     throw error;
   });
@@ -149,11 +161,23 @@ export async function exchangeTicket(ticket: string): Promise<{
     method: 'POST',
     body: JSON.stringify({ ticket }),
   });
-  sessionStorage.setItem('jcb.csrf', result.csrfToken);
+  setCsrfToken('race', result.csrfToken);
   if (result.edgeAccessToken !== undefined && result.raceId !== undefined) {
     sessionStorage.setItem(`jcb.edge-token:${result.raceId}`, result.edgeAccessToken);
   }
   return result;
+}
+
+export function getCsrfToken(scope: AuthScope): string | null {
+  return sessionStorage.getItem(`jcb.csrf:${scope}`);
+}
+
+export function setCsrfToken(scope: AuthScope, token: string): void {
+  sessionStorage.setItem(`jcb.csrf:${scope}`, token);
+}
+
+export function clearCsrfToken(scope: AuthScope): void {
+  sessionStorage.removeItem(`jcb.csrf:${scope}`);
 }
 
 export async function getRace(raceId: string) {
@@ -196,6 +220,10 @@ function readEnvironmentString(environment: unknown, key: string): string {
   }
   const value = (environment as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : '';
+}
+
+function authScopeForPath(path: string): AuthScope {
+  return path.startsWith('/api/v1/admin/') ? 'admin' : 'race';
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {

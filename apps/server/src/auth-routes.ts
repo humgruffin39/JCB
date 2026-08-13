@@ -1,10 +1,15 @@
 import { createEdgeAccessToken, createOpaqueToken } from '@jcb/application';
 import { discordOAuthCallbackSchema, ticketExchangeSchema } from '@jcb/contracts';
 import { timestamp } from '@jcb/domain';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { SESSION_COOKIE } from './server-context.js';
+import {
+  ADMIN_SESSION_COOKIE,
+  LEGACY_SESSION_COOKIE,
+  RACE_SESSION_COOKIE,
+  sessionTokenFromRequest,
+} from './server-context.js';
 import { envelope, httpError, oauthConfiguration } from './server-support.js';
 import type { ServerRouteContext } from './server-types.js';
 
@@ -39,13 +44,13 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
         authStore.revoke(session.sessionToken);
         throw httpError(403, 'GUILD_MEMBERSHIP_REQUIRED', 'Current guild membership is required.');
       }
-      reply.setCookie(SESSION_COOKIE, session.sessionToken, {
-        path: '/',
-        httpOnly: true,
-        secure: dependencies.environment.NODE_ENV === 'production',
-        sameSite: dependencies.environment.NODE_ENV === 'production' ? 'none' : 'lax',
-        expires: new Date(session.expiresAt),
-      });
+      setSessionCookie(
+        reply,
+        dependencies,
+        RACE_SESSION_COOKIE,
+        session.sessionToken,
+        session.expiresAt,
+      );
       let edgeAccessToken: string | undefined;
       if (
         session.raceId !== undefined &&
@@ -188,13 +193,13 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
         return reply.redirect(destination.toString());
       }
       const session = authStore.createOAuthSession(profile.id);
-      reply.setCookie(SESSION_COOKIE, session.sessionToken, {
-        path: '/',
-        httpOnly: true,
-        secure: dependencies.environment.NODE_ENV === 'production',
-        sameSite: dependencies.environment.NODE_ENV === 'production' ? 'none' : 'lax',
-        expires: new Date(session.expiresAt),
-      });
+      setSessionCookie(
+        reply,
+        dependencies,
+        ADMIN_SESSION_COOKIE,
+        session.sessionToken,
+        session.expiresAt,
+      );
       const destination = new URL('/admin', dependencies.environment.PUBLIC_WEB_ORIGIN);
       destination.hash = new URLSearchParams({ csrf: session.csrfToken }).toString();
       return reply.redirect(destination.toString());
@@ -203,15 +208,55 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
 
   app.post('/api/v1/auth/logout', async (request, reply) => {
     await authenticate(request, { csrf: true });
-    const token = request.cookies[SESSION_COOKIE]!;
+    const token = sessionTokenFromRequest(request, false)!;
     authStore.revoke(token);
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    reply.clearCookie(RACE_SESSION_COOKIE, { path: '/' });
+    reply.clearCookie(LEGACY_SESSION_COOKIE, { path: '/' });
     return envelope({ loggedOut: true });
   });
 
-  app.get('/api/v1/auth/csrf', async (request) => {
+  app.get('/api/v1/auth/csrf', async (request, reply) => {
     await authenticate(request);
-    const sessionToken = request.cookies[SESSION_COOKIE]!;
-    return envelope({ csrfToken: authStore.rotateCsrfToken(sessionToken) });
+    const sessionToken = sessionTokenFromRequest(request, false)!;
+    reply.header('cache-control', 'no-store');
+    return envelope({
+      csrfToken: authStore.getOrRotateCsrfToken(sessionToken, readCsrfHeader(request)),
+    });
   });
+
+  app.get('/api/v1/auth/admin/csrf', async (request, reply) => {
+    await authenticate(request, { admin: true });
+    const sessionToken = sessionTokenFromRequest(request, true)!;
+    const expiresAt = authStore.renewOAuthSession(sessionToken);
+    if (expiresAt !== undefined) {
+      setSessionCookie(reply, dependencies, ADMIN_SESSION_COOKIE, sessionToken, expiresAt);
+    }
+    reply.header('cache-control', 'no-store');
+    return envelope({
+      csrfToken: authStore.getOrRotateCsrfToken(sessionToken, readCsrfHeader(request)),
+    });
+  });
+}
+
+function setSessionCookie(
+  reply: FastifyReply,
+  dependencies: ServerRouteContext['dependencies'],
+  cookieName: string,
+  sessionToken: string,
+  expiresAt: number,
+): void {
+  reply.setCookie(cookieName, sessionToken, {
+    path: '/',
+    httpOnly: true,
+    secure: dependencies.environment.NODE_ENV === 'production',
+    sameSite: dependencies.environment.NODE_ENV === 'production' ? 'none' : 'lax',
+    expires: new Date(expiresAt),
+  });
+}
+
+function readCsrfHeader(
+  request: Parameters<ServerRouteContext['authenticate']>[0],
+): string | undefined {
+  const header = request.headers['x-csrf-token'];
+  return Array.isArray(header) ? header[0] : header;
 }

@@ -59,13 +59,14 @@ describe('server API contract', () => {
       DISCORD_CLIENT_SECRET: 'test-client-secret',
       DISCORD_REDIRECT_URI: 'http://localhost:3000/api/v1/auth/discord/callback',
     });
+    let isGuildMember = true;
     const app = await buildServer({
       database,
       environment,
       clock: new SystemClock(),
       membership: {
         async isCurrentMember() {
-          return true;
+          return isGuildMember;
         },
       },
     });
@@ -74,6 +75,8 @@ describe('server API contract', () => {
       ['GET', '/api/v1/auth/discord/start'],
       ['GET', '/api/v1/auth/discord/callback'],
       ['POST', '/api/v1/auth/logout'],
+      ['GET', '/api/v1/auth/csrf'],
+      ['GET', '/api/v1/auth/admin/csrf'],
       ['GET', '/api/v1/me'],
       ['GET', '/api/v1/races/:raceId'],
       ['GET', '/api/v1/races/:raceId/odds'],
@@ -137,6 +140,7 @@ describe('server API contract', () => {
     const setCookie = exchange.headers['set-cookie'];
     const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(';')[0];
     expect(cookie).toBeDefined();
+    expect(cookie).toMatch(/^jcb_race_session=/);
     const result = await app.inject({
       method: 'GET',
       url: `/api/v1/races/${race.id}/result`,
@@ -165,12 +169,32 @@ describe('server API contract', () => {
       error: { code: 'ADMIN_OAUTH_REQUIRED' },
     });
     const oauthSession = authStore.createOAuthSession('123456');
+    const oauthSessionId = authStore.validateSession(oauthSession.sessionToken).id;
+    database
+      .prepare('UPDATE web_sessions SET last_guild_check_at = 0 WHERE id = ?')
+      .run(oauthSessionId);
+    isGuildMember = false;
     const oauthAdmin = await app.inject({
       method: 'GET',
       url: '/api/v1/admin/health',
       headers: { cookie: `jcb_session=${oauthSession.sessionToken}` },
     });
     expect(oauthAdmin.statusCode).toBe(200);
+    const adminCsrf = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/admin/csrf',
+      headers: {
+        cookie: `jcb_session=${oauthSession.sessionToken}`,
+        'x-csrf-token': oauthSession.csrfToken,
+      },
+    });
+    expect(adminCsrf.statusCode).toBe(200);
+    expect(adminCsrf.headers['cache-control']).toBe('no-store');
+    expect(adminCsrf.json()).toMatchObject({
+      result: { csrfToken: oauthSession.csrfToken },
+    });
+    expect(adminCsrf.headers['set-cookie']).toContain('jcb_admin_session=');
+    isGuildMember = true;
 
     const resultSecret = Buffer.alloc(32, 7).toString('base64');
     const official = simulateOfficialRace(
@@ -324,6 +348,19 @@ describe('server API contract', () => {
       )
       .get(createdHorse.id) as { actorUserId: string | null };
     expect(horseAudit.actorUserId).toBeNull();
+
+    database.prepare('DELETE FROM admin_allowlist WHERE discord_user_id = ?').run('123456');
+    const removedAdmin = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/health',
+      headers: { cookie: `jcb_session=${oauthSession.sessionToken}` },
+    });
+    expect(removedAdmin.statusCode).toBe(403);
+    expect(removedAdmin.json()).toMatchObject({ error: { code: 'ADMIN_REQUIRED' } });
+    const revokedSession = database
+      .prepare('SELECT revoked_at AS revokedAt FROM web_sessions WHERE id = ?')
+      .get(oauthSessionId) as { revokedAt: bigint | null } | undefined;
+    expect(revokedSession?.revokedAt).not.toBeNull();
 
     await app.close();
     database.close();

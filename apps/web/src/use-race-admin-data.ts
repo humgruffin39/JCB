@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiRequest, getPublicSettings } from './api.js';
+import { apiRequest } from './api.js';
 import { useAdminToast } from './admin-toaster.js';
 import { useAdminPolling } from './use-admin-polling.js';
 import {
@@ -25,6 +25,10 @@ export interface UseRaceAdminData {
   readonly cancelRace: (race: AdminRace, reason: string) => Promise<void>;
 }
 
+interface AdminSettingsResponse {
+  readonly gameSettings: ScheduleSettings;
+}
+
 export function useRaceAdminData(): UseRaceAdminData {
   const [races, setRaces] = useState<readonly AdminRace[]>([]);
   const raceRequestId = useRef(0);
@@ -46,16 +50,17 @@ export function useRaceAdminData(): UseRaceAdminData {
 
   const refreshFormOptions = useCallback(async () => {
     try {
-      const [horseRows, publicSettings] = await Promise.all([
+      const [horseRows, adminSettings] = await Promise.all([
         apiRequest<readonly HorseOption[]>('/api/v1/admin/horses'),
-        getPublicSettings(),
+        apiRequest<AdminSettingsResponse>('/api/v1/admin/settings'),
       ]);
       setHorses(horseRows);
+      const settings = adminSettings.gameSettings;
       setSchedule({
-        recommendedLockTime: publicSettings.recommendedLockTime,
-        viewerOpenTime: publicSettings.viewerOpenTime,
-        bettingCloseTime: publicSettings.bettingCloseTime,
-        startTime: publicSettings.startTime,
+        recommendedLockTime: settings.recommendedLockTime,
+        viewerOpenTime: settings.viewerOpenTime,
+        bettingCloseTime: settings.bettingCloseTime,
+        startTime: settings.startTime,
       });
       setFormOptionsError('');
     } catch (caught) {

@@ -62,6 +62,8 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
       result = [{ ...race, status: raceReads > 1 ? 'locked' : 'draft' }];
     } else if (path.endsWith('/admin/horses')) {
       result = horses;
+    } else if (path.endsWith('/admin/settings')) {
+      result = { gameSettings: publicSettings, history: [] };
     } else if (path.endsWith('/settings/public')) {
       result = publicSettings;
     } else {

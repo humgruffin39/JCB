@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { clearCsrfToken } from './api.js';
+import { useRef, useState } from 'react';
 import { HorseAdmin } from './horse-admin.js';
 import { RaceAdmin } from './race-admin.js';
 import { SystemAdmin } from './system-admin.js';
@@ -28,14 +27,6 @@ export function AdminTerminal() {
     setSection(nextSection);
     tabRefs.current[nextSection]?.focus();
   };
-  useEffect(() => {
-    const handleAuthExpired = (): void => {
-      clearCsrfToken('admin');
-      window.location.assign('/admin');
-    };
-    window.addEventListener('jcb:auth-expired', handleAuthExpired);
-    return () => window.removeEventListener('jcb:auth-expired', handleAuthExpired);
-  }, []);
   return (
     <AdminToastProvider>
       <div className="admin-terminal">

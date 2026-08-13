@@ -16,11 +16,13 @@ test.beforeEach(async ({ page }) => {
     const result =
       path.endsWith('/auth/csrf') || path.endsWith('/auth/admin/csrf')
         ? { csrfToken: 'test-csrf-token' }
-        : path.endsWith('/settings/public')
-          ? publicSettings
-          : path.endsWith('/admin/health')
-            ? { databaseReadWrite: true }
-            : [];
+        : path.endsWith('/admin/settings')
+          ? { gameSettings: publicSettings, history: [] }
+          : path.endsWith('/settings/public')
+            ? publicSettings
+            : path.endsWith('/admin/health')
+              ? { databaseReadWrite: true }
+              : [];
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

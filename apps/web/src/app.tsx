@@ -101,9 +101,22 @@ export function App() {
 
 function AdminGate() {
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>();
   const isRedirecting = useRef(false);
 
   useEffect(() => {
+    let active = true;
+    const redirectToDiscord = (): void => {
+      if (isRedirecting.current) return;
+      isRedirecting.current = true;
+      window.location.replace(apiAbsoluteUrl('/api/v1/auth/discord/start'));
+    };
+    const handleAuthExpired = (): void => {
+      clearCsrfToken('admin');
+      redirectToDiscord();
+    };
+    window.addEventListener('jcb:auth-expired', handleAuthExpired);
+
     const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const csrfToken = fragment.get('csrf');
     if (csrfToken !== null) {
@@ -112,21 +125,41 @@ function AdminGate() {
     }
     void apiRequest<unknown>('/api/v1/admin/health')
       .then(() => refreshCsrfToken('admin'))
-      .then(() => setIsAuthorized(true))
+      .then(() => {
+        if (active) setIsAuthorized(true);
+      })
       .catch((error: unknown) => {
+        if (!active) return;
         clearCsrfToken('admin');
-        if (
-          error instanceof ApiRequestError &&
-          (error.status === 401 || error.status === 403) &&
-          !isRedirecting.current
-        ) {
-          isRedirecting.current = true;
-          window.location.replace(apiAbsoluteUrl('/api/v1/auth/discord/start'));
+        if (isAdminAuthenticationError(error)) {
+          redirectToDiscord();
+          return;
         }
+        setErrorMessage(adminGateErrorMessage(error));
       });
+
+    return () => {
+      active = false;
+      window.removeEventListener('jcb:auth-expired', handleAuthExpired);
+    };
   }, []);
 
-  return isAuthorized ? <AdminTerminal /> : null;
+  if (isAuthorized) return <AdminTerminal />;
+  if (errorMessage !== undefined) {
+    return <PublicState status="error" heading="管理画面を読み込めません" message={errorMessage} />;
+  }
+  return null;
+}
+
+function isAdminAuthenticationError(error: unknown): boolean {
+  return error instanceof ApiRequestError && (error.status === 401 || error.status === 403);
+}
+
+function adminGateErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError && error.status === 429) {
+    return 'アクセスが集中しています。少し待ってから開き直してください。';
+  }
+  return '管理画面に接続できません。時間をおいて開き直してください。';
 }
 
 async function initialize(): Promise<AppState> {

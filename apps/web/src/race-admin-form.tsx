@@ -9,6 +9,17 @@ import {
 } from './race-admin-model.js';
 import { entriesFor, moveTimestampToJstDate, raceKindForDate } from './race-admin-utils.js';
 
+function shuffled<T>(items: readonly T[]): T[] {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const randomValue = new Uint32Array(1);
+    crypto.getRandomValues(randomValue);
+    const randomIndex = Math.floor((randomValue[0]! / 2 ** 32) * (index + 1));
+    [result[index], result[randomIndex]] = [result[randomIndex]!, result[index]!];
+  }
+  return result;
+}
+
 export interface RaceFormProps {
   readonly horses: readonly HorseOption[];
   readonly schedule: ScheduleSettings;
@@ -112,6 +123,18 @@ export function RaceForm({
   }
 
   const activeHorseCount = horses.filter((horse) => horse.status !== 'retired').length;
+  function autoAssignHorses(): void {
+    const availableHorseIds = shuffled(horses.filter((horse) => horse.status !== 'retired'))
+      .slice(0, 8)
+      .map((horse) => horse.id);
+    if (availableHorseIds.length < 8) {
+      setError('レース作成には、引退していない馬が8頭必要です。');
+      return;
+    }
+    setSelectedHorseIds(availableHorseIds);
+    setError('');
+  }
+
   const distanceCandidate = Number(race?.distanceM ?? 1_200);
   const currentDistance = Number.isInteger(distanceCandidate) ? distanceCandidate : 1_200;
   const distanceOptions = Array.from(
@@ -169,7 +192,17 @@ export function RaceForm({
           </label>
         </div>
         <fieldset className="entry-selects">
-          <legend>出走馬（8頭）</legend>
+          <legend>
+            出走馬
+            <button
+              type="button"
+              className="text-button"
+              onClick={autoAssignHorses}
+              disabled={activeHorseCount < 8 || isSubmitting}
+            >
+              自動決定
+            </button>
+          </legend>
           {Array.from({ length: 8 }, (_, index) => {
             const selectedHorseId = selectedHorseIds[index] ?? '';
             return (

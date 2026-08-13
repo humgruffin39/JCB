@@ -84,6 +84,17 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   const createDialog = page.getByRole('dialog', { name: 'レースを作成' });
   await expect(createDialog).toBeVisible();
   await expect(createDialog.getByLabel('開催日')).toBeFocused();
+  const entryLegend = createDialog.locator('legend');
+  await expect(entryLegend).toContainText('出走馬');
+  await expect(entryLegend).not.toContainText('8頭');
+  await createDialog.getByRole('button', { name: '自動決定' }).click();
+  const automaticallyAssignedHorseIds = await createDialog
+    .locator('select[name^="horse-"]')
+    .evaluateAll((selects) =>
+      selects.map((select) => (select instanceof HTMLSelectElement ? select.value : '')),
+    );
+  expect(new Set(automaticallyAssignedHorseIds).size).toBe(8);
+  expect(automaticallyAssignedHorseIds.sort()).toEqual(horses.map((horse) => horse.id).sort());
   const distance = createDialog.getByRole('combobox', { name: '距離' });
   await expect(distance).toHaveValue('1200');
   await expect(distance.locator('option[value="1200"]')).toHaveText('1200m');

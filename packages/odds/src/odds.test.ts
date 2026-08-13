@@ -3,7 +3,7 @@ import { horseFixture } from '@jcb/test-support';
 import type { SimulationInput } from '@jcb/simulation';
 import { currentOddsTenths } from './current-odds.js';
 import { allocateSeedLiquidity, planAdaptiveSeedLiquidity } from './liquidity.js';
-import { generateProbabilities } from './probabilities.js';
+import { generateProbabilities, temperProbabilities } from './probabilities.js';
 
 const entries: readonly RaceEntry[] = Array.from({ length: 8 }, (_, index) => ({
   horseNumber: index + 1,
@@ -39,6 +39,20 @@ describe('odds generation', () => {
     for (const selection of result.win) {
       expect(selection.baseOdds).toBeCloseTo(1 / selection.modelProbability, 1);
     }
+  });
+
+  it('softens extreme probabilities while preserving their order', () => {
+    const tempered = temperProbabilities([0.7, 0.2, 0.08, 0.02], 1.8);
+
+    expect(tempered.reduce((sum, probability) => sum + probability, 0)).toBeCloseTo(1, 14);
+    expect(tempered[0]!).toBeLessThan(0.7);
+    expect(tempered[3]!).toBeGreaterThan(0.02);
+    expect(tempered[0]!).toBeGreaterThan(tempered[1]!);
+    expect(tempered[1]!).toBeGreaterThan(tempered[2]!);
+    expect(tempered[2]!).toBeGreaterThan(tempered[3]!);
+    expect(() => temperProbabilities([0.5, 0.5], 0.9)).toThrow(
+      'Odds temperature must be a finite number greater than or equal to 1.',
+    );
   });
 
   it('allocates every rupee of seed liquidity', () => {

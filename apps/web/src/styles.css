@@ -1193,19 +1193,25 @@ main {
 }
 
 .entry-selects legend {
-  display: flex;
+  display: grid;
   width: 100%;
   box-sizing: border-box;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-2);
-  padding: 0 var(--space-2) var(--space-2);
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: var(--space-2);
+  padding-inline: var(--space-2);
   color: var(--cyan);
   font: 700 0.75rem/1 var(--font-display);
-  border-bottom: 0.0625rem solid var(--line);
+}
+
+.entry-selects legend .entry-selects-divider {
+  align-self: center;
+  min-height: 1.75rem;
+  border-inline-start: 0.0625rem solid var(--line);
 }
 
 .entry-selects legend .text-button {
+  justify-self: end;
   font: inherit;
 }
 

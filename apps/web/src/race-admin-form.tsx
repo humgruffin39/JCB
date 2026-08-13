@@ -193,7 +193,8 @@ export function RaceForm({
         </div>
         <fieldset className="entry-selects">
           <legend>
-            出走馬
+            <span>出走馬</span>
+            <span className="entry-selects-divider" aria-hidden="true" />
             <button
               type="button"
               className="text-button"

@@ -1,8 +1,9 @@
 import { allTrifectaSelections } from '@jcb/domain';
 import { simulateOutcomeOnly, Xoshiro128StarStar, type SimulationInput } from '@jcb/simulation';
 
-export const ODDS_VERSION = 'outcome-20000-v3-preference-axis';
+export const ODDS_VERSION = 'outcome-20000-v4-preference-axis-temp18';
 export const DEFAULT_SIMULATION_COUNT = 20_000;
+export const ODDS_TEMPERATURE = 1.8;
 
 export interface SelectionProbability {
   readonly selectionCode: string;
@@ -54,12 +55,12 @@ export function generateProbabilities(
     const smoothed = (count + 0.25) / (simulationCount + 0.25 * 336);
     return 0.9 * smoothed + 0.1 * (1 / 336);
   });
-  const win = normalizeProbabilities(winRaw).map((probability, index) => ({
+  const win = temperProbabilities(winRaw, ODDS_TEMPERATURE).map((probability, index) => ({
     selectionCode: String(index + 1),
     modelProbability: probability,
     baseOdds: 1 / probability,
   }));
-  const trifecta = normalizeProbabilities(trifectaRaw).map((probability, index) => ({
+  const trifecta = temperProbabilities(trifectaRaw, ODDS_TEMPERATURE).map((probability, index) => ({
     selectionCode: trifectaSelections[index]!,
     modelProbability: probability,
     baseOdds: 1 / probability,
@@ -76,6 +77,16 @@ export function normalizeProbabilities(values: readonly number[]): readonly numb
   const withoutLast = normalized.slice(0, -1);
   const last = 1 - withoutLast.reduce((sum, value) => sum + value, 0);
   return [...withoutLast, last];
+}
+
+export function temperProbabilities(
+  values: readonly number[],
+  temperature: number,
+): readonly number[] {
+  if (!Number.isFinite(temperature) || temperature < 1) {
+    throw new Error('Odds temperature must be a finite number greater than or equal to 1.');
+  }
+  return normalizeProbabilities(values.map((value) => Math.pow(value, 1 / temperature)));
 }
 
 export function createCalibrationReport(result: ProbabilityResult): string {

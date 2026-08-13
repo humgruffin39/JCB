@@ -9,6 +9,7 @@ import {
 import { createRaceDramaFrame } from './race-drama.js';
 import type { HorseCoatColor } from './race-horse-model.js';
 import type { RaceSurface } from './race-environment.js';
+import { PublicState } from './public-state.js';
 
 export function RaceScene3D({
   frames,
@@ -173,15 +174,18 @@ export function RaceScene3D({
         <span className="sr-only" role="img" aria-label="8頭のレース進行アニメーション" />
       ) : null}
       {status === 'loading' ? (
-        <div className="race-scene-3d__state" role="status">
-          <span />
-          馬場を準備中
-        </div>
+        <PublicState
+          className="public-state--scene"
+          status="loading"
+          heading="レース映像を準備中"
+        />
       ) : null}
       {status === 'error' ? (
-        <div className="race-scene-3d__state race-scene-3d__state--error" role="alert">
-          3Dレースを読み込めません
-        </div>
+        <PublicState
+          className="public-state--scene"
+          status="error"
+          heading="レース画面を表示できません"
+        />
       ) : null}
     </div>
   );

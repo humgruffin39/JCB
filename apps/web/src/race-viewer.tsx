@@ -2,6 +2,7 @@ import { betResponseSchema } from '@jcb/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest, estimateServerOffset, getResult } from './api.js';
 import type { getRace } from './api.js';
+import { publicErrorMessage } from './public-error-message.js';
 import { synchronizedPosition } from './playback-clock.js';
 import { RaceScene3D } from './race-scene-3d.js';
 import { POST_FINISH_RUNOUT_MS } from './race-world-finish.js';
@@ -112,9 +113,10 @@ export function RaceViewer({
         if (!cancelled) {
           setBetsLoading(false);
           setBetsError(
-            error instanceof Error
-              ? error.message
-              : '購入情報を取得できません。Discordの#競馬から観戦リンクを開き直してください。',
+            publicErrorMessage(
+              error,
+              '購入情報を取得できません。Discordの#競馬から観戦リンクを開き直してください。',
+            ),
           );
         }
       });
@@ -197,7 +199,7 @@ export function RaceViewer({
           hasFailed = true;
           setViewer({
             state: 'error',
-            message: error instanceof Error ? error.message : 'レース映像を読み込めません',
+            message: publicErrorMessage(error, '通信を確認して、もう一度お試しください。'),
           });
         }
       } finally {

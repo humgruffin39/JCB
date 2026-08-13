@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getPublicSettings, getRace } from './api.js';
+import { publicErrorMessage } from './public-error-message.js';
+import { PublicState } from './public-state.js';
 import { RaceViewer } from './race-viewer.js';
 
 type RaceDetail = Awaited<ReturnType<typeof getRace>>;
@@ -23,7 +25,7 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
       }
     } catch (caught) {
       if (generation === requestGeneration.current) {
-        setError(caught instanceof Error ? caught.message : 'レース情報を更新できません。');
+        setError(publicErrorMessage(caught, '通信を確認しています。自動で再試行します。'));
       }
     } finally {
       if (generation === requestGeneration.current) requestInFlight.current = false;
@@ -59,9 +61,12 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
 
   if (race === undefined) {
     return (
-      <section className="race-loading" aria-live="polite" aria-busy="true">
-        <p>{error ?? 'レース情報を読み込んでいます'}</p>
-      </section>
+      <PublicState
+        status={error === undefined ? 'loading' : 'error'}
+        heading={error === undefined ? '読み込み中' : 'レース情報を読み込めません'}
+        message={error ?? 'レース情報を確認しています。'}
+        {...(error === undefined ? {} : { actionLabel: '再試行', onAction: () => void refresh() })}
+      />
     );
   }
 

@@ -1,5 +1,6 @@
 import { type CSSProperties } from 'react';
 import { SADDLECLOTH_COLORS } from './race-horse-model.js';
+import { PublicState } from './public-state.js';
 
 export interface BroadcastHudHorse {
   readonly horseNumber: number;
@@ -109,16 +110,13 @@ export function BroadcastState({
   readonly onRetry?: (() => void) | undefined;
 }) {
   return (
-    <div
-      className={`broadcast-state broadcast-state--${state}`}
-      role={state === 'error' ? 'alert' : 'status'}
-    >
-      <strong>{message}</strong>
-      {state === 'error' && onRetry !== undefined ? (
-        <button className="replay-button" type="button" onClick={onRetry}>
-          再試行
-        </button>
-      ) : null}
-    </div>
+    <PublicState
+      status={state === 'error' ? 'error' : state === 'waiting' ? 'waiting' : 'loading'}
+      heading={state === 'error' ? 'レース映像を読み込めません' : message}
+      {...(state === 'error' ? { message } : {})}
+      {...(state === 'error' && onRetry !== undefined
+        ? { actionLabel: '再試行', onAction: onRetry }
+        : {})}
+    />
   );
 }

@@ -7,6 +7,8 @@ import {
   getRace,
   refreshCsrfToken,
 } from './api.js';
+import { initializationErrorMessage as getInitializationErrorMessage } from './public-error-message.js';
+import { PublicState } from './public-state.js';
 
 const ACCESS_REDIRECT_URL = 'https://youtu.be/dQw4w9WgXcQ';
 
@@ -150,26 +152,12 @@ async function initialize(): Promise<AppState> {
   } catch (error) {
     return {
       status: 'error',
-      message: initializationErrorMessage(error),
+      message: getInitializationErrorMessage(error),
     };
   }
 }
 
-const INITIALIZATION_ERROR_MESSAGES: Readonly<Record<string, string>> = {
-  LOGIN_TICKET_INVALID: 'この観戦リンクは期限切れか、すでに使用されています。',
-  AUTH_REQUIRED: '観戦にはDiscordから発行されたリンクが必要です。',
-  GUILD_MEMBERSHIP_REQUIRED: 'このDiscordサーバーのメンバーだけが観戦できます。',
-  RACE_NOT_FOUND: 'レース情報が見つかりません。',
-};
-
-export function initializationErrorMessage(error: unknown): string {
-  const knownMessage =
-    error instanceof ApiRequestError && error.code !== undefined
-      ? INITIALIZATION_ERROR_MESSAGES[error.code]
-      : undefined;
-  const message = knownMessage ?? 'レースを読み込めません。';
-  return `${message}Discordの#競馬から新しいリンクを発行して開き直してください。`;
-}
+export { initializationErrorMessage } from './public-error-message.js';
 
 export function raceIdFromPathname(pathname: string): string | undefined {
   const pathMatch = /^\/races\/([^/]+)/.exec(pathname);
@@ -177,12 +165,7 @@ export function raceIdFromPathname(pathname: string): string | undefined {
 }
 
 function LoadingState() {
-  return (
-    <section className="terminal-state" aria-live="polite" aria-busy="true">
-      <h2>読み込み中</h2>
-      <p>認証とレース情報を確認しています。</p>
-    </section>
-  );
+  return <PublicState status="loading" heading="読み込み中" />;
 }
 
 function AccessRedirect() {
@@ -198,10 +181,5 @@ function AccessRedirect() {
 }
 
 function ErrorState({ message }: { readonly message: string }) {
-  return (
-    <section className="terminal-state terminal-state--error" role="alert">
-      <h2>レースを読み込めません</h2>
-      <p>{message}</p>
-    </section>
-  );
+  return <PublicState status="error" heading="レースを読み込めません" message={message} />;
 }

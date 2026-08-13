@@ -3,6 +3,7 @@ import { PodiumHorsePreview } from './podium-horse-preview.js';
 import { SADDLECLOTH_COLORS } from './race-horse-model.js';
 import type { FinishOrder } from './race-viewer-selectors.js';
 import type { getRace } from './api.js';
+import { PublicState } from './public-state.js';
 
 type RaceDetail = Awaited<ReturnType<typeof getRace>>;
 export interface Bet {
@@ -36,14 +37,14 @@ export function ResultUnavailable({
   readonly message: string | undefined;
   readonly onRetry: () => void;
 }) {
+  const isLoading = message === undefined;
   return (
-    <div className="results-screen" role="alert" aria-live="assertive">
-      <h2>公式結果を表示できません</h2>
-      <p>{message ?? '公式結果を確認しています。'}</p>
-      <button className="replay-button" type="button" onClick={onRetry}>
-        結果を再取得
-      </button>
-    </div>
+    <PublicState
+      status={isLoading ? 'loading' : 'error'}
+      heading={isLoading ? '公式結果を確認しています' : '公式結果を表示できません'}
+      {...(message === undefined ? {} : { message })}
+      {...(isLoading ? {} : { actionLabel: '結果を再取得', onAction: onRetry })}
+    />
   );
 }
 

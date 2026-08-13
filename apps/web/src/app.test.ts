@@ -27,7 +27,7 @@ describe('raceIdFromPathname', () => {
 
   it('does not expose raw backend text for unknown initialization errors', () => {
     expect(initializationErrorMessage(new Error('Internal server error.'))).toBe(
-      'レースを読み込めません。Discordの#競馬から新しいリンクを発行して開き直してください。',
+      'Discordの#競馬から新しいリンクを発行して開き直してください。',
     );
   });
 });

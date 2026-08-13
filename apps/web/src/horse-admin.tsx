@@ -6,6 +6,7 @@ import { AdminDialog } from './admin-dialog.js';
 import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { PreferenceSlider } from './preference-slider.js';
+import { formatDateKeyForDisplay } from './race-admin-utils.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
 interface Horse {
@@ -230,7 +231,7 @@ function HorsePerformancePanel({
           <tbody>
             {record.history.map((row) => (
               <tr key={row.raceId}>
-                <td>{row.raceDate}</td>
+                <td>{formatDateKeyForDisplay(row.raceDate)}</td>
                 <td>
                   {row.raceName} / {row.distanceM}m / {surfaceLabel(row.surface)}
                 </td>

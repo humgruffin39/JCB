@@ -8,7 +8,13 @@ import {
   type SqliteJobStore,
   type SqliteDatabase,
 } from '@jcb/database';
-import { jstDateTimeToTimestamp, timestamp, toJstDateKey, type Timestamp } from '@jcb/domain';
+import {
+  formatDateKeyForDisplay,
+  jstDateTimeToTimestamp,
+  timestamp,
+  toJstDateKey,
+  type Timestamp,
+} from '@jcb/domain';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { publishRaceMessage } from './discord-gateway.js';
@@ -259,7 +265,7 @@ export function createHandlers(
           level: 'warning',
           title: '本日のレースがまだ作成されていません',
           description: 'レース作成画面を確認してください。',
-          fields: [{ name: '対象日', value: date }],
+          fields: [{ name: '対象日', value: formatDateKeyForDisplay(date) }],
         });
       }
     },

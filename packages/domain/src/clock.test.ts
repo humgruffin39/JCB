@@ -1,6 +1,11 @@
-import { jstDateTimeToTimestamp, raceKindForJstDate } from './clock.js';
+import { formatDateKeyForDisplay, jstDateTimeToTimestamp, raceKindForJstDate } from './clock.js';
 
 describe('JST calendar validation', () => {
+  it('formats date keys for display without changing their calendar values', () => {
+    expect(formatDateKeyForDisplay('2001-01-01')).toBe('2001/01/01');
+    expect(formatDateKeyForDisplay('not-a-date')).toBe('not-a-date');
+  });
+
   it('rejects normalized but nonexistent calendar dates', () => {
     expect(() => jstDateTimeToTimestamp('2026-02-29', '22:00:00')).toThrow(/YYYY-MM-DD/);
     expect(() => jstDateTimeToTimestamp('2026-04-31', '22:00:00')).toThrow(/YYYY-MM-DD/);

@@ -24,6 +24,11 @@ export function toJstDateKey(value: Timestamp): string {
   return new Date(value + JST_OFFSET_MILLISECONDS).toISOString().slice(0, 10);
 }
 
+export function formatDateKeyForDisplay(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match === null ? value : `${match[1]}/${match[2]}/${match[3]}`;
+}
+
 export function jstDateTimeToTimestamp(dateKey: string, time: string): Timestamp {
   if (!isCalendarDate(dateKey) || !/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(time)) {
     throw new DomainError('INVALID_TIMESTAMP', 'JST date/time must use YYYY-MM-DD and HH:mm:ss.');

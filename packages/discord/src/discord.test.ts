@@ -28,7 +28,7 @@ describe('Discord contracts', () => {
       canView: false,
     });
     const description = message.embeds[0].data.description ?? '';
-    expect(description).toContain('開催日: 2026-08-03 / 1200m / 芝');
+    expect(description).toContain('開催日: 2026/08/03 / 1200m / 芝');
     expect(description).not.toContain('発走');
     expect(description).not.toContain('締切');
     expect(description).not.toContain('通常レース');

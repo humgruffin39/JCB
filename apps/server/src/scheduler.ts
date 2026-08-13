@@ -11,7 +11,13 @@ import {
   type RaceRecord,
   type SqliteDatabase,
 } from '@jcb/database';
-import { jstDateTimeToTimestamp, timestamp, toJstDateKey, type Timestamp } from '@jcb/domain';
+import {
+  formatDateKeyForDisplay,
+  jstDateTimeToTimestamp,
+  timestamp,
+  toJstDateKey,
+  type Timestamp,
+} from '@jcb/domain';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -457,7 +463,7 @@ function createHandlers(
           level: 'warning',
           title: '本日のレースがまだ作成されていません',
           description: 'レース作成画面を確認してください。',
-          fields: [{ name: '対象日', value: date }],
+          fields: [{ name: '対象日', value: formatDateKeyForDisplay(date) }],
         });
       }
     },

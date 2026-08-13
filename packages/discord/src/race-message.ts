@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { formatDateKeyForDisplay } from '@jcb/domain';
 import type { DiscordRaceCard } from './types.js';
 
 export function renderRaceMessage(card: DiscordRaceCard): {
@@ -10,7 +11,7 @@ export function renderRaceMessage(card: DiscordRaceCard): {
     .setTitle(card.name)
     .setDescription(
       [
-        `開催日: ${card.raceDate} / ${String(card.distanceM)}m / ${card.surfaceLabel}`,
+        `開催日: ${formatDateKeyForDisplay(card.raceDate)} / ${String(card.distanceM)}m / ${card.surfaceLabel}`,
         '',
         ...card.horses.map(
           (horse) =>

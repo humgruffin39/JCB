@@ -2,6 +2,7 @@ import { kindLabel, processStatusLabel, raceStatusLabel, raceStatusTone } from '
 import type { AdminRace } from './race-admin-model.js';
 import {
   entriesFor,
+  formatDateKeyForDisplay,
   formatConditionReadout,
   formatOddsRange,
   formatSeedLiquidity,
@@ -42,7 +43,8 @@ export function RaceAdminList({
           <header className="race-admin-card__header">
             <div>
               <p className="race-admin-card__eyebrow">
-                <time dateTime={race.raceDate}>{race.raceDate}</time> ・ v{String(race.version)}
+                <time dateTime={race.raceDate}>{formatDateKeyForDisplay(race.raceDate)}</time> ・ v
+                {String(race.version)}
               </p>
               <h3>{race.name}</h3>
               <p className="race-admin-card__meta">

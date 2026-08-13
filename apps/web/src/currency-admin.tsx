@@ -1,4 +1,5 @@
 import { TerminalPanel } from '@jcb/ui';
+import { formatDateKeyForDisplay } from './race-admin-utils.js';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   accountTypeLabel,
@@ -411,6 +412,7 @@ function formatOperationValue(
   moneyColumns: ReadonlySet<string>,
 ): string {
   if (moneyColumns.has(key)) return formatMoney(value);
+  if (key === 'raceDate') return formatDateKeyForDisplay(String(value ?? ''));
   if (key.toLowerCase().endsWith('at')) return formatTimestamp(value);
   if (key === 'accountType') return accountTypeLabel(String(value ?? ''));
   if (key === 'poolType') return poolTypeLabel(String(value ?? ''));

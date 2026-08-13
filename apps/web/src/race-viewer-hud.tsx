@@ -103,20 +103,15 @@ export function CourseProgressIndicator({ progress }: { readonly progress: numbe
 export function BroadcastState({
   state,
   message,
-  onRetry,
 }: {
   readonly state: string;
   readonly message: string;
-  readonly onRetry?: (() => void) | undefined;
 }) {
   return (
     <PublicState
       status={state === 'error' ? 'error' : state === 'waiting' ? 'waiting' : 'loading'}
       heading={state === 'error' ? 'レース映像を読み込めません' : message}
       {...(state === 'error' ? { message } : {})}
-      {...(state === 'error' && onRetry !== undefined
-        ? { actionLabel: '再試行', onAction: onRetry }
-        : {})}
     />
   );
 }

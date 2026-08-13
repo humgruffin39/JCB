@@ -65,7 +65,6 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
         status={error === undefined ? 'loading' : 'error'}
         heading={error === undefined ? '読み込み中' : 'レース情報を読み込めません'}
         message={error ?? 'レース情報を確認しています。'}
-        {...(error === undefined ? {} : { actionLabel: '再試行', onAction: () => void refresh() })}
       />
     );
   }

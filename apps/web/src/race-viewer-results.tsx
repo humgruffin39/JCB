@@ -30,20 +30,13 @@ export function FinishSnapshot({ snapshot }: { readonly snapshot: string }) {
   );
 }
 
-export function ResultUnavailable({
-  message,
-  onRetry,
-}: {
-  readonly message: string | undefined;
-  readonly onRetry: () => void;
-}) {
+export function ResultUnavailable({ message }: { readonly message: string | undefined }) {
   const isLoading = message === undefined;
   return (
     <PublicState
       status={isLoading ? 'loading' : 'error'}
       heading={isLoading ? '公式結果を確認しています' : '公式結果を表示できません'}
       {...(message === undefined ? {} : { message })}
-      {...(isLoading ? {} : { actionLabel: '結果を再取得', onAction: onRetry })}
     />
   );
 }
@@ -54,7 +47,6 @@ export interface ResultsScreenProps {
   readonly bets: readonly Bet[];
   readonly betsLoading: boolean;
   readonly betsError: string | undefined;
-  readonly onRetryBets: () => void;
   readonly onReplay: () => void;
 }
 
@@ -64,7 +56,6 @@ export function ResultsScreen({
   bets,
   betsLoading,
   betsError,
-  onRetryBets,
   onReplay,
 }: ResultsScreenProps) {
   const topThree = finishOrder.slice(0, 3);
@@ -101,12 +92,7 @@ export function ResultsScreen({
         {betsLoading ? (
           <p>購入情報を確認しています。</p>
         ) : betsError !== undefined ? (
-          <>
-            <p>{betsError}</p>
-            <button className="replay-button" type="button" onClick={onRetryBets}>
-              購入情報を再取得
-            </button>
-          </>
+          <p>{betsError}</p>
         ) : bets.length === 0 ? (
           <p>購入した馬券はありません</p>
         ) : (

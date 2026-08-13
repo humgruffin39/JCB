@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { PublicState, type PublicStateStatus } from './public-state.js';
 
 const statusCases = [
@@ -39,25 +39,13 @@ describe('PublicState', () => {
     expect(markup).not.toContain('public-state__action');
   });
 
-  it('renders an accessible action only when a callback is provided', () => {
-    const onAction = vi.fn();
+  it('does not render an action button', () => {
     const markup = renderToStaticMarkup(
-      <PublicState
-        status="error"
-        heading="読み込めません"
-        actionLabel="もう一度試す"
-        onAction={onAction}
-      />,
+      <PublicState status="error" heading="読み込めません" message="説明" />,
     );
 
-    expect(markup).toContain('class="public-state__action"');
-    expect(markup).toContain('もう一度試す');
-    expect(onAction).not.toHaveBeenCalled();
-
-    const defaultLabelMarkup = renderToStaticMarkup(
-      <PublicState status="unavailable" heading="利用できません" onAction={onAction} />,
-    );
-    expect(defaultLabelMarkup).toContain('再試行');
+    expect(markup).not.toContain('<button');
+    expect(markup).not.toContain('public-state__action');
   });
 
   it('keeps the base class when an integration-specific class is supplied', () => {

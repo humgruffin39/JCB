@@ -63,7 +63,6 @@ export function RaceViewer({
   const [phase, setPhase] = useState<PresentationPhase>('race');
   const [isSceneReady, setIsSceneReady] = useState(false);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
-  const [viewerRetry, setViewerRetry] = useState(0);
   const [trackedHorseNumber, setTrackedHorseNumber] = useState<number>();
   const [cameraMode, setCameraMode] = useState<RaceCameraMode>('follow');
   const [finishSnapshot, setFinishSnapshot] = useState<string>();
@@ -71,10 +70,8 @@ export function RaceViewer({
   const [bets, setBets] = useState<readonly Bet[]>([]);
   const [betsLoading, setBetsLoading] = useState(true);
   const [betsError, setBetsError] = useState<string>();
-  const [betsRetry, setBetsRetry] = useState(0);
   const [result, setResult] = useState<RaceResult>();
   const [resultError, setResultError] = useState<string>();
-  const [resultRetry, setResultRetry] = useState(0);
   const playbackPositionRef = useRef(0);
   const displayedPositionRef = useRef(0);
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
@@ -135,7 +132,7 @@ export function RaceViewer({
     return () => {
       cancelled = true;
     };
-  }, [betsRetry, race.id, race.status]);
+  }, [race.id, race.status]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -212,7 +209,7 @@ export function RaceViewer({
       isCancelled = true;
       window.clearInterval(interval);
     };
-  }, [offset, race.id, race.scheduledAt, race.status, viewerRetry]);
+  }, [offset, race.id, race.scheduledAt, race.status]);
 
   useEffect(() => {
     if (viewer.state !== 'ready' || phase !== 'race' || !isSceneReady || hasPlaybackStarted) {
@@ -302,7 +299,7 @@ export function RaceViewer({
     return () => {
       cancelled = true;
     };
-  }, [phase, race.id, result, resultRetry, viewer]);
+  }, [phase, race.id, result, viewer]);
 
   const timelineFinishOrder = useMemo(
     () =>
@@ -376,13 +373,7 @@ export function RaceViewer({
           {phase === 'photo' ? <PhotoFinish /> : null}
           {phase === 'results' ? (
             result === undefined ? (
-              <ResultUnavailable
-                message={resultError}
-                onRetry={() => {
-                  setResultError(undefined);
-                  setResultRetry((value) => value + 1);
-                }}
-              />
+              <ResultUnavailable message={resultError} />
             ) : (
               <ResultsScreen
                 entries={race.entries}
@@ -390,10 +381,6 @@ export function RaceViewer({
                 bets={bets}
                 betsLoading={betsLoading}
                 betsError={betsError}
-                onRetryBets={() => {
-                  setBetsError(undefined);
-                  setBetsRetry((value) => value + 1);
-                }}
                 onReplay={restart}
               />
             )
@@ -435,13 +422,7 @@ export function RaceViewer({
           ) : null}
         </>
       ) : (
-        <BroadcastState
-          state={viewer.state}
-          message={viewer.message}
-          onRetry={
-            viewer.state === 'error' ? () => setViewerRetry((value) => value + 1) : undefined
-          }
-        />
+        <BroadcastState state={viewer.state} message={viewer.message} />
       )}
       {connectionError === undefined ? null : (
         <p className="broadcast-connection" role="status">

@@ -18,6 +18,11 @@ describe('database retention maintenance', () => {
     auth.issueLoginTicket('user');
     auth.issueOAuthState();
     auth.createOAuthSession('user');
+    // Seed an old session explicitly so this retention test does not depend on
+    // the configured lifetime of newly issued OAuth sessions.
+    database
+      .prepare('UPDATE web_sessions SET expires_at = ? WHERE discord_user_id = ?')
+      .run(BigInt(now), 'user');
     now = 61 * 24 * 60 * 60 * 1_000;
 
     const result = new SqliteMaintenanceStore(database).cleanup(now);

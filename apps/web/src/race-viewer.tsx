@@ -21,6 +21,7 @@ import {
   selectOrderedHorses,
   selectTimelineFinishOrder,
 } from './race-viewer-selectors.js';
+import { RaceOrientationGate, useRaceViewerOrientation } from './race-viewer-orientation.js';
 import { loadTimeline, type TimelineFrame } from './race-timeline-loader.js';
 
 export { SoundControls, VolumeSlider } from './race-viewer-controls.js';
@@ -72,6 +73,7 @@ export function RaceViewer({
   const [betsError, setBetsError] = useState<string>();
   const [result, setResult] = useState<RaceResult>();
   const [resultError, setResultError] = useState<string>();
+  const broadcastRef = useRef<HTMLElement>(null);
   const playbackPositionRef = useRef(0);
   const displayedPositionRef = useRef(0);
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
@@ -323,6 +325,8 @@ export function RaceViewer({
     return selectCurrentFrame(viewer.frames, position, finalOrder, viewer.duration);
   }, [finalOrder, position, viewer]);
   const orderedHorses = useMemo(() => selectOrderedHorses(currentFrame), [currentFrame]);
+  const { isPortrait, isFullscreen, toggleImmersiveMode } = useRaceViewerOrientation(broadcastRef);
+  const shouldShowOrientationGate = viewer.state === 'ready' && phase !== 'results' && isPortrait;
 
   const restart = () => {
     setPhase('race');
@@ -336,23 +340,23 @@ export function RaceViewer({
 
   return (
     <section
+      ref={broadcastRef}
       className={`race-broadcast${phase === 'results' ? ' race-broadcast--results' : ''}`}
       aria-label={`${race.name} レース観戦`}
     >
-      {phase === 'race' && viewer.state === 'ready' && isSceneReady ? (
-        <BroadcastHud
-          raceName={race.name}
-          distanceM={race.distanceM}
-          surface={race.surface}
-          orderedHorses={orderedHorses}
-          position={position}
-          trackedHorseNumber={trackedHorseNumber}
-          onTrackHorse={setTrackedHorseNumber}
-        />
-      ) : null}
-
       {viewer.state === 'ready' ? (
-        <>
+        <div className="race-viewer-content" inert={shouldShowOrientationGate ? true : undefined}>
+          {phase === 'race' && isSceneReady ? (
+            <BroadcastHud
+              raceName={race.name}
+              distanceM={race.distanceM}
+              surface={race.surface}
+              orderedHorses={orderedHorses}
+              position={position}
+              trackedHorseNumber={trackedHorseNumber}
+              onTrackHorse={setTrackedHorseNumber}
+            />
+          ) : null}
           <RaceScene3D
             key={`${race.id}:${String(race.distanceM)}:${race.surface}`}
             frames={viewer.frames}
@@ -398,6 +402,7 @@ export function RaceViewer({
             <PlaybackControls
               isPaused={isPaused}
               cameraMode={cameraMode}
+              isFullscreen={isFullscreen}
               onPause={() => {
                 if (!isReplay) {
                   setIsReplay(true);
@@ -427,9 +432,10 @@ export function RaceViewer({
                 setTrackedHorseNumber(leader.horseNumber);
                 setCameraMode('horse');
               }}
+              onToggleFullscreen={() => void toggleImmersiveMode()}
             />
           ) : null}
-        </>
+        </div>
       ) : (
         <BroadcastState state={viewer.state} message={viewer.message} />
       )}
@@ -438,6 +444,12 @@ export function RaceViewer({
           通信再試行中
         </p>
       )}
+      {viewer.state === 'ready' ? (
+        <RaceOrientationGate
+          isVisible={shouldShowOrientationGate}
+          onEnterImmersiveMode={toggleImmersiveMode}
+        />
+      ) : null}
     </section>
   );
 }

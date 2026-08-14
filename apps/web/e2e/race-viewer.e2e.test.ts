@@ -126,6 +126,14 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
   });
 
   await page.goto('/races/viewer-test');
+  if (testInfo.project.name.startsWith('mobile-')) {
+    await expect(page.getByRole('heading', { name: '端末を横向きにしてください' })).toBeVisible({
+      timeout: 120_000,
+    });
+    await page.setViewportSize({ width: 640, height: 360 });
+    await expect(page.getByRole('heading', { name: '端末を横向きにしてください' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '全画面で見る' })).toBeVisible();
+  }
   await page
     .getByRole('button', { name: '一時停止' })
     .dispatchEvent('click', undefined, { timeout: 120_000 });

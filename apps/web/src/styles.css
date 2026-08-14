@@ -1818,12 +1818,60 @@ main {
   scale: 0.96;
 }
 
+.broadcast-fullscreen-button {
+  display: none;
+}
+
+@media (any-pointer: coarse) {
+  .broadcast-fullscreen-button {
+    display: inline-flex;
+  }
+}
+
 .broadcast-icon-button svg {
   display: block;
   width: 1.125rem;
   height: 1.125rem;
   overflow: visible;
   stroke-width: 2;
+}
+
+.race-orientation-gate {
+  position: absolute;
+  z-index: 200;
+  inset: 0;
+  display: grid;
+  padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+  place-items: center;
+  color: #f5f5f2;
+  background: #050505;
+  text-align: center;
+}
+
+.race-orientation-gate__content {
+  display: grid;
+  width: min(100%, 30rem);
+  justify-items: center;
+  gap: 0.75rem;
+}
+
+.race-orientation-gate h2 {
+  margin: 0;
+  font: 700 clamp(1.2rem, 4vw, 1.6rem) / 1.25 var(--font-display);
+  text-wrap: balance;
+}
+
+.race-orientation-gate p {
+  max-width: 28rem;
+  margin: 0;
+  color: rgb(255 255 255 / 72%);
+  font-size: 0.9rem;
+  text-wrap: balance;
+}
+
+.race-orientation-gate button {
+  margin-top: 0.5rem;
 }
 
 .volume-slider {

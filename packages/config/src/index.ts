@@ -14,6 +14,7 @@ const optionalPem = z.preprocess(
 );
 const optionalDiscordId = z.preprocess(emptyAsUndefined, discordId.optional());
 const optionalUrl = z.preprocess(emptyAsUndefined, z.url().optional());
+const nonNegativeDecimal = z.string().regex(/^(0|[1-9][0-9]*)$/);
 
 export const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -29,6 +30,13 @@ export const environmentSchema = z.object({
   DISCORD_RACE_CHANNEL_ID: optionalDiscordId,
   DISCORD_RANKING_CHANNEL_ID: optionalDiscordId,
   DISCORD_ADMIN_CHANNEL_ID: optionalDiscordId,
+  COUNT_CHANNEL_ID: optionalDiscordId,
+  COUNT_PENALTY_ROLE_ID: optionalDiscordId,
+  COUNT_FAILURE_EMOJI_ID: optionalDiscordId,
+  COUNT_CONSECUTIVE_WARNING_EMOJI_ID: optionalDiscordId,
+  COUNT_TIMEOUT_SECONDS: z.coerce.number().int().min(1).max(86_400).default(10),
+  COUNT_INITIAL_COUNT: z.preprocess(emptyAsUndefined, nonNegativeDecimal.default('0')),
+  COUNTING_STATE_IMPORT_PATH: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
   INITIAL_ADMIN_DISCORD_IDS: z.string().default(''),
   SESSION_SECRET: optionalSecret,
   TIMELINE_MASTER_SECRET: optionalSecret,
@@ -116,6 +124,13 @@ export function parseEnvironment(source: NodeJS.ProcessEnv): Environment {
         .includes(parsed.PUBLIC_WEB_ORIGIN)
     ) {
       throw new Error('CORS_ORIGINS must include PUBLIC_WEB_ORIGIN in production.');
+    }
+    if (parsed.COUNT_CHANNEL_ID !== undefined) {
+      for (const key of ['COUNT_PENALTY_ROLE_ID', 'COUNT_FAILURE_EMOJI_ID'] as const) {
+        if (parsed[key] === undefined) {
+          throw new Error(`${key} is required when COUNT_CHANNEL_ID is configured.`);
+        }
+      }
     }
   }
   return parsed;

@@ -33,6 +33,7 @@ try {
     'bets',
     'scheduled_jobs',
     'audit_logs',
+    'counting_state',
   ]) {
     if (!tables.has(table)) throw new Error(`Migration did not create ${table}.`);
   }

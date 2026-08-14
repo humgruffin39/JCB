@@ -58,6 +58,24 @@ describe('production environment', () => {
     );
   });
 
+  it('requires counting resources together when counting is enabled', () => {
+    expect(() =>
+      parseEnvironment({
+        ...validProductionEnvironment(),
+        COUNT_CHANNEL_ID: '100000000000000007',
+      }),
+    ).toThrow('COUNT_PENALTY_ROLE_ID is required when COUNT_CHANNEL_ID is configured.');
+    expect(
+      parseEnvironment({
+        ...validProductionEnvironment(),
+        COUNT_CHANNEL_ID: '100000000000000007',
+        COUNT_PENALTY_ROLE_ID: '100000000000000008',
+        COUNT_FAILURE_EMOJI_ID: '100000000000000009',
+        COUNT_INITIAL_COUNT: '144',
+      }).COUNT_INITIAL_COUNT,
+    ).toBe('144');
+  });
+
   it('requires an initial administrator and an exact public CORS origin', () => {
     expect(() =>
       parseEnvironment({

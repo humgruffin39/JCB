@@ -25,7 +25,12 @@ import { SqliteDiscordPurchaseGateway } from './discord-purchase-gateway.js';
 
 export function createDiscordClient(): Client {
   return new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
     allowedMentions: { parse: [] },
   });
 }

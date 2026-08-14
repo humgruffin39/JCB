@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { buildServer } from './build-app.js';
 import { R2BackupProbe } from './backup-probe.js';
 import { createDiscordClient, wireDiscordGateway } from './discord-gateway.js';
+import { wireCountingGateway } from './counting-bot/gateway.js';
 import { DiscordClientGuildMembership } from './guild-membership.js';
 import { buildAdminNoticeMessage } from './admin-notification.js';
 import { FilePrivateObjectStore, R2PrivateObjectStore } from './object-store.js';
@@ -26,9 +27,18 @@ const discordClient =
   environment.DISCORD_BOT_TOKEN === undefined || environment.DISCORD_GUILD_ID === undefined
     ? undefined
     : createDiscordClient();
+let countingGatewayForShutdown: ReturnType<typeof wireCountingGateway>;
 if (discordClient !== undefined) {
   wireDiscordGateway({ client: discordClient, database, environment, clock });
+  const countingGateway = wireCountingGateway({
+    client: discordClient,
+    database,
+    environment,
+    clock,
+  });
   await discordClient.login(environment.DISCORD_BOT_TOKEN);
+  await countingGateway?.initialize();
+  countingGatewayForShutdown = countingGateway;
 }
 if (
   environment.NODE_ENV === 'production' &&
@@ -108,6 +118,7 @@ const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, 'shutting down');
   await stopScheduler();
   await app.close();
+  await countingGatewayForShutdown?.shutdown();
   if (discordClient !== undefined) await discordClient.destroy();
   database.close();
 };

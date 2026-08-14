@@ -1833,7 +1833,18 @@ main {
 }
 
 .broadcast-loading-controls {
+  display: none;
   z-index: 140;
+}
+
+@media (max-width: 48rem) {
+  .broadcast-controls .broadcast-fullscreen-button {
+    display: inline-flex;
+  }
+
+  .broadcast-loading-controls {
+    display: flex;
+  }
 }
 
 .broadcast-icon-button svg {

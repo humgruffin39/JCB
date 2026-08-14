@@ -441,7 +441,7 @@ export function RaceViewer({
       ) : (
         <BroadcastState state={viewer.state} message={viewer.message} />
       )}
-      {isMobile && viewer.state !== 'ready' ? (
+      {viewer.state !== 'ready' ? (
         <div className="broadcast-controls broadcast-controls--mobile broadcast-loading-controls">
           <FullscreenControl
             isFullscreen={isFullscreen}

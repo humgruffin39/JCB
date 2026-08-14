@@ -3,10 +3,13 @@ export type BroadcastShotId =
   | 'launch-track'
   | 'first-turn-tower'
   | 'turn-exit'
+  | 'backstretch-wide'
   | 'backstretch-track'
   | 'rear-quarter'
   | 'backstretch-tower'
+  | 'far-turn-wide'
   | 'far-turn-head-on'
+  | 'final-turn-wide'
   | 'final-turn-track'
   | 'home-stretch-track'
   | 'finish-line'
@@ -77,6 +80,19 @@ const SHOTS = {
     positionDamping: 4.8,
     targetDamping: 6.2,
   },
+  backstretchWide: {
+    id: 'backstretch-wide',
+    movement: 'fixed',
+    anchorRaceProgress: 0.39,
+    tangentOffset: 8,
+    normalOffset: 32,
+    height: 10.5,
+    lookAhead: 0,
+    lookHeight: 1.3,
+    fieldOfView: 33,
+    positionDamping: 5,
+    targetDamping: 6.5,
+  },
   backstretchTrack: {
     id: 'backstretch-track',
     movement: 'tracking',
@@ -104,13 +120,26 @@ const SHOTS = {
   backstretchTower: {
     id: 'backstretch-tower',
     movement: 'fixed',
-    anchorRaceProgress: 0.59,
+    anchorRaceProgress: 0.53,
     tangentOffset: 5,
     normalOffset: 32,
     height: 11,
     lookAhead: 0.5,
     lookHeight: 1.25,
     fieldOfView: 32,
+    positionDamping: 5,
+    targetDamping: 6.5,
+  },
+  farTurnWide: {
+    id: 'far-turn-wide',
+    movement: 'fixed',
+    anchorRaceProgress: 0.72,
+    tangentOffset: 4,
+    normalOffset: 30,
+    height: 10.2,
+    lookAhead: 0.5,
+    lookHeight: 1.3,
+    fieldOfView: 33,
     positionDamping: 5,
     targetDamping: 6.5,
   },
@@ -125,6 +154,19 @@ const SHOTS = {
     fieldOfView: 32,
     positionDamping: 5.8,
     targetDamping: 7.5,
+  },
+  finalTurnWide: {
+    id: 'final-turn-wide',
+    movement: 'fixed',
+    anchorRaceProgress: 0.86,
+    tangentOffset: 5,
+    normalOffset: 30,
+    height: 10.2,
+    lookAhead: 0.5,
+    lookHeight: 1.35,
+    fieldOfView: 33,
+    positionDamping: 5,
+    targetDamping: 6.5,
   },
   finalTurnTrack: {
     id: 'final-turn-track',
@@ -143,7 +185,7 @@ const SHOTS = {
     movement: 'fixed',
     anchorRaceProgress: 0.93,
     tangentOffset: 20,
-    normalOffset: 30,
+    normalOffset: -30,
     height: 8.5,
     lookAhead: 0.5,
     lookHeight: 1.45,
@@ -184,11 +226,14 @@ export function selectBroadcastCameraShot(raceProgress: number): BroadcastCamera
   if (progress < 0.1) return SHOTS.launchTrack;
   if (progress < 0.22) return SHOTS.firstTurnTower;
   if (progress < 0.32) return SHOTS.turnExit;
-  if (progress < 0.45) return SHOTS.backstretchTrack;
-  if (progress < 0.56) return SHOTS.rearQuarter;
-  if (progress < 0.65) return SHOTS.backstretchTower;
-  if (progress < 0.78) return SHOTS.farTurnHeadOn;
-  if (progress < 0.865) return SHOTS.finalTurnTrack;
+  if (progress < 0.39) return SHOTS.backstretchWide;
+  if (progress < 0.48) return SHOTS.backstretchTrack;
+  if (progress < 0.56) return SHOTS.backstretchTower;
+  if (progress < 0.65) return SHOTS.rearQuarter;
+  if (progress < 0.73) return SHOTS.farTurnWide;
+  if (progress < 0.82) return SHOTS.farTurnHeadOn;
+  if (progress < 0.88) return SHOTS.finalTurnWide;
+  if (progress < 0.93) return SHOTS.finalTurnTrack;
   return SHOTS.homeStretchTrack;
 }
 

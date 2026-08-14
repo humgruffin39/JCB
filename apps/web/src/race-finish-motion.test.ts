@@ -76,19 +76,12 @@ describe('race finish motion', () => {
     expect(finishCameraPositionMs(100_000)).toBe(100_500);
   });
 
-  it('frames only the leading three horses from their captured finish positions', () => {
+  it('keeps a fixed finish-line frame instead of reframing around the horses', () => {
     const finishLine = sampleCourse(1);
-    const leadingPositions = [
-      finishLine.position.clone().addScaledVector(finishLine.tangent, 4),
-      finishLine.position.clone().addScaledVector(finishLine.tangent, -2),
-      finishLine.position.clone().addScaledVector(finishLine.tangent, -7),
-      finishLine.position.clone().addScaledVector(finishLine.tangent, -80),
-    ];
-    const camera = calculateFinishSnapshotCamera(finishLine, leadingPositions, 16 / 9);
+    const camera = calculateFinishSnapshotCamera(finishLine, 16 / 9);
 
-    expect(camera.targetPosition.x).toBeCloseTo(finishLine.position.x - 1.5, 6);
+    expect(camera.targetPosition.x).toBeCloseTo(finishLine.position.x, 6);
     expect(camera.targetPosition.z).toBeCloseTo(finishLine.position.z, 6);
-    expect(camera.fieldOfView).toBeGreaterThanOrEqual(34);
-    expect(camera.fieldOfView).toBeLessThan(56);
+    expect(camera.fieldOfView).toBe(34);
   });
 });

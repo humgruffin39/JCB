@@ -5,53 +5,21 @@ import type { FinishSnapshotCamera } from './race-world-types.js';
 
 export function calculateFinishSnapshotCamera(
   finishLine: Pick<CourseSample, 'position' | 'tangent' | 'normal'>,
-  horsePositions: readonly THREE.Vector3[],
   aspect: number,
   shot: BroadcastCameraShot = getFinishCameraShot(),
-  fallbackHorsePosition?: THREE.Vector3,
 ): FinishSnapshotCamera {
   const tangent = finishLine.tangent.clone().normalize();
   const normal = finishLine.normal.clone().normalize();
-  const validPositions = horsePositions.filter((position) =>
-    [position.x, position.y, position.z].every(Number.isFinite),
-  );
-  const candidates = [...validPositions]
-    .sort(
-      (left, right) =>
-        right.clone().sub(finishLine.position).dot(tangent) -
-        left.clone().sub(finishLine.position).dot(tangent),
-    )
-    .slice(0, 3);
-  const fallback = fallbackHorsePosition ?? finishLine.position;
-  const positions = candidates.length > 0 ? candidates : [fallback];
-  const along = positions.map((position) => position.clone().sub(finishLine.position).dot(tangent));
-  const across = positions.map((position) => position.clone().sub(finishLine.position).dot(normal));
-  const minimumAlong = Math.min(...along);
-  const maximumAlong = Math.max(...along);
-  const centerAlong = (minimumAlong + maximumAlong) / 2;
-  const centerAcross = across.reduce((sum, value) => sum + value, 0) / across.length;
-  const targetPosition = finishLine.position
-    .clone()
-    .addScaledVector(tangent, centerAlong)
-    .addScaledVector(normal, centerAcross);
+  const targetPosition = finishLine.position.clone().addScaledVector(tangent, shot.lookAhead);
   targetPosition.y = shot.lookHeight;
 
-  const normalDistance = Math.max(10, Math.abs(shot.normalOffset));
-  const framingMargin = 4.5;
-  const halfWidth = Math.max(6, (maximumAlong - minimumAlong) / 2 + framingMargin);
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
-  const requiredFieldOfView =
-    (2 * Math.atan(halfWidth / (normalDistance * safeAspect)) * 180) / Math.PI;
   const portraitCompensation = THREE.MathUtils.clamp(1.65 / safeAspect, 1, 1.42);
-  const fieldOfView = THREE.MathUtils.clamp(
-    Math.max(shot.fieldOfView * portraitCompensation, requiredFieldOfView),
-    18,
-    56,
-  );
+  const fieldOfView = THREE.MathUtils.clamp(shot.fieldOfView * portraitCompensation, 18, 56);
   const cameraPosition = finishLine.position
     .clone()
-    .addScaledVector(tangent, centerAlong + shot.tangentOffset)
-    .addScaledVector(normal, centerAcross + shot.normalOffset);
+    .addScaledVector(tangent, shot.tangentOffset)
+    .addScaledVector(normal, shot.normalOffset);
   cameraPosition.y = shot.height;
   return { cameraPosition, targetPosition, fieldOfView };
 }

@@ -7,21 +7,29 @@ import {
 
 describe('race camera director', () => {
   it('covers the full race with a deliberate broadcast sequence', () => {
-    const checkpoints = [0, 0.04, 0.12, 0.25, 0.36, 0.5, 0.6, 0.7, 0.82, 0.9, 0.98, 1];
-    expect(checkpoints.map((progress) => selectBroadcastCameraShot(progress).id)).toEqual([
+    const checkpoints = [0, 0.04, 0.12, 0.25, 0.36, 0.44, 0.5, 0.6, 0.7, 0.76, 0.84, 0.9, 0.98, 1];
+    const shots = checkpoints.map((progress) => selectBroadcastCameraShot(progress));
+    expect(shots.map((shot) => shot.id)).toEqual([
       'break',
       'launch-track',
       'first-turn-tower',
       'turn-exit',
+      'backstretch-wide',
       'backstretch-track',
-      'rear-quarter',
       'backstretch-tower',
+      'rear-quarter',
+      'far-turn-wide',
       'far-turn-head-on',
+      'final-turn-wide',
       'final-turn-track',
       'home-stretch-track',
       'home-stretch-track',
-      'home-stretch-track',
     ]);
+    for (let index = 1; index < shots.length; index += 1) {
+      if (shots[index - 1]!.movement === 'tracking') {
+        expect(shots[index]!.movement).toBe('fixed');
+      }
+    }
   });
 
   it('provides a fixed side camera for the captured finish frame', () => {
@@ -38,7 +46,7 @@ describe('race camera director', () => {
     expect(shot.id).toBe('home-stretch-track');
     expect(shot.movement).toBe('fixed');
     expect(shot.anchorRaceProgress).toBeCloseTo(0.93, 6);
-    expect(shot.normalOffset).toBeGreaterThan(20);
+    expect(shot.normalOffset).toBeLessThan(-20);
     expect(shot.fieldOfView).toBeGreaterThanOrEqual(32);
   });
 

@@ -347,15 +347,8 @@ export class RaceWorld {
       this.finishSnapshotAttempts < 3 &&
       state.frame.horses.some((horse) => horse.progress >= 1)
     ) {
-      const firstFinisher = this.horses
-        .filter((horse) => horse.visualFinishTimeMs !== undefined)
-        .sort(
-          (left, right) =>
-            (left.visualFinishTimeMs ?? Number.POSITIVE_INFINITY) -
-            (right.visualFinishTimeMs ?? Number.POSITIVE_INFINITY),
-        )[0];
       this.finishSnapshotAttempts += 1;
-      const snapshot = this.captureFinishSnapshot(firstFinisher);
+      const snapshot = this.captureFinishSnapshot();
       if (snapshot !== undefined) {
         this.finishSnapshotDataUrl = snapshot;
         this.onFinishSnapshot?.(snapshot);
@@ -369,20 +362,14 @@ export class RaceWorld {
     this.renderer.render(this.scene, this.camera);
   }
 
-  private captureFinishSnapshot(firstFinisher?: AnimatedHorse): string | undefined {
+  private captureFinishSnapshot(): string | undefined {
     const shot = getFinishCameraShot();
     const finishLine = sampleCourse(
       raceProgressToCourseProgress(shot.anchorRaceProgress ?? 1, 0, this.distanceM),
       0,
       this.distanceM,
     );
-    const snapshotCamera = calculateFinishSnapshotCamera(
-      finishLine,
-      this.horses.filter((horse) => horse.initialized).map((horse) => horse.rig.root.position),
-      this.camera.aspect,
-      shot,
-      firstFinisher?.rig.root.position,
-    );
+    const snapshotCamera = calculateFinishSnapshotCamera(finishLine, this.camera.aspect, shot);
     const previousPosition = this.camera.position.clone();
     const previousQuaternion = this.camera.quaternion.clone();
     const previousFieldOfView = this.camera.fov;

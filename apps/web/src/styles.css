@@ -2045,7 +2045,7 @@ main {
   place-content: center;
   color: var(--horse-number-text);
   background: var(--horse-number-fill);
-  border: 0.0625rem solid rgb(255 255 255 / 48%);
+  border: 0.0625rem solid var(--horse-number-border, rgb(255 255 255 / 48%));
   box-shadow: 0 0.2rem 0.55rem rgb(0 0 0 / 28%);
   font-family: var(--font-display);
   font-weight: 900;

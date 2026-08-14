@@ -137,6 +137,8 @@ export function getSaddleclothStyle(horseNumber: number): CSSProperties {
   return {
     '--horse-number-fill': colors.background,
     '--horse-number-text': colors.foreground,
+    '--horse-number-border':
+      horseNumber === 1 || horseNumber === 5 ? '#111111' : 'rgb(255 255 255 / 48%)',
   } as CSSProperties;
 }
 

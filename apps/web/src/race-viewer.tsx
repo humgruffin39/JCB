@@ -8,7 +8,7 @@ import { RaceScene3D } from './race-scene-3d.js';
 import { finishCameraPositionMs } from './race-world-finish.js';
 import type { RaceCameraMode } from './race-world-types.js';
 import { BroadcastHud, BroadcastState } from './race-viewer-hud.js';
-import { PlaybackControls } from './race-viewer-controls.js';
+import { FullscreenControl, PlaybackControls } from './race-viewer-controls.js';
 import {
   FinishSnapshot,
   PhotoFinish,
@@ -325,7 +325,8 @@ export function RaceViewer({
     return selectCurrentFrame(viewer.frames, position, finalOrder, viewer.duration);
   }, [finalOrder, position, viewer]);
   const orderedHorses = useMemo(() => selectOrderedHorses(currentFrame), [currentFrame]);
-  const { isPortrait, isFullscreen, toggleImmersiveMode } = useRaceViewerOrientation(broadcastRef);
+  const { isMobile, isPortrait, isFullscreen, toggleImmersiveMode } =
+    useRaceViewerOrientation(broadcastRef);
   const shouldShowOrientationGate = viewer.state === 'ready' && phase !== 'results' && isPortrait;
 
   const restart = () => {
@@ -402,6 +403,7 @@ export function RaceViewer({
             <PlaybackControls
               isPaused={isPaused}
               cameraMode={cameraMode}
+              isMobile={isMobile}
               isFullscreen={isFullscreen}
               onPause={() => {
                 if (!isReplay) {
@@ -439,6 +441,14 @@ export function RaceViewer({
       ) : (
         <BroadcastState state={viewer.state} message={viewer.message} />
       )}
+      {isMobile && viewer.state !== 'ready' ? (
+        <div className="broadcast-controls broadcast-controls--mobile broadcast-loading-controls">
+          <FullscreenControl
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => void toggleImmersiveMode()}
+          />
+        </div>
+      ) : null}
       {connectionError === undefined ? null : (
         <p className="broadcast-connection" role="status">
           通信再試行中

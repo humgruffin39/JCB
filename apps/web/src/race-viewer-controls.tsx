@@ -14,22 +14,44 @@ import type { RaceCameraMode } from './race-world.js';
 export interface PlaybackControlsProps {
   readonly isPaused: boolean;
   readonly cameraMode: RaceCameraMode;
+  readonly isMobile: boolean;
   readonly isFullscreen: boolean;
   readonly onPause: () => void;
   readonly onToggleCamera: () => void;
   readonly onToggleFullscreen: () => void;
 }
 
+export interface FullscreenControlProps {
+  readonly isFullscreen: boolean;
+  readonly onToggleFullscreen: () => void;
+}
+
+export function FullscreenControl({ isFullscreen, onToggleFullscreen }: FullscreenControlProps) {
+  return (
+    <button
+      className="broadcast-icon-button broadcast-fullscreen-button"
+      type="button"
+      aria-label={isFullscreen ? '全画面を終了' : '全画面で見る'}
+      aria-pressed={isFullscreen}
+      title={isFullscreen ? '全画面を終了' : '全画面で見る'}
+      onClick={onToggleFullscreen}
+    >
+      {isFullscreen ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+    </button>
+  );
+}
+
 export function PlaybackControls({
   isPaused,
   cameraMode,
+  isMobile,
   isFullscreen,
   onPause,
   onToggleCamera,
   onToggleFullscreen,
 }: PlaybackControlsProps) {
   return (
-    <div className="broadcast-controls">
+    <div className={`broadcast-controls${isMobile ? ' broadcast-controls--mobile' : ''}`}>
       <button
         className="broadcast-icon-button broadcast-camera-button"
         type="button"
@@ -53,16 +75,7 @@ export function PlaybackControls({
       >
         {isPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
       </button>
-      <button
-        className="broadcast-icon-button broadcast-fullscreen-button"
-        type="button"
-        aria-label={isFullscreen ? '全画面を終了' : '全画面で見る'}
-        aria-pressed={isFullscreen}
-        title={isFullscreen ? '全画面を終了' : '全画面で見る'}
-        onClick={onToggleFullscreen}
-      >
-        {isFullscreen ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
-      </button>
+      <FullscreenControl isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} />
     </div>
   );
 }

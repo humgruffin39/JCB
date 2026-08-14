@@ -1828,6 +1828,14 @@ main {
   }
 }
 
+.broadcast-controls--mobile .broadcast-fullscreen-button {
+  display: inline-flex;
+}
+
+.broadcast-loading-controls {
+  z-index: 140;
+}
+
 .broadcast-icon-button svg {
   display: block;
   width: 1.125rem;

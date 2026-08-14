@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { selectServerOffset, synchronizedPosition } from './playback-clock.js';
+import {
+  selectServerOffset,
+  shouldCommitPlaybackPosition,
+  synchronizedPosition,
+} from './playback-clock.js';
 
 describe('viewer synchronization clock', () => {
   it('keeps 50 simulated clients within the p50 and p95 start-skew targets', () => {
@@ -29,5 +33,10 @@ describe('viewer synchronization clock', () => {
   it('jumps delayed and reconnected clients to the authoritative position', () => {
     expect(synchronizedPosition(15_000, 500, 10_000, 60_000)).toBe(5_500);
     expect(synchronizedPosition(70_000, -250, 10_000, 60_000)).toBe(59_750);
+  });
+
+  it('always commits the exact playback endpoint even below the display throttle', () => {
+    expect(shouldCommitPlaybackPosition(60_000, 59_950, 60_000)).toBe(true);
+    expect(shouldCommitPlaybackPosition(59_950, 59_900, 60_000)).toBe(false);
   });
 });

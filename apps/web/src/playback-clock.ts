@@ -19,3 +19,17 @@ export function synchronizedPosition(
 ): number {
   return Math.max(0, Math.min(duration, localNow + serverOffset - scheduledStart));
 }
+
+export function shouldCommitPlaybackPosition(
+  nextPosition: number,
+  displayedPosition: number,
+  endPosition: number,
+  immediate = false,
+): boolean {
+  return (
+    immediate ||
+    nextPosition === 0 ||
+    nextPosition >= endPosition ||
+    Math.abs(nextPosition - displayedPosition) >= 100
+  );
+}

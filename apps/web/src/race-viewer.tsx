@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest, estimateServerOffset, getResult } from './api.js';
 import type { getRace } from './api.js';
 import { publicErrorMessage } from './public-error-message.js';
-import { synchronizedPosition } from './playback-clock.js';
+import { shouldCommitPlaybackPosition, synchronizedPosition } from './playback-clock.js';
 import { RaceScene3D } from './race-scene-3d.js';
 import { POST_FINISH_RUNOUT_MS } from './race-world-finish.js';
 import type { RaceCameraMode } from './race-world-types.js';
@@ -78,10 +78,15 @@ export function RaceViewer({
 
   const updatePlaybackPosition = (nextPosition: number, immediate = false): void => {
     playbackPositionRef.current = nextPosition;
+    const playbackEndPosition =
+      viewer.state === 'ready' ? viewer.duration + POST_FINISH_RUNOUT_MS : Number.POSITIVE_INFINITY;
     if (
-      immediate ||
-      Math.abs(nextPosition - displayedPositionRef.current) >= 100 ||
-      nextPosition === 0
+      shouldCommitPlaybackPosition(
+        nextPosition,
+        displayedPositionRef.current,
+        playbackEndPosition,
+        immediate,
+      )
     ) {
       displayedPositionRef.current = nextPosition;
       setPosition(nextPosition);

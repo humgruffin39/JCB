@@ -69,6 +69,7 @@ export function parseEnvironment(source: NodeJS.ProcessEnv): Environment {
       'DISCORD_REDIRECT_URI',
       'DISCORD_RACE_CHANNEL_ID',
       'DISCORD_ADMIN_CHANNEL_ID',
+      'COUNT_CHANNEL_ID',
       'SESSION_SECRET',
       'TIMELINE_MASTER_SECRET',
       'RESULT_MASTER_SECRET',

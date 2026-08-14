@@ -29,6 +29,9 @@ function validProductionEnvironment(): NodeJS.ProcessEnv {
     DISCORD_RACE_CHANNEL_ID: '100000000000000003',
     DISCORD_RANKING_CHANNEL_ID: '100000000000000004',
     DISCORD_ADMIN_CHANNEL_ID: '100000000000000005',
+    COUNT_CHANNEL_ID: '100000000000000007',
+    COUNT_PENALTY_ROLE_ID: '100000000000000008',
+    COUNT_FAILURE_EMOJI_ID: '100000000000000009',
     INITIAL_ADMIN_DISCORD_IDS: '100000000000000006',
     SESSION_SECRET: randomBytes(32).toString('base64'),
     TIMELINE_MASTER_SECRET: randomBytes(32).toString('base64'),
@@ -58,11 +61,20 @@ describe('production environment', () => {
     );
   });
 
+  it('requires Counting Bot to be configured in production', () => {
+    const environment = validProductionEnvironment();
+    delete environment.COUNT_CHANNEL_ID;
+    expect(() => parseEnvironment(environment)).toThrow(
+      'COUNT_CHANNEL_ID is required in production.',
+    );
+  });
+
   it('requires counting resources together when counting is enabled', () => {
+    const incompleteEnvironment = validProductionEnvironment();
+    delete incompleteEnvironment.COUNT_PENALTY_ROLE_ID;
     expect(() =>
       parseEnvironment({
-        ...validProductionEnvironment(),
-        COUNT_CHANNEL_ID: '100000000000000007',
+        ...incompleteEnvironment,
       }),
     ).toThrow('COUNT_PENALTY_ROLE_ID is required when COUNT_CHANNEL_ID is configured.');
     expect(

@@ -62,7 +62,7 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
     });
   });
 
-  const scheduledAt = Date.now();
+  const scheduledAt = Date.now() + 60 * 60_000;
   const encrypted = encryptTimeline(timelineFixture());
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -128,25 +128,11 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
   await page.goto('/races/viewer-test');
   const pauseButton = page.getByRole('button', { name: '一時停止' });
   const playButton = page.getByRole('button', { name: '再生' });
-  const replayButton = page.getByRole('button', { name: 'もう一度見る' });
-  let isPausedForAssertions = false;
-  for (let attempt = 0; attempt < 480 && !isPausedForAssertions; attempt += 1) {
-    if (await pauseButton.isVisible()) {
-      await pauseButton.dispatchEvent('click');
-      for (let settleAttempt = 0; settleAttempt < 10; settleAttempt += 1) {
-        if (await playButton.isVisible()) {
-          isPausedForAssertions = true;
-          break;
-        }
-        await page.waitForTimeout(50);
-      }
-    } else if (await replayButton.isVisible()) {
-      await replayButton.dispatchEvent('click');
-    } else {
-      await page.waitForTimeout(250);
-    }
-  }
-  expect(isPausedForAssertions).toBe(true);
+  await expect(pauseButton).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible({
+    timeout: 120_000,
+  });
+  await pauseButton.dispatchEvent('click');
   if (testInfo.project.name.startsWith('mobile-')) {
     await expect(page.getByRole('heading', { name: '端末を横向きにしてください' })).toBeVisible({
       timeout: 120_000,

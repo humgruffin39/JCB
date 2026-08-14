@@ -398,7 +398,7 @@ export function RaceViewer({
               />
             )
           ) : null}
-          {phase === 'race' && isSceneReady ? (
+          {phase === 'race' ? (
             <PlaybackControls
               isPaused={isPaused}
               cameraMode={cameraMode}

@@ -47,7 +47,7 @@ test('renders the full-screen race broadcast at 360px without horizontal overflo
 }) => {
   await page.goto('/races/race-demo');
   await expect(page.getByRole('region', { name: 'ジョサン記念 レース観戦' })).toBeVisible();
-  await expect(page.getByText(/後に発走/)).toBeVisible();
+  await expect(page.getByText(/後に観戦できます/)).toBeVisible();
   await expect(page.getByRole('button', { name: /馬券.*購入/ })).toHaveCount(0);
   const dimensions = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

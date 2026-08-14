@@ -227,6 +227,39 @@ describe('SQLite game store', () => {
     database.close();
   });
 
+  it('allows a new race after a same-day race has settled, but rejects active overlap', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    const store = new SqliteGameStore(database, () => 1);
+    const horses = Array.from({ length: 8 }, (_, index) =>
+      store.createHorse({ ...horseBase, name: `同日試験馬${index + 1}` }),
+    );
+    const input = {
+      raceDate: '2026-08-14',
+      name: '同日試験',
+      distanceM: 1_200,
+      surface: 'turf' as const,
+      scheduledAt: timestamp(100_000),
+      bettingOpensAt: timestamp(80_000),
+      bettingClosesAt: timestamp(90_000),
+      viewerOpensAt: timestamp(70_000),
+      entries: horses.map((horse, index) => ({ horseId: horse.id, horseNumber: index + 1 })),
+    };
+    const first = store.createRaceDraft(input);
+    database.prepare("UPDATE races SET status = 'settled' WHERE id = ?").run(first.id);
+    expect(store.createRaceDraft({ ...input, name: '同日試験・二走目' }).name).toBe(
+      '同日試験・二走目',
+    );
+    expect(() => store.createRaceDraft({ ...input, name: '同日試験・重複' })).toThrow(
+      /already scheduled during this time/i,
+    );
+    database.close();
+  });
+
   it('grants relief at most once per JST day', () => {
     const database = openDatabase(':memory:');
     applyMigrations(

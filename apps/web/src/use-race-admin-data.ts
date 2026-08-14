@@ -148,7 +148,7 @@ export function useRaceAdminData(): UseRaceAdminData {
           body: '{}',
         });
       },
-      'リハーサルを精算まで進めました。',
+      '観戦画面を公開し、1分後の発走を予約しました。',
     );
     if (!succeeded) throw new Error('操作を完了できません。画面のエラーを確認してください。');
   }

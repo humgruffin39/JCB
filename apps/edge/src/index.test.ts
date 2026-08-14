@@ -75,6 +75,19 @@ describe('Cloudflare release edge', () => {
     });
   });
 
+  it('allows the viewer to load before the scheduled start once the viewer opens', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const response = await requestRelease(
+      validToken(),
+      environment(signedManifest(now + 60_000, now - 1_000)),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      result: { scheduledStart: now + 60_000, viewerOpensAt: now - 1_000 },
+    });
+  });
+
   it('rejects tampered access tokens and tampered manifests', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(now);
     const tokenResponse = await requestRelease(
@@ -211,12 +224,13 @@ function validToken(): string {
   );
 }
 
-function signedManifest(scheduledStart: number) {
+function signedManifest(scheduledStart: number, viewerOpensAt?: number) {
   return signReleaseManifest(
     {
       raceId,
       raceVersion: 1,
       scheduledStart,
+      ...(viewerOpensAt === undefined ? {} : { viewerOpensAt }),
       timelineDuration: 60_000,
       ciphertextObjectKey: `race-timelines/${raceId}/1.bin`,
       ciphertextSha256: timelineSha256,

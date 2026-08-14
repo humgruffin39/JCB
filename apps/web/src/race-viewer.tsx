@@ -171,13 +171,13 @@ export function RaceViewer({
       }
       const authoritativeNow = Date.now() + offset;
       if (
-        authoritativeNow < race.scheduledAt &&
+        authoritativeNow < race.viewerOpensAt &&
         !['running', 'finished', 'settling', 'settled'].includes(race.status)
       ) {
         if (!isCancelled) {
           setViewer({
             state: 'waiting',
-            message: `${formatCountdown(race.scheduledAt - authoritativeNow)}後に発走`,
+            message: `${formatCountdown(race.viewerOpensAt - authoritativeNow)}後に観戦できます`,
           });
         }
         return;

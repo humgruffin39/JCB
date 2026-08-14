@@ -44,28 +44,38 @@ export function applyMigrations(
       throw new Error(`Applied migration file is missing: ${version}`);
     }
   }
-  const run = database.transaction(() => {
-    for (const fileName of migrationFiles) {
-      const sql = readFileSync(join(migrationsDirectory, fileName), 'utf8');
-      const checksum = createHash('sha256').update(sql).digest('hex');
-      const existingChecksum = applied.get(fileName);
-      if (existingChecksum !== undefined) {
-        if (existingChecksum === null) {
-          database
-            .prepare('UPDATE schema_migrations SET checksum = ? WHERE version = ?')
-            .run(checksum, fileName);
-        } else if (existingChecksum !== checksum) {
-          throw new Error(`Applied migration checksum mismatch: ${fileName}`);
+  const foreignKeys = Number(database.pragma('foreign_keys', { simple: true }));
+  // Some SQLite schema migrations must rebuild a parent table. SQLite does not
+  // allow foreign_keys to be toggled from inside a transaction, so temporarily
+  // disable enforcement around the atomic migration batch and restore it even
+  // when a migration fails.
+  database.pragma('foreign_keys = OFF');
+  try {
+    const run = database.transaction(() => {
+      for (const fileName of migrationFiles) {
+        const sql = readFileSync(join(migrationsDirectory, fileName), 'utf8');
+        const checksum = createHash('sha256').update(sql).digest('hex');
+        const existingChecksum = applied.get(fileName);
+        if (existingChecksum !== undefined) {
+          if (existingChecksum === null) {
+            database
+              .prepare('UPDATE schema_migrations SET checksum = ? WHERE version = ?')
+              .run(checksum, fileName);
+          } else if (existingChecksum !== checksum) {
+            throw new Error(`Applied migration checksum mismatch: ${fileName}`);
+          }
+          continue;
         }
-        continue;
+        database.exec(sql);
+        database
+          .prepare('INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?, ?, ?)')
+          .run(fileName, BigInt(now), checksum);
       }
-      database.exec(sql);
-      database
-        .prepare('INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?, ?, ?)')
-        .run(fileName, BigInt(now), checksum);
-    }
-  });
-  run.immediate();
+    });
+    run.immediate();
+  } finally {
+    database.pragma(`foreign_keys = ${foreignKeys === 0 ? 'OFF' : 'ON'}`);
+  }
   return database
     .prepare(
       'SELECT version, applied_at AS appliedAt, checksum FROM schema_migrations ORDER BY version',

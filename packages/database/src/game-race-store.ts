@@ -1,5 +1,11 @@
 import type Database from 'better-sqlite3';
-import { identifier, raceKindForJstDate, transitionRace, type RaceEntry } from '@jcb/domain';
+import {
+  DomainError,
+  identifier,
+  raceKindForJstDate,
+  transitionRace,
+  type RaceEntry,
+} from '@jcb/domain';
 import { hashSimulationInput } from '@jcb/simulation';
 import { ulid } from 'ulid';
 import {
@@ -31,6 +37,15 @@ interface RaceDraftHorseRow {
   readonly surface_preference: bigint;
 }
 
+const UNPREPARED_RACE_DURATION_MS = 5 * 60 * 1_000;
+
+interface RaceScheduleRow {
+  readonly id: string;
+  readonly viewerOpensAt: bigint;
+  readonly scheduledAt: bigint;
+  readonly timelineDurationMs: bigint | null;
+}
+
 export class SqliteRaceStore {
   public constructor(
     private readonly database: Database.Database,
@@ -39,9 +54,21 @@ export class SqliteRaceStore {
 
   public createRaceDraft(input: RaceDraftInput): RaceRecord {
     if (input.entries.length !== 8) throw new Error('Eight entries are required.');
+    if (
+      input.bettingOpensAt >= input.bettingClosesAt ||
+      input.bettingClosesAt > input.scheduledAt ||
+      input.viewerOpensAt > input.scheduledAt
+    ) {
+      throw new Error('Race schedule ordering is invalid.');
+    }
     const id = ulid();
     const now = BigInt(this.now());
     const run = this.database.transaction(() => {
+      this.assertScheduleAvailable(
+        input.raceDate,
+        Number(input.viewerOpensAt),
+        Number(input.scheduledAt),
+      );
       this.database
         .prepare(
           `INSERT INTO races
@@ -111,6 +138,12 @@ export class SqliteRaceStore {
       ) {
         throw new Error('Race schedule ordering is invalid.');
       }
+      this.assertScheduleAvailable(
+        next.raceDate,
+        Number(next.viewerOpensAt),
+        Number(next.scheduledAt),
+        raceId,
+      );
       this.database
         .prepare(
           `UPDATE races SET race_date = ?, name = ?, kind = ?, distance_m = ?, surface = ?,
@@ -149,6 +182,41 @@ export class SqliteRaceStore {
     });
     run.immediate();
     return this.getRace(raceId);
+  }
+
+  private assertScheduleAvailable(
+    raceDate: string,
+    viewerOpensAt: number,
+    scheduledAt: number,
+    excludedRaceId?: string,
+  ): void {
+    const candidateStart = viewerOpensAt;
+    const candidateEnd = scheduledAt + UNPREPARED_RACE_DURATION_MS;
+    const rows = this.database
+      .prepare(
+        `SELECT id, viewer_opens_at AS viewerOpensAt, scheduled_at AS scheduledAt,
+                timeline_duration_ms AS timelineDurationMs
+         FROM races
+         WHERE race_date = ?
+           AND status IN ('draft', 'locked', 'simulating', 'betting_open',
+                          'betting_closed', 'ready', 'running')
+           AND (? IS NULL OR id <> ?)`,
+      )
+      .all(raceDate, excludedRaceId ?? null, excludedRaceId ?? null) as RaceScheduleRow[];
+    for (const row of rows) {
+      const existingStart = Number(row.viewerOpensAt);
+      const existingEnd =
+        Number(row.scheduledAt) +
+        (row.timelineDurationMs === null
+          ? UNPREPARED_RACE_DURATION_MS
+          : Number(row.timelineDurationMs) + 3_000);
+      if (candidateStart < existingEnd && existingStart < candidateEnd) {
+        throw new DomainError(
+          'DUPLICATE_OPERATION',
+          'Another active race is already scheduled during this time on the same date.',
+        );
+      }
+    }
   }
 
   public getRace(id: string): RaceRecord {

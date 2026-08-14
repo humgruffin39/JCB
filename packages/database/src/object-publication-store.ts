@@ -89,6 +89,26 @@ export class SqliteObjectPublicationStore {
     }
   }
 
+  public replace(
+    key: string,
+    body: Uint8Array,
+    metadata: Readonly<Record<string, string>>,
+    now: number,
+  ): void {
+    const serializedMetadata = JSON.stringify(metadata);
+    const updated = this.database
+      .prepare(
+        `UPDATE object_publications
+         SET body = ?, metadata_json = ?, status = 'pending', attempt_count = 0,
+             next_attempt_at = ?, locked_at = NULL, locked_by = NULL,
+             last_error_redacted = NULL, updated_at = ?
+         WHERE object_key = ? AND status IN ('pending', 'completed', 'dead_letter')`,
+      )
+      .run(Buffer.from(body), serializedMetadata, BigInt(now), BigInt(now), key);
+    if (updated.changes === 1) return;
+    this.enqueue(key, body, metadata, now);
+  }
+
   public claimDue(now: number, workerId: string): ObjectPublication | undefined {
     const run = this.database.transaction(() => {
       const row = this.database

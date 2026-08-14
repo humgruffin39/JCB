@@ -111,15 +111,13 @@ export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogPro
           setError('');
           void onConfirm(race)
             .catch((caught: unknown) => {
-              setError(caught instanceof Error ? caught.message : 'リハーサルを実行できません。');
+              setError(caught instanceof Error ? caught.message : '今すぐ進行できません。');
             })
             .finally(() => setIsSubmitting(false));
         }}
       >
         <h2 id="rehearse-race-title">「{race.name}」を今すぐ進行しますか</h2>
-        <p>
-          投票受付を締め切り、発走・レース終了・精算・観戦データ公開まで進めます。リハーサル用の操作です。
-        </p>
+        <p>観戦画面をすぐに公開し、1分後に発走します。レース終了後に自動で精算します。</p>
         {error === '' ? null : (
           <p className="field-error" role="alert">
             {error}
@@ -127,7 +125,7 @@ export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogPro
         )}
         <div className="inline-actions">
           <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '処理中…' : 'リハーサルを実行'}
+            {isSubmitting ? '処理中…' : '今すぐ進行'}
           </button>
           <button
             type="button"

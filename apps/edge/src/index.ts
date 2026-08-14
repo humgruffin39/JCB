@@ -91,7 +91,7 @@ export async function handleEdgeRequest(
     if (manifest.raceId !== raceId) {
       return errorResponse(409, 'MANIFEST_RACE_MISMATCH', responseOrigin);
     }
-    if (Date.now() < manifest.scheduledStart) {
+    if (Date.now() < (manifest.viewerOpensAt ?? manifest.scheduledStart)) {
       return errorResponse(425, 'RACE_NOT_STARTED', responseOrigin);
     }
     const timelineObject = await environment.TIMELINE_BUCKET.get(manifest.ciphertextObjectKey);
@@ -146,6 +146,7 @@ export async function handleEdgeRequest(
           raceId,
           raceVersion: manifest.raceVersion,
           scheduledStart: manifest.scheduledStart,
+          viewerOpensAt: manifest.viewerOpensAt ?? manifest.scheduledStart,
           timelineDuration: manifest.timelineDuration,
           timelineKey: bytesToBase64(timelineKey),
           iv: manifest.iv,

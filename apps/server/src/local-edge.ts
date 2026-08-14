@@ -8,7 +8,6 @@ import {
 } from '@jcb/application';
 import type { Environment } from '@jcb/config';
 import { raceIdParamsSchema, signedManifestSchema } from '@jcb/contracts';
-import type { SqliteDatabase } from '@jcb/database';
 import type { Clock } from '@jcb/domain';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
@@ -18,7 +17,6 @@ export function registerLocalEdgeRoutes(
     readonly environment: Environment;
     readonly clock: Clock;
     readonly timelineStore: PrivateObjectStore;
-    readonly database: SqliteDatabase;
   },
 ): void {
   if (dependencies.environment.NODE_ENV === 'production') return;
@@ -30,10 +28,7 @@ export function registerLocalEdgeRoutes(
     if (token.raceId !== raceId || token.guildId !== dependencies.environment.DISCORD_GUILD_ID) {
       return sendError(reply, 403, 'TOKEN_SCOPE_MISMATCH');
     }
-    if (
-      dependencies.clock.now() < manifest.scheduledStart &&
-      !hasRehearsalStarted(dependencies.database, raceId)
-    ) {
+    if (dependencies.clock.now() < (manifest.viewerOpensAt ?? manifest.scheduledStart)) {
       return sendError(reply, 425, 'RACE_NOT_STARTED');
     }
     const ciphertext = await dependencies.timelineStore.get(manifest.ciphertextObjectKey);
@@ -76,6 +71,7 @@ export function registerLocalEdgeRoutes(
         raceId,
         raceVersion: manifest.raceVersion,
         scheduledStart: manifest.scheduledStart,
+        viewerOpensAt: manifest.viewerOpensAt ?? manifest.scheduledStart,
         timelineDuration: manifest.timelineDuration,
         timelineKey: key.toString('base64'),
         iv: manifest.iv,
@@ -93,10 +89,7 @@ export function registerLocalEdgeRoutes(
     if (token.raceId !== raceId || token.guildId !== dependencies.environment.DISCORD_GUILD_ID) {
       return sendError(reply, 403, 'TOKEN_SCOPE_MISMATCH');
     }
-    if (
-      dependencies.clock.now() < manifest.scheduledStart &&
-      !hasRehearsalStarted(dependencies.database, raceId)
-    ) {
+    if (dependencies.clock.now() < (manifest.viewerOpensAt ?? manifest.scheduledStart)) {
       return sendError(reply, 425, 'RACE_NOT_STARTED');
     }
     const ciphertext = await dependencies.timelineStore.get(manifest.ciphertextObjectKey);
@@ -113,12 +106,6 @@ export function registerLocalEdgeRoutes(
 
 function parseRaceId(params: unknown): string {
   return raceIdParamsSchema.parse(params).raceId;
-}
-
-function hasRehearsalStarted(database: SqliteDatabase, raceId: string): boolean {
-  const row = database.prepare('SELECT status FROM races WHERE id = ?').get(raceId) as
-    { readonly status: string } | undefined;
-  return row !== undefined && ['running', 'finished', 'settling', 'settled'].includes(row.status);
 }
 
 function verifyToken(

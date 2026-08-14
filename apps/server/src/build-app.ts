@@ -20,7 +20,6 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
       environment: dependencies.environment,
       clock: dependencies.clock,
       timelineStore: dependencies.timelineStore,
-      database: dependencies.database,
     });
   }
   const context = createServerRouteContext(app, dependencies, (error) =>

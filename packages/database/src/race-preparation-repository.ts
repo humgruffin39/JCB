@@ -32,6 +32,7 @@ interface RacePreparationRow {
   readonly distanceM: bigint;
   readonly surface: 'turf' | 'dirt';
   readonly scheduledAt: bigint;
+  readonly viewerOpensAt: bigint;
   readonly inputHash: string;
   readonly simulationConfigJson: string;
 }
@@ -85,6 +86,7 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
         raceVersion: Number(race.version),
         raceKind: race.kind,
         scheduledAt: timestamp(Number(race.scheduledAt)),
+        viewerOpensAt: timestamp(Number(race.viewerOpensAt)),
         input: {
           raceId,
           raceVersion: Number(race.version),
@@ -238,7 +240,8 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
     const row = this.database
       .prepare(
         `SELECT id, kind, status, version, distance_m AS distanceM, surface,
-                scheduled_at AS scheduledAt, input_hash AS inputHash,
+                scheduled_at AS scheduledAt, viewer_opens_at AS viewerOpensAt,
+                input_hash AS inputHash,
                 simulation_config_json AS simulationConfigJson
          FROM races WHERE id = ?`,
       )

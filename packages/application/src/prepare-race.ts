@@ -31,6 +31,7 @@ export interface RacePreparationStart {
   readonly raceVersion: number;
   readonly raceKind: RaceKind;
   readonly scheduledAt: Timestamp;
+  readonly viewerOpensAt?: Timestamp;
   readonly input: SimulationInput;
   readonly officialSeed: string;
   readonly oddsSeed: string;
@@ -103,6 +104,7 @@ export async function prepareRace(
         raceId,
         raceVersion: start.raceVersion,
         scheduledStart: start.scheduledAt,
+        viewerOpensAt: start.viewerOpensAt ?? start.scheduledAt,
         timelineDuration: official.timelineDurationMs,
         ciphertextObjectKey: timelineObjectKey,
         ciphertextSha256: timelineSha256,

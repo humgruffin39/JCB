@@ -103,6 +103,7 @@ const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'race.cancelled': 'レースを中止',
   'race.simulation_retry_queued': 'シミュレーションを再試行',
   'race.settlement_retry_queued': '精算を再試行',
+  'race.rehearsal_scheduled': '今すぐ進行を予約',
   'race.rehearsal_completed_now': 'リハーサルを実行',
   'race.emergency_revealed': '緊急結果閲覧を実行',
   'job.retry_queued': '自動処理を再試行',

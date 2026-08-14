@@ -246,7 +246,7 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
     const timing = dependencies.database
       .prepare(
         `SELECT scheduled_at AS scheduledAt, timeline_duration_ms AS timelineDurationMs
-         FROM races WHERE id = ?`,
+         FROM races WHERE id = ? AND status = 'betting_open'`,
       )
       .get(raceId) as { scheduledAt: bigint; timelineDurationMs: bigint | null } | undefined;
     if (timing?.timelineDurationMs === null || timing === undefined) {
@@ -257,8 +257,13 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
       );
     }
     const runAt = now();
-    const scheduledAt = timestamp(runAt + 3_000);
-    const finishAt = timestamp(scheduledAt + Number(timing.timelineDurationMs));
+    const scheduledAt = timestamp(runAt + 60_000);
+    const timelineDurationMs = Number(timing.timelineDurationMs);
+    if (!Number.isSafeInteger(timelineDurationMs) || timelineDurationMs <= 0) {
+      throw httpError(409, 'RACE_NOT_PREPARED', 'The race timeline duration is invalid.');
+    }
+    const finishAt = timestamp(scheduledAt + timelineDurationMs);
+    const settlementAt = timestamp(finishAt + 3_000);
     if (
       dependencies.timelineStore === undefined ||
       dependencies.environment.MANIFEST_PRIVATE_KEY === undefined
@@ -279,7 +284,7 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
       manifestPublication = Buffer.from(
         JSON.stringify(
           signReleaseManifest(
-            { ...signed.manifest, scheduledStart: scheduledAt },
+            { ...signed.manifest, scheduledStart: scheduledAt, viewerOpensAt: runAt },
             dependencies.environment.MANIFEST_PRIVATE_KEY,
           ),
         ),
@@ -288,6 +293,12 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
     } catch {
       throw httpError(409, 'RACE_MANIFEST_INVALID', 'The race release manifest is invalid.');
     }
+    const manifestKey = `race-manifests/${raceId}.json`;
+    const manifestMetadata = { raceId, type: 'release-manifest' };
+    // The rehearsal is intentionally available as soon as this request succeeds.
+    // Keep the outbox entry below as a retryable record, but publish the small
+    // manifest directly so a viewer does not wait for the scheduler poll.
+    await dependencies.timelineStore.put(manifestKey, manifestPublication, manifestMetadata);
     const run = dependencies.database.transaction(() => {
       dependencies.database
         .prepare(
@@ -303,27 +314,25 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
         );
       lifecycle.closeBetting(raceId, timestamp(runAt));
       lifecycle.markReady(raceId);
-      lifecycle.markRunning(raceId, scheduledAt);
-      lifecycle.markFinished(raceId, finishAt);
-      lifecycle.settleRace(raceId, timestamp(finishAt + 3_000));
+      const raceVersion = String(race.version);
       dependencies.database
         .prepare(
-          `UPDATE scheduled_jobs SET status = 'completed', locked_at = NULL, locked_by = NULL,
-           updated_at = ? WHERE deduplication_key IN (?, ?, ?, ?, ?)
-           AND status IN ('pending', 'retry_wait')`,
+          `UPDATE scheduled_jobs
+           SET status = 'completed', locked_at = NULL, locked_by = NULL, updated_at = ?
+           WHERE job_type IN ('publish_race', 'refresh_race_message', 'open_viewer',
+                              'close_betting', 'mark_running', 'mark_finished', 'settle_race')
+             AND status IN ('pending', 'retry_wait', 'dead_letter')
+             AND json_extract(payload_json, '$.raceId') = ?
+             AND (
+               json_extract(payload_json, '$.raceVersion') = ?
+               OR json_extract(payload_json, '$.raceVersion') IS NULL
+             )`,
         )
-        .run(
-          BigInt(runAt),
-          `open-viewer:${raceId}:${String(race.version)}`,
-          `close:${raceId}:${String(race.version)}`,
-          `running:${raceId}:${String(race.version)}`,
-          `finished:${raceId}:${String(race.version)}`,
-          `settle:${raceId}:${String(race.version)}`,
-        );
-      new SqliteObjectPublicationStore(dependencies.database).enqueue(
-        `race-manifests/${raceId}.json`,
+        .run(BigInt(runAt), raceId, race.version);
+      new SqliteObjectPublicationStore(dependencies.database).replace(
+        manifestKey,
         manifestPublication,
-        { raceId, type: 'release-manifest' },
+        manifestMetadata,
         runAt,
       );
       jobStore.enqueue({
@@ -333,20 +342,44 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
         runAt,
       });
       jobStore.enqueue({
-        jobType: 'refresh_rankings',
-        deduplicationKey: `rankings:${raceId}:rehearsal:${String(runAt)}`,
-        payload: { raceId },
+        jobType: 'open_viewer',
+        deduplicationKey: `open-viewer:${raceId}:${raceVersion}:rehearsal:${String(runAt)}`,
+        payload: { raceId, raceVersion: race.version },
         runAt,
+      });
+      jobStore.enqueue({
+        jobType: 'mark_running',
+        deduplicationKey: `running:${raceId}:${raceVersion}:rehearsal:${String(runAt)}`,
+        payload: { raceId, raceVersion: race.version },
+        runAt: scheduledAt,
+      });
+      jobStore.enqueue({
+        jobType: 'mark_finished',
+        deduplicationKey: `finished:${raceId}:${raceVersion}:rehearsal:${String(runAt)}`,
+        payload: { raceId, raceVersion: race.version },
+        runAt: finishAt,
+      });
+      jobStore.enqueue({
+        jobType: 'settle_race',
+        deduplicationKey: `settle:${raceId}:${raceVersion}:rehearsal:${String(runAt)}`,
+        payload: { raceId, raceVersion: race.version },
+        runAt: settlementAt,
       });
       adminStore.recordAudit({
         actorUserId: findInternalUserId(dependencies.database, session.discordUserId),
-        action: 'race.rehearsal_completed_now',
+        action: 'race.rehearsal_scheduled',
         targetType: 'race',
         targetId: raceId,
       });
     });
     run.immediate();
-    return envelope({ settled: true });
+    return envelope({
+      scheduled: true,
+      viewerOpensAt: runAt,
+      scheduledAt,
+      finishAt,
+      settlementAt,
+    });
   });
   app.post('/api/v1/admin/races/:raceId/emergency-reveal', async (request) => {
     const session = await authenticate(request, { admin: true, csrf: true });

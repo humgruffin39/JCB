@@ -126,6 +126,9 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
   });
 
   await page.goto('/races/viewer-test');
+  const pauseButton = page.getByRole('button', { name: '一時停止' });
+  await expect(pauseButton).toBeVisible({ timeout: 120_000 });
+  await pauseButton.dispatchEvent('click');
   if (testInfo.project.name.startsWith('mobile-')) {
     await expect(page.getByRole('heading', { name: '端末を横向きにしてください' })).toBeVisible({
       timeout: 120_000,
@@ -134,9 +137,7 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
     await expect(page.getByRole('heading', { name: '端末を横向きにしてください' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '全画面で見る' })).toBeVisible();
   }
-  await page
-    .getByRole('button', { name: '一時停止' })
-    .dispatchEvent('click', undefined, { timeout: 120_000 });
+  await expect(page.getByRole('button', { name: '再生' })).toBeVisible();
   await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible();
   await expect(page.locator('.broadcast-clock output')).toHaveCSS(
     'font-family',

@@ -28,8 +28,18 @@ describe('race camera director', () => {
     const shot = getFinishCameraShot();
     expect(shot.id).toBe('finish-line');
     expect(shot.tangentOffset).toBe(0);
-    expect(shot.normalOffset).toBeLessThan(0);
-    expect(shot.height).toBeLessThan(4);
+    expect(shot.normalOffset).toBeLessThan(-20);
+    expect(shot.height).toBeGreaterThan(4);
+    expect(shot.fieldOfView).toBeGreaterThanOrEqual(34);
+  });
+
+  it('uses a wide fixed three-quarter shot on the final approach', () => {
+    const shot = selectBroadcastCameraShot(0.98);
+    expect(shot.id).toBe('home-stretch-track');
+    expect(shot.movement).toBe('fixed');
+    expect(shot.anchorRaceProgress).toBeCloseTo(0.93, 6);
+    expect(shot.normalOffset).toBeGreaterThan(20);
+    expect(shot.fieldOfView).toBeGreaterThanOrEqual(32);
   });
 
   it('holds the home-stretch shot until the field is genuinely at the line', () => {

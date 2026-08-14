@@ -9,6 +9,11 @@ export const POST_FINISH_RUNOUT_DISTANCE_M = 32;
 export const POST_FINISH_RUNOUT_MS = Math.ceil(
   (POST_FINISH_RUNOUT_DISTANCE_M / MIN_VISUAL_FINISH_SPEED_MPS) * 1_000,
 );
+export const FINISH_CAMERA_DELAY_MS = 500;
+
+export function finishCameraPositionMs(timelineDurationMs: number): number {
+  return Math.max(0, timelineDurationMs) + FINISH_CAMERA_DELAY_MS;
+}
 
 export function postFinishCourseProgress(
   positionMs: number,

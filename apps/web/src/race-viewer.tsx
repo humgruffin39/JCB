@@ -5,7 +5,7 @@ import type { getRace } from './api.js';
 import { publicErrorMessage } from './public-error-message.js';
 import { shouldCommitPlaybackPosition, synchronizedPosition } from './playback-clock.js';
 import { RaceScene3D } from './race-scene-3d.js';
-import { POST_FINISH_RUNOUT_MS } from './race-world-finish.js';
+import { finishCameraPositionMs } from './race-world-finish.js';
 import type { RaceCameraMode } from './race-world-types.js';
 import { BroadcastHud, BroadcastState } from './race-viewer-hud.js';
 import { PlaybackControls } from './race-viewer-controls.js';
@@ -75,16 +75,27 @@ export function RaceViewer({
   const playbackPositionRef = useRef(0);
   const displayedPositionRef = useRef(0);
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
+  const timelineFinishOrder = useMemo(
+    () =>
+      viewer.state === 'ready'
+        ? selectTimelineFinishOrder(race.entries, viewer.frames, viewer.duration)
+        : [],
+    [race.entries, viewer],
+  );
+  const finishCameraPosition =
+    viewer.state === 'ready'
+      ? finishCameraPositionMs(
+          Math.max(viewer.duration, timelineFinishOrder.at(-1)?.finishTimeMs ?? 0),
+        )
+      : Number.POSITIVE_INFINITY;
 
   const updatePlaybackPosition = (nextPosition: number, immediate = false): void => {
     playbackPositionRef.current = nextPosition;
-    const playbackEndPosition =
-      viewer.state === 'ready' ? viewer.duration + POST_FINISH_RUNOUT_MS : Number.POSITIVE_INFINITY;
     if (
       shouldCommitPlaybackPosition(
         nextPosition,
         displayedPositionRef.current,
-        playbackEndPosition,
+        finishCameraPosition,
         immediate,
       )
     ) {
@@ -228,12 +239,7 @@ export function RaceViewer({
         };
       } else {
         updatePlaybackPosition(
-          synchronizedPosition(
-            Date.now(),
-            offset,
-            race.scheduledAt,
-            viewer.duration + POST_FINISH_RUNOUT_MS,
-          ),
+          synchronizedPosition(Date.now(), offset, race.scheduledAt, finishCameraPosition),
           true,
         );
       }
@@ -248,12 +254,13 @@ export function RaceViewer({
     phase,
     position,
     race.scheduledAt,
+    finishCameraPosition,
     viewer,
   ]);
 
   useEffect(() => {
     if (viewer.state !== 'ready' || phase !== 'race' || !hasPlaybackStarted) return;
-    const playbackEndMs = viewer.duration + POST_FINISH_RUNOUT_MS;
+    const playbackEndMs = finishCameraPosition;
     const interval = window.setInterval(() => {
       if (isReplay) {
         if (isPaused) return;
@@ -266,19 +273,23 @@ export function RaceViewer({
       }
     }, 50);
     return () => window.clearInterval(interval);
-  }, [hasPlaybackStarted, isPaused, isReplay, offset, phase, race.scheduledAt, viewer]);
+  }, [
+    finishCameraPosition,
+    hasPlaybackStarted,
+    isPaused,
+    isReplay,
+    offset,
+    phase,
+    race.scheduledAt,
+    viewer,
+  ]);
 
   useEffect(() => {
-    if (
-      viewer.state !== 'ready' ||
-      phase !== 'race' ||
-      position < viewer.duration + POST_FINISH_RUNOUT_MS
-    )
-      return;
+    if (viewer.state !== 'ready' || phase !== 'race' || position < finishCameraPosition) return;
     if (finishSnapshot === undefined && !finishSnapshotUnavailable) return;
     setIsPaused(true);
     setPhase(finishSnapshotUnavailable ? 'results' : 'photo');
-  }, [finishSnapshotUnavailable, finishSnapshot, phase, position, viewer]);
+  }, [finishCameraPosition, finishSnapshotUnavailable, finishSnapshot, phase, position, viewer]);
 
   useEffect(() => {
     if (phase !== 'photo') return;
@@ -306,13 +317,6 @@ export function RaceViewer({
     };
   }, [phase, race.id, result, viewer]);
 
-  const timelineFinishOrder = useMemo(
-    () =>
-      viewer.state === 'ready'
-        ? selectTimelineFinishOrder(race.entries, viewer.frames, viewer.duration)
-        : [],
-    [race.entries, viewer],
-  );
   const finalOrder = selectFinalOrder(result?.finishOrder, timelineFinishOrder);
   const currentFrame = useMemo(() => {
     if (viewer.state !== 'ready') return undefined;

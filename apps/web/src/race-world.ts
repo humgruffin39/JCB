@@ -33,6 +33,8 @@ export type {
   RaceWorldState,
 } from './race-world-types.js';
 export {
+  FINISH_CAMERA_DELAY_MS,
+  finishCameraPositionMs,
   isPostFinishPoseReady,
   MIN_VISUAL_FINISH_SPEED_MPS,
   POST_FINISH_RUNOUT_DISTANCE_M,
@@ -376,11 +378,7 @@ export class RaceWorld {
     );
     const snapshotCamera = calculateFinishSnapshotCamera(
       finishLine,
-      this.horses
-        .filter((horse) => horse.initialized)
-        .sort((left, right) => right.courseProgress - left.courseProgress)
-        .slice(0, 3)
-        .map((horse) => horse.rig.root.position),
+      this.horses.filter((horse) => horse.initialized).map((horse) => horse.rig.root.position),
       this.camera.aspect,
       shot,
       firstFinisher?.rig.root.position,

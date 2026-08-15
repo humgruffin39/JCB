@@ -1543,13 +1543,15 @@ main {
 }
 
 .race-broadcast--activity {
+  --race-activity-chrome-right: 0px;
   --race-safe-top: max(
     var(--jcb-activity-safe-top, 0px),
     var(--discord-safe-area-inset-top, env(safe-area-inset-top, 0px))
   );
   --race-safe-right: max(
     var(--jcb-activity-safe-right, 0px),
-    var(--discord-safe-area-inset-right, env(safe-area-inset-right, 0px))
+    var(--discord-safe-area-inset-right, env(safe-area-inset-right, 0px)),
+    var(--race-activity-chrome-right)
   );
   --race-safe-bottom: max(
     var(--jcb-activity-safe-bottom, 0px),
@@ -1561,6 +1563,14 @@ main {
   );
   height: 100%;
   min-height: 100dvh;
+}
+
+@media (min-width: 64rem) {
+  .race-broadcast--activity[data-activity-layout='focused'] {
+    /* Discord's desktop control rail overlays the Activity iframe without
+       consistently contributing to its reported safe-area inset. */
+    --race-activity-chrome-right: clamp(6rem, 7.5vw, 12rem);
+  }
 }
 
 .race-broadcast--results .race-scene-3d {

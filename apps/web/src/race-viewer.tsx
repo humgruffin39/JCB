@@ -402,6 +402,7 @@ export function RaceViewer({
           {phase === 'race' ? (
             <PlaybackControls
               isPaused={isPaused}
+              canPause={isReplay}
               cameraMode={cameraMode}
               isMobile={isMobile}
               isFullscreen={isFullscreen}

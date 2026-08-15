@@ -225,7 +225,7 @@ function raceFixture(scheduledAt: number) {
     raceDate: '2026-08-03',
     name: '観戦機能試験',
     kind: 'regular',
-    status: 'running',
+    status: 'finished',
     version: 1,
     distanceM: 1_200,
     surface: 'turf',

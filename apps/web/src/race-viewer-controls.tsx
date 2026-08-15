@@ -13,6 +13,7 @@ import type { RaceCameraMode } from './race-world.js';
 
 export interface PlaybackControlsProps {
   readonly isPaused: boolean;
+  readonly canPause: boolean;
   readonly cameraMode: RaceCameraMode;
   readonly isMobile: boolean;
   readonly isFullscreen: boolean;
@@ -43,6 +44,7 @@ export function FullscreenControl({ isFullscreen, onToggleFullscreen }: Fullscre
 
 export function PlaybackControls({
   isPaused,
+  canPause,
   cameraMode,
   isMobile,
   isFullscreen,
@@ -66,15 +68,17 @@ export function PlaybackControls({
           <Video aria-hidden="true" />
         )}
       </button>
-      <button
-        className="broadcast-icon-button"
-        type="button"
-        aria-label={isPaused ? '再生' : '一時停止'}
-        title={isPaused ? '再生' : '一時停止'}
-        onClick={onPause}
-      >
-        {isPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
-      </button>
+      {canPause ? (
+        <button
+          className="broadcast-icon-button"
+          type="button"
+          aria-label={isPaused ? '再生' : '一時停止'}
+          title={isPaused ? '再生' : '一時停止'}
+          onClick={onPause}
+        >
+          {isPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+        </button>
+      ) : null}
       <FullscreenControl isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} />
     </div>
   );

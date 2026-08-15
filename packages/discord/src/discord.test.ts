@@ -20,6 +20,7 @@ describe('Discord contracts', () => {
       horses: Array.from({ length: 8 }, (_, index) => ({
         horseNumber: index + 1,
         name: `試験馬${index + 1}`,
+        condition: 'normal' as const,
         currentWinOdds: '4.2',
       })),
       trifectaPoolTotal: money(15_000n),
@@ -29,6 +30,7 @@ describe('Discord contracts', () => {
     });
     const description = message.embeds[0].data.description ?? '';
     expect(description).toContain('開催日: 2026/08/03 / 1200m / 芝');
+    expect(description).toContain('<:normal:1538151937269301348> 試験馬1');
     expect(description).not.toContain('発走');
     expect(description).not.toContain('締切');
     expect(description).not.toContain('通常レース');

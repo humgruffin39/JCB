@@ -1,6 +1,15 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { formatDateKeyForDisplay } from '@jcb/domain';
+import type { Condition } from '@jcb/domain';
 import type { DiscordRaceCard } from './types.js';
+
+const CONDITION_EMOJIS: Readonly<Record<Condition, string>> = {
+  excellent: '<:excellent:1538152048292528208>',
+  good: '<:good:1538151990893477938>',
+  normal: '<:normal:1538151937269301348>',
+  poor: '<:poor:1538151890137776158>',
+  terrible: '<:terrible:1538151846844170260>',
+};
 
 export function renderRaceMessage(card: DiscordRaceCard): {
   readonly embeds: readonly [EmbedBuilder];
@@ -15,7 +24,7 @@ export function renderRaceMessage(card: DiscordRaceCard): {
         '',
         ...card.horses.map(
           (horse) =>
-            `\`${String(horse.horseNumber).padStart(2, '0')}\` ${horse.name}  **${horse.currentWinOdds}倍**`,
+            `\`${String(horse.horseNumber).padStart(2, '0')}\` ${CONDITION_EMOJIS[horse.condition]} ${horse.name}  **${horse.currentWinOdds}倍**`,
         ),
         '',
         `三連単プール: ${card.trifectaPoolTotal.toString()} R`,

@@ -228,6 +228,7 @@ export async function publishRaceMessage(input: {
     horses: detail.entries.map((entry) => ({
       horseNumber: entry.horseNumber,
       name: entry.name,
+      condition: entry.condition,
       currentWinOdds: entry.currentWinOdds,
     })),
     trifectaPoolTotal: money(BigInt(detail.trifectaPoolTotal)),

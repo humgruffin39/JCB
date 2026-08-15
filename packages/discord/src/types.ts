@@ -1,8 +1,9 @@
-import type { Money, PoolType, Timestamp } from '@jcb/domain';
+import type { Condition, Money, PoolType, Timestamp } from '@jcb/domain';
 
 export interface DiscordRaceHorse {
   readonly horseNumber: number;
   readonly name: string;
+  readonly condition: Condition;
   readonly currentWinOdds: string;
 }
 

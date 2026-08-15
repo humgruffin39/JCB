@@ -113,6 +113,15 @@ describe('production environment', () => {
     ).toThrow('PUBLIC_WEB_ORIGIN must be explicitly configured for production.');
   });
 
+  it('never permits unverified Activity instances in production', () => {
+    expect(() =>
+      parseEnvironment({
+        ...validProductionEnvironment(),
+        DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT: 'true',
+      }),
+    ).toThrow('DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT cannot be enabled in production.');
+  });
+
   it('rejects weak secrets and mismatched signing keys', () => {
     expect(() =>
       parseEnvironment({
@@ -130,6 +139,14 @@ describe('production environment', () => {
 });
 
 describe('development environment', () => {
+  it('requires an explicit opt-in for the unverified Activity development fallback', () => {
+    expect(parseEnvironment({}).DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT).toBe(false);
+    expect(
+      parseEnvironment({ DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT: 'true' })
+        .DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT,
+    ).toBe(true);
+  });
+
   it('restores escaped PEM newlines from one-line dotenv values', () => {
     const environment = parseEnvironment({
       EDGE_TOKEN_PRIVATE_KEY:

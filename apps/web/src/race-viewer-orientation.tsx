@@ -8,6 +8,20 @@ interface ViewerOrientationState {
   readonly isPortrait: boolean;
 }
 
+export function shouldShowRaceOrientationGate({
+  isActivity,
+  isReady,
+  isResults,
+  isPortrait,
+}: {
+  readonly isActivity: boolean;
+  readonly isReady: boolean;
+  readonly isResults: boolean;
+  readonly isPortrait: boolean;
+}): boolean {
+  return !isActivity && isReady && !isResults && isPortrait;
+}
+
 function readViewerOrientation(): ViewerOrientationState {
   if (typeof window === 'undefined') {
     return { isMobile: false, isPortrait: false };
@@ -22,14 +36,17 @@ function readViewerOrientation(): ViewerOrientationState {
   };
 }
 
-export function useRaceViewerOrientation(rootRef: RefObject<HTMLElement | null>) {
+export function useRaceViewerOrientation(
+  rootRef: RefObject<HTMLElement | null>,
+  isActivity = false,
+) {
   const [orientation, setOrientation] = useState(readViewerOrientation);
   const [isFullscreen, setIsFullscreen] = useState(
     () => typeof document !== 'undefined' && document.fullscreenElement !== null,
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (isActivity || typeof window === 'undefined') return;
 
     const updateOrientation = (): void => {
       setOrientation(readViewerOrientation());
@@ -55,19 +72,19 @@ export function useRaceViewerOrientation(rootRef: RefObject<HTMLElement | null>)
       window.removeEventListener('orientationchange', updateOrientation);
       window.removeEventListener('resize', updateOrientation);
     };
-  }, []);
+  }, [isActivity]);
 
   useEffect(() => {
-    if (typeof document === 'undefined') return;
+    if (isActivity || typeof document === 'undefined') return;
     const updateFullscreen = (): void => {
       setIsFullscreen(document.fullscreenElement !== null);
     };
     document.addEventListener('fullscreenchange', updateFullscreen);
     return () => document.removeEventListener('fullscreenchange', updateFullscreen);
-  }, []);
+  }, [isActivity]);
 
   const toggleImmersiveMode = useCallback(async (): Promise<void> => {
-    if (typeof document === 'undefined') return;
+    if (isActivity || typeof document === 'undefined') return;
 
     if (document.fullscreenElement !== null) {
       try {
@@ -93,12 +110,12 @@ export function useRaceViewerOrientation(rootRef: RefObject<HTMLElement | null>)
     } catch {
       // Orientation locking is optional; the portrait guidance remains available.
     }
-  }, [rootRef]);
+  }, [isActivity, rootRef]);
 
   return {
     isMobile: orientation.isMobile,
     isPortrait: orientation.isPortrait,
-    isFullscreen,
+    isFullscreen: isActivity || isFullscreen,
     toggleImmersiveMode,
   } as const;
 }

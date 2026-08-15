@@ -1,18 +1,28 @@
 /// <reference types="vite/client" />
 
 import {
+  activityExchangeResponseSchema,
   apiErrorSchema,
   publicSettingsSchema,
   raceDetailSchema,
   resultResponseSchema,
+  type ActivityExchangeRequest,
+  type ActivityExchangeResponse,
 } from '@jcb/contracts';
+import { isDiscordActivityLaunch } from './activity-launch.js';
 import { selectServerOffset } from './playback-clock.js';
 
 const browserEnvironment: unknown = import.meta.env;
-const API_ORIGIN = readEnvironmentString(browserEnvironment, 'VITE_API_ORIGIN') || '';
+const activityProxy =
+  typeof window !== 'undefined' && isDiscordActivityLaunch(window.location.search);
+// Discord's URL mappings proxy these relative paths. Calling the public origin
+// directly from the iframe would bypass that boundary and its session cookies.
+const API_ORIGIN = activityProxy
+  ? ''
+  : readEnvironmentString(browserEnvironment, 'VITE_API_ORIGIN') || '';
 const API_REQUEST_TIMEOUT_MS = 15_000;
 export const EDGE_ORIGIN =
-  readEnvironmentString(browserEnvironment, 'VITE_EDGE_ORIGIN') ||
+  (activityProxy ? '' : readEnvironmentString(browserEnvironment, 'VITE_EDGE_ORIGIN')) ||
   (import.meta.env.DEV ? API_ORIGIN : '');
 
 export function apiAbsoluteUrl(path: string): string {
@@ -163,6 +173,28 @@ export async function exchangeTicket(ticket: string): Promise<{
   });
   setCsrfToken('race', result.csrfToken);
   if (result.edgeAccessToken !== undefined && result.raceId !== undefined) {
+    sessionStorage.setItem(`jcb.edge-token:${result.raceId}`, result.edgeAccessToken);
+  }
+  return result;
+}
+
+export type ActivityAuthorizationExchangeRequest = ActivityExchangeRequest;
+export type ActivityAuthorizationExchangeResult = ActivityExchangeResponse;
+
+export async function exchangeActivityAuthorization(
+  request: ActivityAuthorizationExchangeRequest,
+): Promise<ActivityAuthorizationExchangeResult> {
+  const response = await apiRequest<unknown>('/api/v1/auth/activity/exchange', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  const parsed = activityExchangeResponseSchema.safeParse(response);
+  if (!parsed.success) {
+    throw new ApiRequestError('API response contract is invalid.', 502, 'ACTIVITY_SESSION_INVALID');
+  }
+  const result = parsed.data;
+  setCsrfToken('race', result.csrfToken);
+  if (result.edgeAccessToken !== undefined) {
     sessionStorage.setItem(`jcb.edge-token:${result.raceId}`, result.edgeAccessToken);
   }
   return result;

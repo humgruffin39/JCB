@@ -5,9 +5,11 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
+  ACTIVITY_SESSION_COOKIE,
   ADMIN_SESSION_COOKIE,
   LEGACY_SESSION_COOKIE,
   RACE_SESSION_COOKIE,
+  activitySessionTokenFromRequest,
   sessionTokenFromRequest,
 } from './server-context.js';
 import { envelope, httpError, oauthConfiguration } from './server-support.js';
@@ -17,7 +19,8 @@ const OAUTH_STATE_COOKIE = 'jcb_oauth_state';
 const ONE_DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
 
 export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteContext): void {
-  const { dependencies, now, authStore, gameStore, viewerStore, authenticate } = context;
+  const { dependencies, now, authStore, activityStore, gameStore, viewerStore, authenticate } =
+    context;
 
   app.post(
     '/api/v1/auth/tickets/exchange',
@@ -207,7 +210,13 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
   );
 
   app.post('/api/v1/auth/logout', async (request, reply) => {
-    await authenticate(request, { csrf: true });
+    const session = await authenticate(request, { csrf: true });
+    if (session.authenticationMethod === 'activity') {
+      const activityToken = activitySessionTokenFromRequest(request)!;
+      activityStore.revoke(activityToken);
+      expireActivityCookie(reply, dependencies);
+      return envelope({ loggedOut: true });
+    }
     const token = sessionTokenFromRequest(request, false)!;
     authStore.revoke(token);
     reply.clearCookie(RACE_SESSION_COOKIE, { path: '/' });
@@ -216,7 +225,14 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
   });
 
   app.get('/api/v1/auth/csrf', async (request, reply) => {
-    await authenticate(request);
+    const session = await authenticate(request);
+    if (session.authenticationMethod === 'activity') {
+      const sessionToken = activitySessionTokenFromRequest(request)!;
+      reply.header('cache-control', 'no-store');
+      return envelope({
+        csrfToken: activityStore.getOrRotateCsrfToken(sessionToken, readCsrfHeader(request)),
+      });
+    }
     const sessionToken = sessionTokenFromRequest(request, false)!;
     reply.header('cache-control', 'no-store');
     return envelope({
@@ -236,6 +252,28 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
       csrfToken: authStore.getOrRotateCsrfToken(sessionToken, readCsrfHeader(request)),
     });
   });
+}
+
+function expireActivityCookie(
+  reply: FastifyReply,
+  dependencies: ServerRouteContext['dependencies'],
+): void {
+  const attributes = [
+    `${ACTIVITY_SESSION_COOKIE}=`,
+    'Path=/',
+    'HttpOnly',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+    'Max-Age=0',
+  ];
+  const clientId = dependencies.environment.DISCORD_CLIENT_ID;
+  if (clientId !== undefined) {
+    attributes.push(`Domain=${clientId}.discordsays.com`, 'Secure', 'SameSite=None', 'Partitioned');
+  } else if (dependencies.environment.NODE_ENV !== 'production') {
+    attributes.push('SameSite=Lax');
+  } else {
+    throw new Error('DISCORD_CLIENT_ID is not configured.');
+  }
+  reply.header('set-cookie', attributes.join('; '));
 }
 
 function setSessionCookie(

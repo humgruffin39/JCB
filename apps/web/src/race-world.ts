@@ -25,6 +25,7 @@ import type { RaceCameraMode, RaceWorldState } from './race-world-types.js';
 import { calculateFinishSnapshotCamera, readRenderTargetDataUrl } from './race-world-snapshot.js';
 import { RaceWorldCameraController } from './race-world-camera.js';
 import { createRaceWorldScene } from './race-world-scene.js';
+import type { RaceRenderQuality } from './race-viewer-performance.js';
 
 export type {
   FinishPosition,
@@ -44,6 +45,16 @@ export {
 export { calculateFinishSnapshotCamera } from './race-world-snapshot.js';
 
 const HORSE_NOSE_OFFSET = 1.05;
+
+const RENDER_QUALITY = {
+  high: { maximumPixelRatio: 1.75, shadows: true },
+  balanced: { maximumPixelRatio: 1.35, shadows: true },
+  low: { maximumPixelRatio: 1, shadows: false },
+  minimal: { maximumPixelRatio: 0.8, shadows: false },
+} as const satisfies Record<
+  RaceRenderQuality,
+  { readonly maximumPixelRatio: number; readonly shadows: boolean }
+>;
 
 interface AnimatedHorse {
   readonly rig: HorseRig;
@@ -73,6 +84,9 @@ export class RaceWorld {
   private finishSnapshotAttempts = 0;
   private finishSnapshotFailed = false;
   private lastPositionMs = 0;
+  private viewportWidth = 1;
+  private viewportHeight = 1;
+  private renderQuality: RaceRenderQuality = 'high';
 
   private constructor(
     renderer: THREE.WebGLRenderer,
@@ -129,6 +143,7 @@ export class RaceWorld {
     onTrackedHorseChange?: (horseNumber: number | undefined) => void,
     onFinishSnapshot?: (snapshot: string | undefined) => void,
     onFinishSnapshotError?: () => void,
+    initialRenderQuality: RaceRenderQuality = 'high',
   ): Promise<RaceWorld> {
     const renderer = new THREE.WebGLRenderer({
       canvas,
@@ -141,7 +156,9 @@ export class RaceWorld {
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    const settings = RENDER_QUALITY[initialRenderQuality];
+    renderer.shadowMap.enabled = settings.shadows;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.maximumPixelRatio));
 
     const rigs: HorseRig[] = [];
     let environment: RaceEnvironment | undefined;
@@ -151,7 +168,7 @@ export class RaceWorld {
         rigs.push(createHorseRig(assets, index + 1, horseCoats.get(index + 1)));
       }
       environment = new RaceEnvironment(renderer, distanceM, surface);
-      return new RaceWorld(
+      const world = new RaceWorld(
         renderer,
         environment,
         rigs,
@@ -161,6 +178,8 @@ export class RaceWorld {
         onFinishSnapshot,
         onFinishSnapshotError,
       );
+      world.setRenderQuality(initialRenderQuality);
+      return world;
     } catch (error) {
       rigs.forEach((rig) => rig.dispose());
       environment?.dispose();
@@ -177,9 +196,41 @@ export class RaceWorld {
     this.cameraController.setTrackedHorse(horseNumber);
   }
 
+  setInteractive(interactive: boolean): void {
+    this.cameraController.setInteractive(interactive);
+  }
+
+  setRenderQuality(quality: RaceRenderQuality): void {
+    if (quality === this.renderQuality && this.viewportWidth > 1 && this.viewportHeight > 1) return;
+    const previousShadows = this.renderer.shadowMap.enabled;
+    const settings = RENDER_QUALITY[quality];
+    this.renderQuality = quality;
+    this.renderer.setPixelRatio(
+      Math.min(
+        typeof window === 'undefined' ? 1 : window.devicePixelRatio,
+        settings.maximumPixelRatio,
+      ),
+    );
+    this.renderer.shadowMap.enabled = settings.shadows;
+    if (previousShadows !== settings.shadows) {
+      this.scene.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        const materials: readonly THREE.Material[] = Array.isArray(object.material)
+          ? object.material
+          : [object.material];
+        materials.forEach((material) => {
+          material.needsUpdate = true;
+        });
+      });
+    }
+    this.renderer.setSize(this.viewportWidth, this.viewportHeight, false);
+  }
+
   resize(width: number, height: number): void {
     const safeWidth = Math.max(1, Math.floor(width));
     const safeHeight = Math.max(1, Math.floor(height));
+    this.viewportWidth = safeWidth;
+    this.viewportHeight = safeHeight;
     this.renderer.setSize(safeWidth, safeHeight, false);
     this.camera.aspect = safeWidth / safeHeight;
     this.camera.updateProjectionMatrix();

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { registerAdminHorseRoutes } from './admin-horse-routes.js';
+import { registerActivityRoutes } from './activity-routes.js';
 import { registerAdminOperationsRoutes } from './admin-operations-routes.js';
 import { registerAdminRaceRoutes } from './admin-race-routes.js';
 import { registerAuthRoutes } from './auth-routes.js';
@@ -26,6 +27,7 @@ export async function buildServer(dependencies: ServerDependencies): Promise<Fas
     app.log.error({ err: error }, 'Administrative notification failed after a committed mutation.'),
   );
   registerFoundationRoutes(app, context, dependencies);
+  registerActivityRoutes(app, context);
   registerAuthRoutes(app, context);
   registerViewerRoutes(app, context);
   registerAdminHorseRoutes(app, context);

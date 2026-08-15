@@ -10,6 +10,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173"
   },
   "dependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
     "@fontsource-variable/noto-sans-jp": "^5.3.0",
     "@jcb/config": "workspace:*",
     "@jcb/contracts": "workspace:*",

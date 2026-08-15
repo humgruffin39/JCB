@@ -11,6 +11,7 @@ import {
 } from './api.js';
 import { initializationErrorMessage as getInitializationErrorMessage } from './public-error-message.js';
 import { PublicState } from './public-state.js';
+import { isDiscordActivityLaunch } from './activity-launch.js';
 
 const ACCESS_REDIRECT_URL = 'https://youtu.be/dQw4w9WgXcQ';
 
@@ -22,6 +23,10 @@ const RaceTerminal = lazy(async () => {
   const module = await import('./race-terminal.js');
   return { default: module.RaceTerminal };
 });
+const ActivityShell = lazy(async () => {
+  const module = await import('./activity-shell.js');
+  return { default: module.ActivityShell };
+});
 
 type AppState =
   | { readonly status: 'loading' }
@@ -32,12 +37,13 @@ type AppState =
 export function App() {
   const [state, setState] = useState<AppState>({ status: 'loading' });
   const isAdmin = window.location.pathname.startsWith('/admin');
+  const isActivity = !isAdmin && isDiscordActivityLaunch(window.location.search);
   const isRace =
     !isAdmin && (state.status === 'race' || window.location.pathname.startsWith('/races/'));
   const isState = !isAdmin && !isRace;
 
   useEffect(() => {
-    if (isAdmin) return;
+    if (isAdmin || isActivity) return;
     let active = true;
     let sessionExpired = false;
     const handleAuthExpired = () => {
@@ -57,7 +63,19 @@ export function App() {
       active = false;
       window.removeEventListener('jcb:auth-expired', handleAuthExpired);
     };
-  }, [isAdmin]);
+  }, [isActivity, isAdmin]);
+
+  if (isActivity) {
+    return (
+      <div className="app-shell app-shell--race app-shell--activity">
+        <main id="main">
+          <Suspense fallback={<LoadingState />}>
+            <ActivityShell />
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
 
   if (!isAdmin && state.status === 'needs-discord') {
     return <AccessRedirect />;

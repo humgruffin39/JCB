@@ -1,4 +1,5 @@
 export * from './connection.js';
+export * from './activity-store.js';
 export * from './auth-store.js';
 export * from './admin-store.js';
 export * from './admin-health-store.js';

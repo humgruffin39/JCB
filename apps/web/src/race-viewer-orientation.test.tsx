@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { RaceOrientationGate } from './race-viewer-orientation.js';
+import { RaceOrientationGate, shouldShowRaceOrientationGate } from './race-viewer-orientation.js';
 
 describe('RaceOrientationGate', () => {
   it('gives concise landscape guidance without an extra action', () => {
@@ -15,5 +15,29 @@ describe('RaceOrientationGate', () => {
 
   it('does not render anything when the viewport is usable', () => {
     expect(renderToStaticMarkup(<RaceOrientationGate isVisible={false} />)).toBe('');
+  });
+});
+
+describe('shouldShowRaceOrientationGate', () => {
+  it('never blocks a Discord Activity on browser orientation', () => {
+    expect(
+      shouldShowRaceOrientationGate({
+        isActivity: true,
+        isReady: true,
+        isResults: false,
+        isPortrait: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps portrait guidance for the existing mobile browser viewer', () => {
+    expect(
+      shouldShowRaceOrientationGate({
+        isActivity: false,
+        isReady: true,
+        isResults: false,
+        isPortrait: true,
+      }),
+    ).toBe(true);
   });
 });

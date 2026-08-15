@@ -1528,6 +1528,10 @@ main {
   --race-glass-edge: rgb(255 255 255 / 28%);
   --race-glass-highlight: rgb(255 255 255 / 18%);
   --race-glass-shadow: rgb(0 0 0 / 28%);
+  --race-safe-top: env(safe-area-inset-top, 0px);
+  --race-safe-right: env(safe-area-inset-right, 0px);
+  --race-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --race-safe-left: env(safe-area-inset-left, 0px);
   width: 100%;
   height: 100dvh;
   min-height: 0;
@@ -1536,6 +1540,27 @@ main {
   color: #f7f5ef;
   background: #10120d;
   isolation: isolate;
+}
+
+.race-broadcast--activity {
+  --race-safe-top: max(
+    var(--jcb-activity-safe-top, 0px),
+    var(--discord-safe-area-inset-top, env(safe-area-inset-top, 0px))
+  );
+  --race-safe-right: max(
+    var(--jcb-activity-safe-right, 0px),
+    var(--discord-safe-area-inset-right, env(safe-area-inset-right, 0px))
+  );
+  --race-safe-bottom: max(
+    var(--jcb-activity-safe-bottom, 0px),
+    var(--discord-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+  );
+  --race-safe-left: max(
+    var(--jcb-activity-safe-left, 0px),
+    var(--discord-safe-area-inset-left, env(safe-area-inset-left, 0px))
+  );
+  height: 100%;
+  min-height: 100dvh;
 }
 
 .race-broadcast--results .race-scene-3d {
@@ -1551,7 +1576,8 @@ main {
   display: grid;
   width: 100%;
   min-height: 4.75rem;
-  padding: max(1rem, env(safe-area-inset-top)) clamp(1rem, 2.5vw, 2.5rem) 1rem;
+  padding: max(1rem, var(--race-safe-top)) max(clamp(1rem, 2.5vw, 2.5rem), var(--race-safe-right))
+    1rem max(clamp(1rem, 2.5vw, 2.5rem), var(--race-safe-left));
   grid-template-columns: minmax(12rem, 1fr) auto minmax(8rem, 1fr);
   align-items: center;
   gap: 1.5rem;
@@ -1673,6 +1699,29 @@ main {
   gap: clamp(0.55rem, 1.25vw, 1rem);
 }
 
+.broadcast-hud--compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+}
+
+.broadcast-hud--compact .broadcast-title {
+  height: 2.75rem;
+}
+
+.broadcast-hud--compact .broadcast-title h1 {
+  max-width: 56vw;
+  font-size: clamp(0.9rem, 2.3vw, 1.25rem);
+}
+
+.broadcast-hud--compact .broadcast-title small {
+  display: none;
+}
+
+.broadcast-hud--compact .broadcast-race-status,
+.broadcast-hud--compact .broadcast-clock {
+  height: 2.75rem;
+}
+
 .broadcast-race-status .broadcast-clock {
   width: 7.25rem;
   min-width: 7.25rem;
@@ -1779,8 +1828,8 @@ main {
 .broadcast-controls {
   position: absolute;
   z-index: 90;
-  bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem));
-  left: clamp(1rem, 2.5vw, 2.5rem);
+  bottom: max(1rem, calc(var(--race-safe-bottom) + 0.75rem));
+  left: max(clamp(1rem, 2.5vw, 2.5rem), var(--race-safe-left));
   display: flex;
   height: 3.25rem;
   box-sizing: border-box;
@@ -1863,8 +1912,8 @@ main {
   inset: 0;
   display: grid;
   box-sizing: border-box;
-  padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
-    max(1.25rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+  padding: max(1.25rem, var(--race-safe-top)) max(1.25rem, var(--race-safe-right))
+    max(1.25rem, var(--race-safe-bottom)) max(1.25rem, var(--race-safe-left));
   place-items: center;
   color: #f5f5f2;
   background: #050505;
@@ -2025,8 +2074,9 @@ main {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: max(1.25rem, env(safe-area-inset-top)) clamp(1rem, 4vw, 4rem)
-    max(1.25rem, calc(env(safe-area-inset-bottom) + 0.75rem));
+  padding: max(1.25rem, var(--race-safe-top)) max(clamp(1rem, 4vw, 4rem), var(--race-safe-right))
+    max(1.25rem, calc(var(--race-safe-bottom) + 0.75rem))
+    max(clamp(1rem, 4vw, 4rem), var(--race-safe-left));
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-columns: minmax(0, 1fr) minmax(18rem, 27rem);
   align-items: center;
@@ -2339,9 +2389,9 @@ main {
   }
 
   .broadcast-controls {
-    right: 0.65rem;
-    bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem));
-    left: 0.65rem;
+    right: max(0.65rem, var(--race-safe-right));
+    bottom: max(1rem, calc(var(--race-safe-bottom) + 0.75rem));
+    left: max(0.65rem, var(--race-safe-left));
     justify-content: center;
   }
 
@@ -2521,6 +2571,47 @@ main {
   color: rgb(255 255 255 / 68%);
   font-size: 0.86rem;
   overflow-wrap: anywhere;
+}
+
+.activity-status {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  min-width: 20rem;
+  min-height: 100dvh;
+  padding: max(1rem, var(--discord-safe-area-inset-top, env(safe-area-inset-top, 0px)))
+    max(1rem, var(--discord-safe-area-inset-right, env(safe-area-inset-right, 0px)))
+    max(1rem, var(--discord-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))
+    max(1rem, var(--discord-safe-area-inset-left, env(safe-area-inset-left, 0px)));
+  place-content: center;
+  justify-items: center;
+  color: #f5f5f2;
+  background: #050505;
+}
+
+.activity-status .public-state {
+  min-height: 0;
+  padding: 0;
+}
+
+.activity-status__retry {
+  min-width: 9rem;
+  min-height: 2.75rem;
+  margin-top: 1.25rem;
+  color: #050505;
+  background: #f5f5f2;
+  border-color: #f5f5f2;
+}
+
+.activity-status__retry:hover {
+  color: #050505;
+  background: #fff;
+  border-color: #fff;
+}
+
+.activity-status__retry:focus-visible {
+  outline: 0.125rem solid #fff;
+  outline-offset: 0.2rem;
 }
 
 @media (max-width: 30rem) {

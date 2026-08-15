@@ -17,6 +17,7 @@ export interface PlaybackControlsProps {
   readonly cameraMode: RaceCameraMode;
   readonly isMobile: boolean;
   readonly isFullscreen: boolean;
+  readonly showFullscreen?: boolean;
   readonly onPause: () => void;
   readonly onToggleCamera: () => void;
   readonly onToggleFullscreen: () => void;
@@ -48,6 +49,7 @@ export function PlaybackControls({
   cameraMode,
   isMobile,
   isFullscreen,
+  showFullscreen = true,
   onPause,
   onToggleCamera,
   onToggleFullscreen,
@@ -79,7 +81,9 @@ export function PlaybackControls({
           {isPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
         </button>
       ) : null}
-      <FullscreenControl isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} />
+      {showFullscreen ? (
+        <FullscreenControl isFullscreen={isFullscreen} onToggleFullscreen={onToggleFullscreen} />
+      ) : null}
     </div>
   );
 }

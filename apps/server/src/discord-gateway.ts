@@ -1,5 +1,6 @@
 import type { Environment } from '@jcb/config';
 import {
+  SqliteActivityStore,
   SqliteAuthStore,
   SqliteDiscordMessageStore,
   SqliteGameStore,
@@ -44,6 +45,7 @@ export function wireDiscordGateway(input: {
   const guildId = requireConfigured(input.environment.DISCORD_GUILD_ID, 'DISCORD_GUILD_ID');
   const membership = new DiscordClientGuildMembership(input.client, guildId);
   const gameStore = new SqliteGameStore(input.database, () => input.clock.now());
+  const activityStore = new SqliteActivityStore(input.database, () => input.clock.now());
   const authStore = new SqliteAuthStore(input.database, () => input.clock.now());
   const viewerStore = new SqliteViewerStore(input.database);
   const sessions = new SqliteInteractionSessionStore(input.database, () => input.clock.now());
@@ -89,6 +91,28 @@ export function wireDiscordGateway(input: {
             `観戦導線は ${formatJst(race.viewerOpensAt)} に開きます。`,
           );
           return;
+        }
+        if (action === 'view') {
+          if (interaction.channelId === null) {
+            await safeEphemeralReply(interaction, 'このチャンネルから観戦を開始してください。');
+            return;
+          }
+          activityStore.issueLaunchIntent({
+            discordUserId: interaction.user.id,
+            guildId,
+            channelId: interaction.channelId,
+            raceId,
+            interactionId: interaction.id,
+          });
+          try {
+            await interaction.launchActivity();
+            return;
+          } catch (activityError) {
+            // Preserve the proven browser path as an emergency fallback for old
+            // clients and while Activity distribution is being configured.
+            activityStore.cancelLaunchIntent(interaction.id);
+            reportDiscordError(activityError);
+          }
         }
         const issued = authStore.issueLoginTicket(interaction.user.id, raceId);
         const url = new URL('/auth/ticket', input.environment.PUBLIC_WEB_ORIGIN);

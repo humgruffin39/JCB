@@ -72,6 +72,7 @@ describe('server API contract', () => {
     });
     for (const route of [
       ['POST', '/api/v1/auth/tickets/exchange'],
+      ['POST', '/api/v1/auth/activity/exchange'],
       ['GET', '/api/v1/auth/discord/start'],
       ['GET', '/api/v1/auth/discord/callback'],
       ['POST', '/api/v1/auth/logout'],

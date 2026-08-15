@@ -34,6 +34,7 @@ export class RaceWorldCameraController {
   private battleUntilMs = 0;
   private lastBattleCutMs = Number.NEGATIVE_INFINITY;
   private pointerStart: { readonly id: number; readonly x: number; readonly y: number } | undefined;
+  private interactive = true;
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -94,6 +95,12 @@ export class RaceWorldCameraController {
     this.trackedCameraInitialized = false;
     this.onTrackedHorseChange?.(horseNumber);
     this.setCameraMode('horse');
+  }
+
+  setInteractive(interactive: boolean): void {
+    this.interactive = interactive;
+    this.orbit.enabled = interactive;
+    if (!interactive) this.pointerStart = undefined;
   }
 
   update(
@@ -302,6 +309,7 @@ export class RaceWorldCameraController {
   }
 
   private readonly handleOrbitStart = (): void => {
+    if (!this.interactive) return;
     if (this.cameraMode === 'follow' && this.leaderHorseNumber !== undefined) {
       this.setTrackedHorse(this.leaderHorseNumber);
     }
@@ -333,11 +341,13 @@ export class RaceWorldCameraController {
   }
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
+    if (!this.interactive) return;
     if (event.button !== 0) return;
     this.pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
   };
 
   private readonly handlePointerUp = (event: PointerEvent): void => {
+    if (!this.interactive) return;
     const start = this.pointerStart;
     this.pointerStart = undefined;
     if (start === undefined || start.id !== event.pointerId) return;

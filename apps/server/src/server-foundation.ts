@@ -18,6 +18,8 @@ export async function createServerApp(environment: Environment): Promise<Fastify
           'req.headers.cookie',
           'res.headers["set-cookie"]',
           '*.ticket',
+          '*.code',
+          '*.accessToken',
           '*.sessionToken',
           '*.officialSeed',
           '*.finishOrder',
@@ -33,6 +35,9 @@ export async function createServerApp(environment: Environment): Promise<Fastify
       .map((origin) => origin.trim())
       .filter(Boolean),
   );
+  if (environment.DISCORD_CLIENT_ID !== undefined) {
+    origins.add(`https://${environment.DISCORD_CLIENT_ID}.discordsays.com`);
+  }
   await app.register(cookie);
   await app.register(cors, {
     credentials: true,

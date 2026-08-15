@@ -16,6 +16,7 @@ export interface BroadcastHudProps {
   readonly position: number;
   readonly trackedHorseNumber: number | undefined;
   readonly onTrackHorse: (horseNumber: number | undefined) => void;
+  readonly compact?: boolean;
 }
 
 export function BroadcastHud({
@@ -26,44 +27,47 @@ export function BroadcastHud({
   position,
   trackedHorseNumber,
   onTrackHorse,
+  compact = false,
 }: BroadcastHudProps) {
   return (
-    <header className="broadcast-hud">
+    <header className={`broadcast-hud${compact ? ' broadcast-hud--compact' : ''}`}>
       <div className="broadcast-title">
         <h1>{raceName}</h1>
         <small>
           {String(distanceM)}m・{surface === 'turf' ? '芝' : 'ダート'}
         </small>
       </div>
-      <ol className="running-order" aria-label="現在の走行順">
-        {orderedHorses.map((horse) => (
-          <li key={horse.horseNumber}>
-            <button
-              type="button"
-              aria-label={`${String(horse.horseNumber)}番を追尾`}
-              aria-pressed={trackedHorseNumber === horse.horseNumber}
-              title={`${String(horse.horseNumber)}番を追尾`}
-              style={
-                {
-                  '--horse-number-fill':
-                    SADDLECLOTH_COLORS[horse.horseNumber - 1]?.background ?? '#f4f1df',
-                  '--horse-number-text':
-                    SADDLECLOTH_COLORS[horse.horseNumber - 1]?.foreground ?? '#111111',
-                } as CSSProperties
-              }
-              onClick={() =>
-                onTrackHorse(
-                  trackedHorseNumber === horse.horseNumber ? undefined : horse.horseNumber,
-                )
-              }
-            >
-              <strong>{String(horse.horseNumber)}</strong>
-            </button>
-          </li>
-        ))}
-      </ol>
+      {compact ? null : (
+        <ol className="running-order" aria-label="現在の走行順">
+          {orderedHorses.map((horse) => (
+            <li key={horse.horseNumber}>
+              <button
+                type="button"
+                aria-label={`${String(horse.horseNumber)}番を追尾`}
+                aria-pressed={trackedHorseNumber === horse.horseNumber}
+                title={`${String(horse.horseNumber)}番を追尾`}
+                style={
+                  {
+                    '--horse-number-fill':
+                      SADDLECLOTH_COLORS[horse.horseNumber - 1]?.background ?? '#f4f1df',
+                    '--horse-number-text':
+                      SADDLECLOTH_COLORS[horse.horseNumber - 1]?.foreground ?? '#111111',
+                  } as CSSProperties
+                }
+                onClick={() =>
+                  onTrackHorse(
+                    trackedHorseNumber === horse.horseNumber ? undefined : horse.horseNumber,
+                  )
+                }
+              >
+                <strong>{String(horse.horseNumber)}</strong>
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
       <div className="broadcast-race-status">
-        <CourseProgressIndicator progress={orderedHorses[0]?.progress ?? 0} />
+        {compact ? null : <CourseProgressIndicator progress={orderedHorses[0]?.progress ?? 0} />}
         <div className="broadcast-clock">
           <output aria-label="再生位置">{(position / 1000).toFixed(1)}s</output>
         </div>

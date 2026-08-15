@@ -27,6 +27,7 @@ export const environmentSchema = z.object({
   DISCORD_CLIENT_ID: optionalDiscordId,
   DISCORD_CLIENT_SECRET: optionalSecret,
   DISCORD_REDIRECT_URI: optionalUrl,
+  DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT: z.stringbool().default(false),
   DISCORD_RACE_CHANNEL_ID: optionalDiscordId,
   DISCORD_RANKING_CHANNEL_ID: optionalDiscordId,
   DISCORD_ADMIN_CHANNEL_ID: optionalDiscordId,
@@ -60,6 +61,11 @@ export type Environment = z.infer<typeof environmentSchema>;
 
 export function parseEnvironment(source: NodeJS.ProcessEnv): Environment {
   const parsed = environmentSchema.parse(source);
+  if (parsed.NODE_ENV === 'production' && parsed.DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT) {
+    throw new Error(
+      'DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT cannot be enabled in production.',
+    );
+  }
   if (parsed.NODE_ENV === 'production') {
     const required = [
       'DISCORD_GUILD_ID',

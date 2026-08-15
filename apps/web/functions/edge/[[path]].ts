@@ -1,7 +1,7 @@
 import { proxyRequest } from '../upstream-proxy.js';
 
-const API_ORIGIN = 'https://jcb-racing-api.fly.dev';
+const EDGE_ORIGIN = 'https://jcb-race-edge.hugh-fabre.workers.dev';
 
 export async function onRequest(context: { readonly request: Request }): Promise<Response> {
-  return proxyRequest(context, API_ORIGIN);
+  return proxyRequest(context, EDGE_ORIGIN);
 }

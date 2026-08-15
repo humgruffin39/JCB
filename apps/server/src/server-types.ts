@@ -4,6 +4,7 @@ import type { Environment } from '@jcb/config';
 import type { AdminNotice } from './admin-notification.js';
 import type {
   SqliteAdminStore,
+  SqliteActivityStore,
   SqliteAuthStore,
   SqliteGameStore,
   SqliteJobStore,
@@ -14,6 +15,7 @@ import type {
 import type { Clock, Timestamp } from '@jcb/domain';
 import type { PrivateObjectStore } from '@jcb/application';
 import type { GuildMembership } from '@jcb/application';
+import type { DiscordActivityApi } from './discord-activity-api.js';
 
 export interface ServerDependencies {
   readonly database: SqliteDatabase;
@@ -23,12 +25,14 @@ export interface ServerDependencies {
   readonly discordStatus?: () => boolean;
   readonly adminNotifier?: (notice: AdminNotice) => Promise<void>;
   readonly timelineStore?: PrivateObjectStore;
+  readonly activityApi?: DiscordActivityApi;
 }
 
 export interface AuthenticatedSession {
   readonly id: string;
   readonly discordUserId: string;
   readonly reauthenticatedAt?: number;
+  readonly authenticationMethod?: 'web' | 'activity';
 }
 
 export interface AuthenticateOptions {
@@ -47,6 +51,8 @@ export interface ServerRouteContext {
   readonly dependencies: ServerDependencies;
   readonly now: () => Timestamp;
   readonly authStore: SqliteAuthStore;
+  readonly activityStore: SqliteActivityStore;
+  readonly activityApi: DiscordActivityApi;
   readonly gameStore: SqliteGameStore;
   readonly viewerStore: SqliteViewerStore;
   readonly adminStore: SqliteAdminStore;

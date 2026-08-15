@@ -95,8 +95,8 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
     return (
       <PublicState
         status={error === undefined ? 'loading' : 'error'}
-        heading={error === undefined ? '読み込み中' : 'レース情報を読み込めません'}
-        message={error ?? 'レース情報を確認しています。'}
+        heading={error === undefined ? 'レース映像を準備中' : 'レース情報を読み込めません'}
+        {...(error === undefined ? {} : { message: error })}
       />
     );
   }

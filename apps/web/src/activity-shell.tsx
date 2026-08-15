@@ -79,18 +79,10 @@ export function ActivityShell({ createPlatform = defaultPlatformFactory }: Activ
 
   if (state.status === 'race') return <RaceTerminal raceId={state.raceId} />;
   if (state.status === 'connecting') {
-    return (
-      <ActivityStatus status="loading" heading="ジョサン中央銀行" message="接続しています。" />
-    );
+    return <ActivityStatus status="loading" heading="レース映像を準備中" />;
   }
   if (state.status === 'authorizing') {
-    return (
-      <ActivityStatus
-        status="loading"
-        heading="ジョサン中央銀行"
-        message="観戦準備をしています。"
-      />
-    );
+    return <ActivityStatus status="loading" heading="レース映像を準備中" />;
   }
   return (
     <ActivityStatus
@@ -110,12 +102,16 @@ function ActivityStatus({
 }: {
   readonly status: PublicStateStatus;
   readonly heading: string;
-  readonly message: string;
+  readonly message?: string;
   readonly onRetry?: () => void;
 }) {
   return (
     <div className="activity-status">
-      <PublicState status={status} heading={heading} message={message} />
+      <PublicState
+        status={status}
+        heading={heading}
+        {...(message === undefined ? {} : { message })}
+      />
       {onRetry === undefined ? null : (
         <button className="activity-status__retry" type="button" onClick={onRetry}>
           もう一度接続

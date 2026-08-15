@@ -218,7 +218,7 @@ export function raceIdFromPathname(pathname: string): string | undefined {
 }
 
 function LoadingState() {
-  return <PublicState status="loading" heading="読み込み中" />;
+  return <PublicState status="loading" heading="レース映像を準備中" />;
 }
 
 function AccessRedirect() {

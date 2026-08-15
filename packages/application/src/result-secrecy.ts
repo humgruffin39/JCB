@@ -5,6 +5,7 @@ import {
   hkdfSync,
   randomBytes,
   sign,
+  timingSafeEqual,
   verify,
   type KeyLike,
 } from 'node:crypto';
@@ -164,6 +165,13 @@ export function createOpaqueToken(): string {
 
 export function hashOpaqueToken(token: string): string {
   return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+/** Compares an opaque token with a stored SHA-256 digest without data-dependent string comparison. */
+export function matchesOpaqueTokenHash(token: string, expectedHash: string): boolean {
+  const actual = Buffer.from(hashOpaqueToken(token), 'hex');
+  const expected = Buffer.from(expectedHash, 'hex');
+  return actual.byteLength === expected.byteLength && timingSafeEqual(actual, expected);
 }
 
 export function sha256(payload: Uint8Array): string {

@@ -29,16 +29,29 @@ try {
     'horses',
     'races',
     'race_entries',
+    'race_entry_drafts',
     'race_simulations',
     'bets',
     'scheduled_jobs',
     'audit_logs',
+    'oauth_login_states',
+    'health_probes',
+    'object_publications',
     'counting_state',
+    'activity_launch_intents',
+    'activity_instances',
+    'activity_sessions',
   ]) {
     if (!tables.has(table)) throw new Error(`Migration did not create ${table}.`);
   }
   const integrity = database.pragma('integrity_check', { simple: true });
   if (integrity !== 'ok') throw new Error(`SQLite integrity check failed: ${String(integrity)}`);
+  const foreignKeyViolations = database.pragma('foreign_key_check') as unknown[];
+  if (foreignKeyViolations.length > 0) {
+    throw new Error(
+      `SQLite foreign key check found ${String(foreignKeyViolations.length)} errors.`,
+    );
+  }
   process.stdout.write(`Applied migrations to scratch database: ${databasePath}\n`);
 } finally {
   database.close();

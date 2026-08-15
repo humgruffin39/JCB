@@ -9,18 +9,13 @@ import {
   type RaceStatus,
   type Timestamp,
 } from '@jcb/domain';
-import {
-  settleTrifectaPool,
-  settleWinPool,
-  transfer,
-  type OpenTicket,
-  type SeedPosition,
-  type SettlementResult,
-} from '@jcb/economy';
+import { transfer } from '@jcb/economy';
 import { currentOddsTenths, formatOdds } from '@jcb/odds';
 import { verifyOfficialSimulationResult, type OfficialSimulationResult } from '@jcb/simulation';
 import { SqliteLedgerStore } from './ledger-store.js';
+import { normalizeMasterSecrets } from './master-secret-keyring.js';
 import { SqliteObjectPublicationStore } from './object-publication-store.js';
+import { loadOpenTickets, loadRacePools, settleRacePool } from './race-pool-settlement.js';
 
 interface RaceLifecycleRow {
   readonly id: string;
@@ -29,27 +24,6 @@ interface RaceLifecycleRow {
   readonly scheduledAt: bigint;
   readonly bettingClosesAt: bigint;
   readonly timelineDurationMs: bigint | null;
-}
-
-interface PoolRow {
-  readonly id: string;
-  readonly poolType: PoolType;
-  readonly accountId: string;
-  readonly seedLiquidity: bigint;
-  readonly userStakeTotal: bigint;
-}
-
-interface TicketRow {
-  readonly id: string;
-  readonly accountId: string;
-  readonly selectionCode: string;
-  readonly stake: bigint;
-  readonly createdAt: bigint;
-}
-
-interface SeedRow {
-  readonly selectionCode: string;
-  readonly stake: bigint;
 }
 
 const RACE_PROGRESS_ORDER: readonly RaceStatus[] = [
@@ -174,33 +148,58 @@ export class SqliteRaceLifecycleStore {
       if (at < Number(race.scheduledAt + race.timelineDurationMs + 3_000n)) {
         throw new Error('Settlement publication delay not reached.');
       }
-      this.database
-        .prepare("UPDATE races SET status = 'settling', updated_at = ? WHERE id = ?")
-        .run(BigInt(at), raceId);
+      const markSettling = this.database
+        .prepare("UPDATE races SET status = 'settling', updated_at = ? WHERE id = ? AND status = ?")
+        .run(BigInt(at), raceId, race.status);
+      if (markSettling.changes !== 1) {
+        throw new Error('Race settling transition lost a concurrent update.');
+      }
       const finish = this.database
         .prepare(
-          `SELECT horse_number AS horseNumber FROM race_entries
-           WHERE race_id = ? ORDER BY finish_position`,
+          `SELECT horse_number AS horseNumber, finish_position AS finishPosition
+           FROM race_entries
+           WHERE race_id = ? AND finish_position IS NOT NULL
+           ORDER BY finish_position`,
         )
-        .all(raceId) as Array<{ horseNumber: bigint }>;
-      if (finish.length !== 8) throw new Error('Materialized finish order is incomplete.');
+        .all(raceId) as Array<{ horseNumber: bigint; finishPosition: bigint }>;
+      if (
+        finish.length !== 8 ||
+        finish.some((entry, index) => Number(entry.finishPosition) !== index + 1)
+      ) {
+        throw new Error('Materialized finish order is incomplete.');
+      }
       const winSelection = String(finish[0]!.horseNumber);
       const trifectaSelection = `${finish[0]!.horseNumber}-${finish[1]!.horseNumber}-${finish[2]!.horseNumber}`;
-      for (const pool of this.loadPools(raceId)) {
-        this.settlePool(
-          raceId,
-          Number(race.version),
-          pool,
-          pool.poolType === 'win' ? winSelection : trifectaSelection,
-          at,
-        );
+      const centralBankAccountId = this.findAccount('central_bank', 'global');
+      const pools = loadRacePools(this.database, raceId);
+      if (
+        pools.length !== 2 ||
+        !pools.some((pool) => pool.poolType === 'win') ||
+        !pools.some((pool) => pool.poolType === 'trifecta')
+      ) {
+        throw new Error('Race pools are incomplete.');
       }
-      this.database
+      for (const pool of pools) {
+        settleRacePool({
+          database: this.database,
+          ledger: this.ledger,
+          centralBankAccountId,
+          raceId,
+          raceVersion: Number(race.version),
+          pool,
+          winningSelection: pool.poolType === 'win' ? winSelection : trifectaSelection,
+          at,
+        });
+      }
+      const markSettled = this.database
         .prepare(
           `UPDATE races SET status = 'settled', updated_at = ?
            WHERE id = ? AND status = 'settling'`,
         )
         .run(BigInt(at), raceId);
+      if (markSettled.changes !== 1) {
+        throw new Error('Race settled transition lost a concurrent update.');
+      }
       this.ledger.assertProjectionIntegrity();
     });
     run.immediate();
@@ -231,8 +230,18 @@ export class SqliteRaceLifecycleStore {
              AND json_extract(payload_json, '$.raceId') = ?`,
         )
         .run(BigInt(at), raceId);
-      for (const pool of this.loadPools(raceId)) {
-        const tickets = this.loadTickets(pool.id);
+      const updateRefundedBet = this.database.prepare(
+        `UPDATE bets SET status = 'refunded', payout = stake, settled_at = ?
+         WHERE id = ? AND status = 'open'`,
+      );
+      const refundSeedPositions = this.database.prepare(
+        'UPDATE seed_positions SET payout = stake WHERE pool_id = ?',
+      );
+      const finalizePool = this.database.prepare(
+        "UPDATE bet_pools SET status = 'refunded', finalized_at = ? WHERE id = ?",
+      );
+      for (const pool of loadRacePools(this.database, raceId)) {
+        const tickets = loadOpenTickets(this.database, pool.id);
         for (const ticket of tickets) {
           this.ledger.post({
             kind: 'bet_refund',
@@ -242,12 +251,8 @@ export class SqliteRaceLifecycleStore {
             description: `Race cancellation refund: ${reason}`,
             entries: transfer(identifier(pool.accountId), ticket.accountId, ticket.stake),
           });
-          this.database
-            .prepare(
-              `UPDATE bets SET status = 'refunded', payout = stake, settled_at = ?
-               WHERE id = ? AND status = 'open'`,
-            )
-            .run(BigInt(at), ticket.id);
+          const result = updateRefundedBet.run(BigInt(at), ticket.id);
+          if (result.changes !== 1) throw new Error('Open bet disappeared during refund.');
         }
         const remaining = this.ledger.balance(identifier(pool.accountId));
         if (remaining > 0n) {
@@ -260,118 +265,20 @@ export class SqliteRaceLifecycleStore {
             entries: transfer(identifier(pool.accountId), centralBank, remaining),
           });
         }
-        this.database
-          .prepare('UPDATE seed_positions SET payout = stake WHERE pool_id = ?')
-          .run(pool.id);
-        this.database
-          .prepare("UPDATE bet_pools SET status = 'refunded', finalized_at = ? WHERE id = ?")
-          .run(BigInt(at), pool.id);
+        refundSeedPositions.run(pool.id);
+        finalizePool.run(BigInt(at), pool.id);
       }
-      this.database
+      const cancelRace = this.database
         .prepare(
           `UPDATE races SET status = 'cancelled', cancelled_at = ?, cancel_reason = ?, updated_at = ?
-           WHERE id = ?`,
+           WHERE id = ? AND status = ?`,
         )
-        .run(BigInt(at), reason, BigInt(at), raceId);
+        .run(BigInt(at), reason, BigInt(at), raceId, race.status);
+      if (cancelRace.changes !== 1) {
+        throw new Error('Race cancellation transition lost a concurrent update.');
+      }
     });
     run.immediate();
-  }
-
-  private settlePool(
-    raceId: string,
-    raceVersion: number,
-    pool: PoolRow,
-    winningSelection: string,
-    at: Timestamp,
-  ): void {
-    const tickets = this.loadTickets(pool.id);
-    const seeds = this.loadSeedPositions(pool.id);
-    const poolAccountId = identifier<'AccountId'>(pool.accountId);
-    const centralBankAccountId = this.findAccount('central_bank', 'global');
-    const seedTotal = seeds.reduce((sum, seed) => sum + seed.stake, 0n);
-    const userTotal = tickets.reduce((sum, ticket) => sum + ticket.stake, 0n);
-    const poolBalance = this.ledger.balance(poolAccountId);
-    if (
-      seedTotal !== pool.seedLiquidity ||
-      userTotal !== pool.userStakeTotal ||
-      poolBalance !== seedTotal + userTotal
-    ) {
-      throw new Error('Pool projection does not match its ledger balance.');
-    }
-    const common = {
-      poolAccountId,
-      centralBankAccountId,
-      winningSelection,
-      poolBalance,
-      tickets,
-      seedPositions: seeds,
-    };
-    let settlement: SettlementResult;
-    if (pool.poolType === 'win') {
-      settlement = settleWinPool(common);
-    } else {
-      const carryoverAccountId = this.findAccount('trifecta_carryover', 'global');
-      const carryoverProjection = this.database
-        .prepare(
-          "SELECT amount_projection AS amountProjection FROM trifecta_carryover WHERE id = 'global'",
-        )
-        .get() as { amountProjection: bigint } | undefined;
-      const carryoverBalance = this.ledger.balance(carryoverAccountId);
-      if (
-        carryoverProjection === undefined ||
-        carryoverProjection.amountProjection !== carryoverBalance
-      ) {
-        throw new Error('Carryover projection does not match its ledger balance.');
-      }
-      settlement = settleTrifectaPool({
-        ...common,
-        carryoverAccountId,
-        carryoverBalance,
-      });
-    }
-    this.ledger.post({
-      kind: 'pool_settlement',
-      referenceType: 'pool',
-      referenceId: pool.id,
-      idempotencyKey: `settlement:${raceId}:${pool.poolType}:${String(raceVersion)}`,
-      description: `${pool.poolType} pool settlement`,
-      entries: settlement.ledgerEntries,
-    });
-    this.database.prepare('UPDATE seed_positions SET payout = 0 WHERE pool_id = ?').run(pool.id);
-    const payoutByTicket = new Map<string, bigint>();
-    for (const payout of settlement.payouts) {
-      if (payout.recipientType === 'user') {
-        payoutByTicket.set(
-          payout.recipientId,
-          (payoutByTicket.get(payout.recipientId) ?? 0n) + payout.amount,
-        );
-      } else {
-        this.database
-          .prepare(`UPDATE seed_positions SET payout = ? WHERE pool_id = ? AND selection_code = ?`)
-          .run(payout.amount, pool.id, payout.recipientId);
-      }
-    }
-    for (const ticket of tickets) {
-      const payout = payoutByTicket.get(ticket.id) ?? 0n;
-      this.database
-        .prepare(
-          `UPDATE bets SET status = ?, payout = ?, settled_at = ?
-           WHERE id = ? AND status = 'open'`,
-        )
-        .run(payout > 0n ? 'won' : 'lost', payout, BigInt(at), ticket.id);
-    }
-    this.database
-      .prepare("UPDATE bet_pools SET status = 'settled', finalized_at = ? WHERE id = ?")
-      .run(BigInt(at), pool.id);
-    if (pool.poolType === 'trifecta') {
-      const carryover = this.findAccount('trifecta_carryover', 'global');
-      this.database
-        .prepare(
-          `UPDATE trifecta_carryover SET amount_projection = ?, updated_at = ?
-           WHERE id = 'global'`,
-        )
-        .run(this.ledger.balance(carryover), BigInt(at));
-    }
   }
 
   private decryptOfficialResult(raceId: string, raceVersion: number): OfficialSimulationResult {
@@ -452,47 +359,6 @@ export class SqliteRaceLifecycleStore {
     return row;
   }
 
-  private loadPools(raceId: string): readonly PoolRow[] {
-    return this.database
-      .prepare(
-        `SELECT id, pool_type AS poolType, account_id AS accountId,
-                seed_liquidity AS seedLiquidity, user_stake_total AS userStakeTotal
-         FROM bet_pools WHERE race_id = ? ORDER BY pool_type`,
-      )
-      .all(raceId) as PoolRow[];
-  }
-
-  private loadTickets(poolId: string): readonly OpenTicket[] {
-    return (
-      this.database
-        .prepare(
-          `SELECT b.id, a.id AS accountId, b.selection_code AS selectionCode,
-                  b.stake, b.created_at AS createdAt
-           FROM bets b JOIN accounts a ON a.owner_key = b.user_id AND a.account_type = 'user'
-           WHERE b.pool_id = ? AND b.status = 'open'
-           ORDER BY b.created_at, b.id`,
-        )
-        .all(poolId) as TicketRow[]
-    ).map((row) => ({
-      id: row.id,
-      accountId: identifier(row.accountId),
-      selectionCode: row.selectionCode,
-      stake: money(row.stake),
-      createdAt: Number(row.createdAt),
-    }));
-  }
-
-  private loadSeedPositions(poolId: string): readonly SeedPosition[] {
-    return (
-      this.database
-        .prepare(
-          `SELECT selection_code AS selectionCode, stake
-           FROM seed_positions WHERE pool_id = ? ORDER BY selection_code`,
-        )
-        .all(poolId) as SeedRow[]
-    ).map((row) => ({ selectionCode: row.selectionCode, stake: money(row.stake) }));
-  }
-
   private findAccount(accountType: string, ownerKey: string): AccountId {
     const row = this.database
       .prepare('SELECT id FROM accounts WHERE account_type = ? AND owner_key = ?')
@@ -500,14 +366,6 @@ export class SqliteRaceLifecycleStore {
     if (row === undefined) throw new Error(`Account missing: ${accountType}:${ownerKey}`);
     return identifier(row.id);
   }
-}
-
-function normalizeMasterSecrets(value: string | readonly string[]): readonly string[] {
-  const secrets = typeof value === 'string' ? [value] : [...value];
-  if (secrets.length === 0 || secrets.some((secret) => secret.length === 0)) {
-    throw new Error('At least one result master secret is required.');
-  }
-  return [...new Set(secrets)];
 }
 
 function isAtOrAfter(status: RaceStatus, target: RaceStatus): boolean {

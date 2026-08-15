@@ -19,6 +19,11 @@ import {
   type SeedPositionAllocation,
 } from '@jcb/odds';
 import { ulid } from 'ulid';
+import {
+  DEFAULT_RACE_BET_LIMITS,
+  DEFAULT_SEED_LIQUIDITY_CLAMP,
+  type SeedClamp,
+} from './game-store-types.js';
 import type { SqliteLedgerStore } from './ledger-store.js';
 
 export interface PurchaseBetInput {
@@ -46,13 +51,6 @@ export interface OpenBettingPoolsInput {
   readonly trifectaLiquidity: Money;
   readonly winPositions: readonly SeedPositionAllocation[];
   readonly trifectaPositions: readonly SeedPositionAllocation[];
-}
-
-interface SeedClamp {
-  readonly winMinimum: number;
-  readonly winMaximum: number;
-  readonly trifectaMinimum: number;
-  readonly trifectaMaximum: number;
 }
 
 export class SqliteGameFinanceStore {
@@ -281,18 +279,23 @@ export class SqliteGameFinanceStore {
       .get(raceId) as
       { kind: RaceKind; scheduledAt: bigint; simulationConfigJson: string } | undefined;
     if (race === undefined) throw new Error('Race not found.');
+    const recentRows = this.database
+      .prepare(
+        `SELECT poolType, amount FROM (
+           SELECT bp.pool_type AS poolType, bp.user_stake_total AS amount,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY bp.pool_type ORDER BY r.scheduled_at DESC
+                  ) AS recencyRank
+           FROM bet_pools bp JOIN races r ON r.id = bp.race_id
+           WHERE r.kind = ? AND r.scheduled_at < ?
+             AND r.status IN ('finished', 'settling', 'settled')
+             AND bp.pool_type IN ('win', 'trifecta')
+         ) WHERE recencyRank <= 14
+         ORDER BY poolType, recencyRank`,
+      )
+      .all(race.kind, race.scheduledAt) as Array<{ poolType: PoolType; amount: bigint }>;
     const recentTotals = (poolType: PoolType): Money[] =>
-      (
-        this.database
-          .prepare(
-            `SELECT bp.user_stake_total AS amount
-             FROM bet_pools bp JOIN races r ON r.id = bp.race_id
-             WHERE r.kind = ? AND r.scheduled_at < ? AND bp.pool_type = ?
-               AND r.status IN ('finished', 'settling', 'settled')
-             ORDER BY r.scheduled_at DESC LIMIT 14`,
-          )
-          .all(race.kind, race.scheduledAt, poolType) as { amount: bigint }[]
-      ).map((row) => money(row.amount));
+      recentRows.filter((row) => row.poolType === poolType).map((row) => money(row.amount));
     const financial = parseRaceFinancialSettings(race.simulationConfigJson, race.kind);
     const plan = planAdaptiveSeedLiquidity(
       race.kind,
@@ -387,27 +390,6 @@ export class SqliteGameFinanceStore {
     return identifier(row.id);
   }
 }
-
-const DEFAULT_SEED_LIQUIDITY_CLAMP = {
-  regular: {
-    winMinimum: 5_000,
-    winMaximum: 25_000,
-    trifectaMinimum: 10_000,
-    trifectaMaximum: 40_000,
-  },
-  special: {
-    winMinimum: 10_000,
-    winMaximum: 50_000,
-    trifectaMinimum: 20_000,
-    trifectaMaximum: 80_000,
-  },
-} as const;
-
-const DEFAULT_RACE_BET_LIMITS: Readonly<Record<RaceKind, number>> = {
-  regular: 5_000,
-  midweek: 10_000,
-  saturday_night: 20_000,
-};
 
 function parseRaceFinancialSettings(
   valueJson: string,

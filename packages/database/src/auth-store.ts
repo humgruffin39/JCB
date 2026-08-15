@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { createOpaqueToken, hashOpaqueToken } from '@jcb/application';
+import { createOpaqueToken, hashOpaqueToken, matchesOpaqueTokenHash } from '@jcb/application';
 import { timestamp, type Timestamp } from '@jcb/domain';
 import { ulid } from 'ulid';
 
@@ -207,7 +207,7 @@ export class SqliteAuthStore {
     if (row === undefined || row.revokedAt !== null || Number(row.expiresAt) <= this.now()) {
       throw new Error('Web session is invalid or expired.');
     }
-    if (csrfToken !== undefined && hashOpaqueToken(csrfToken) !== row.csrfTokenHash) {
+    if (csrfToken !== undefined && !matchesOpaqueTokenHash(csrfToken, row.csrfTokenHash)) {
       throw new Error('CSRF token is invalid.');
     }
     return {
@@ -245,7 +245,7 @@ export class SqliteAuthStore {
         )
         .get(hashOpaqueToken(sessionToken), BigInt(this.now())) as
         { csrfTokenHash: string } | undefined;
-      if (row !== undefined && hashOpaqueToken(currentToken) === row.csrfTokenHash) {
+      if (row !== undefined && matchesOpaqueTokenHash(currentToken, row.csrfTokenHash)) {
         return currentToken;
       }
     }

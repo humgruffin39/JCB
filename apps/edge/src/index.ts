@@ -1,7 +1,21 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import { edgeAccessClaimsSchema, raceIdParamsSchema, signedManifestSchema } from '@jcb/contracts';
+import {
+  raceIdParamsSchema,
+  signedManifestSchema,
+  type edgeAccessClaimsSchema,
+} from '@jcb/contracts';
 import { ZodError, type z } from 'zod';
+import {
+  bytesToBase64,
+  deriveTimelineKey,
+  deriveVerifiedTimelineKey,
+  sha256Hex,
+  verifyAccessToken,
+  verifyManifest,
+} from './edge-crypto.js';
+
+const MAX_EDGE_TOKEN_LENGTH = 8_192;
 
 class EdgeRequestError extends Error {
   public constructor(
@@ -121,23 +135,32 @@ export async function handleEdgeRequest(
       headers.set('x-content-type-options', 'nosniff');
       return new Response(timelineBytes, { status: 200, headers });
     }
-    const timelineKey =
-      environment.TIMELINE_MASTER_SECRET_PREVIOUS === undefined
-        ? await deriveTimelineKey(
-            environment.TIMELINE_MASTER_SECRET,
-            raceId,
-            manifest.simulationVersion,
-            manifest.raceVersion,
-          )
-        : await deriveVerifiedTimelineKey(
-            [environment.TIMELINE_MASTER_SECRET, environment.TIMELINE_MASTER_SECRET_PREVIOUS],
-            raceId,
-            manifest.simulationVersion,
-            manifest.raceVersion,
-            manifest.iv,
-            manifest.authTag,
-            await new Response(timelineObject.body).arrayBuffer(),
-          );
+    let timelineKey: Uint8Array;
+    if (environment.TIMELINE_MASTER_SECRET_PREVIOUS === undefined) {
+      timelineKey = await deriveTimelineKey(
+        environment.TIMELINE_MASTER_SECRET,
+        raceId,
+        manifest.simulationVersion,
+        manifest.raceVersion,
+      );
+    } else {
+      try {
+        timelineKey = await deriveVerifiedTimelineKey(
+          [environment.TIMELINE_MASTER_SECRET, environment.TIMELINE_MASTER_SECRET_PREVIOUS],
+          raceId,
+          manifest.simulationVersion,
+          manifest.raceVersion,
+          manifest.iv,
+          manifest.authTag,
+          await new Response(timelineObject.body).arrayBuffer(),
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === 'TIMELINE_KEY_INVALID') {
+          throw new EdgeRequestError(409, 'TIMELINE_KEY_INVALID');
+        }
+        throw error;
+      }
+    }
     headers.set('content-type', 'application/json; charset=utf-8');
     return new Response(
       JSON.stringify({
@@ -176,132 +199,26 @@ const edgeWorker = {
 
 export default edgeWorker;
 
-async function verifyAccessToken(
-  token: string,
-  publicKeyValue: string,
-  nowSeconds: number,
-): Promise<z.infer<typeof edgeAccessClaimsSchema>> {
-  const parts = token.split('.');
-  if (parts.length !== 3) throw new Error('TOKEN_MALFORMED');
-  const [header, payload, signature] = parts as [string, string, string];
-  const parsedHeader = JSON.parse(base64UrlToText(header)) as unknown;
-  if (
-    typeof parsedHeader !== 'object' ||
-    parsedHeader === null ||
-    !('alg' in parsedHeader) ||
-    parsedHeader.alg !== 'EdDSA'
-  ) {
-    throw new Error('TOKEN_ALGORITHM_INVALID');
-  }
-  const key = await importEd25519PublicKey(publicKeyValue);
-  const valid = await crypto.subtle.verify(
-    'Ed25519',
-    key,
-    webBuffer(base64UrlToBytes(signature)),
-    new TextEncoder().encode(`${header}.${payload}`),
-  );
-  if (!valid) throw new Error('TOKEN_SIGNATURE_INVALID');
-  const claims = edgeAccessClaimsSchema.parse(JSON.parse(base64UrlToText(payload)));
-  if (nowSeconds < claims.nbf || nowSeconds >= claims.exp) throw new Error('TOKEN_EXPIRED');
-  return claims;
-}
-
-async function verifyManifest(
-  signedInput: z.infer<typeof signedManifestSchema>,
-  publicKeyValue: string,
-): Promise<z.infer<typeof signedManifestSchema>['manifest']> {
-  const signed = signedManifestSchema.parse(signedInput);
-  const key = await importEd25519PublicKey(publicKeyValue);
-  const valid = await crypto.subtle.verify(
-    'Ed25519',
-    key,
-    webBuffer(base64UrlToBytes(signed.signature)),
-    new TextEncoder().encode(stableStringify(signed.manifest)),
-  );
-  if (!valid) throw new Error('MANIFEST_SIGNATURE_INVALID');
-  return signed.manifest;
-}
-
-async function deriveTimelineKey(
-  masterSecret: string,
-  raceId: string,
-  simulationVersion: string,
-  raceVersion: number,
-): Promise<Uint8Array> {
-  const inputKeyMaterial = base64ToBytes(masterSecret);
-  if (inputKeyMaterial.byteLength < 32) throw new Error('TIMELINE_SECRET_INVALID');
-  const key = await crypto.subtle.importKey('raw', webBuffer(inputKeyMaterial), 'HKDF', false, [
-    'deriveBits',
-  ]);
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: new TextEncoder().encode(raceId),
-      info: new TextEncoder().encode(`timeline:${simulationVersion}:${String(raceVersion)}`),
-    },
-    key,
-    256,
-  );
-  return new Uint8Array(bits);
-}
-
-async function deriveVerifiedTimelineKey(
-  masterSecrets: readonly string[],
-  raceId: string,
-  simulationVersion: string,
-  raceVersion: number,
-  iv: string,
-  authTag: string,
-  ciphertext: ArrayBuffer,
-): Promise<Uint8Array> {
-  const ciphertextWithTag = new Uint8Array(
-    ciphertext.byteLength + base64ToBytes(authTag).byteLength,
-  );
-  ciphertextWithTag.set(new Uint8Array(ciphertext));
-  ciphertextWithTag.set(base64ToBytes(authTag), ciphertext.byteLength);
-  for (const masterSecret of masterSecrets) {
-    const keyBytes = await deriveTimelineKey(masterSecret, raceId, simulationVersion, raceVersion);
-    try {
-      const key = await crypto.subtle.importKey(
-        'raw',
-        webBuffer(keyBytes),
-        { name: 'AES-GCM' },
-        false,
-        ['decrypt'],
-      );
-      await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: webBuffer(base64ToBytes(iv)), tagLength: 128 },
-        key,
-        webBuffer(ciphertextWithTag),
-      );
-      return keyBytes;
-    } catch {
-      continue;
-    }
-  }
-  throw new EdgeRequestError(409, 'TIMELINE_KEY_INVALID');
-}
-
-async function importEd25519PublicKey(value: string): Promise<CryptoKey> {
-  const normalized = value.includes('BEGIN PUBLIC KEY')
-    ? value.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s/g, '')
-    : value;
-  return await crypto.subtle.importKey(
-    'spki',
-    webBuffer(base64ToBytes(normalized)),
-    { name: 'Ed25519' },
-    false,
-    ['verify'],
-  );
-}
-
 function bearerToken(request: Request): string {
   const authorization = request.headers.get('authorization');
-  if (authorization === null || !authorization.startsWith('Bearer ')) {
+  if (authorization === null) {
     throw new EdgeRequestError(401, 'TOKEN_REQUIRED');
   }
-  return authorization.slice('Bearer '.length);
+  const parts = authorization.trim().split(/\s+/);
+  const scheme = parts[0];
+  const token = parts[1];
+  if (
+    parts.length !== 2 ||
+    scheme?.toLowerCase() !== 'bearer' ||
+    token === undefined ||
+    token.length === 0
+  ) {
+    throw new EdgeRequestError(401, 'TOKEN_REQUIRED');
+  }
+  if (token.length > MAX_EDGE_TOKEN_LENGTH) {
+    throw new EdgeRequestError(401, 'TOKEN_INVALID');
+  }
+  return token;
 }
 
 function errorResponse(status: number, code: string, origin: string): Response {
@@ -335,46 +252,4 @@ function selectResponseOrigin(
 ): string {
   if (requestOrigin !== null && allowedOrigins.includes(requestOrigin)) return requestOrigin;
   return allowedOrigins[0]!;
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function base64UrlToText(value: string): string {
-  return new TextDecoder().decode(base64UrlToBytes(value));
-}
-
-function base64UrlToBytes(value: string): Uint8Array {
-  return base64ToBytes(value.replaceAll('-', '+').replaceAll('_', '/'));
-}
-
-function base64ToBytes(value: string): Uint8Array {
-  const padded = value.padEnd(Math.ceil(value.length / 4) * 4, '=');
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function bytesToBase64(value: Uint8Array): string {
-  let binary = '';
-  for (const byte of value) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-async function sha256Hex(value: ArrayBuffer): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', value));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function webBuffer(value: Uint8Array): ArrayBuffer {
-  const copy = new Uint8Array(value.byteLength);
-  copy.set(value);
-  return copy.buffer;
 }

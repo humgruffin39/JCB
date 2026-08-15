@@ -140,6 +140,54 @@ describe('admin operational store', () => {
     database.close();
   });
 
+  it('does not record a false audit when adding an existing administrator', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    const game = new SqliteGameStore(database, () => 1);
+    const admin = new SqliteAdminStore(database, () => 1);
+    game.initializeEconomy(['123456']);
+
+    admin.addAdministrator({
+      discordUserId: '123456',
+      actorUserId: '123456',
+      reason: 'duplicate request',
+    });
+
+    const count = database
+      .prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'administrator.added'")
+      .get() as { count: bigint };
+    expect(count.count).toBe(0n);
+    database.close();
+  });
+
+  it('does not audit an update for a setting that does not exist', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(dirname(dirname(fileURLToPath(import.meta.url))), 'migrations'),
+      1,
+    );
+    const admin = new SqliteAdminStore(database, () => 1);
+
+    expect(() =>
+      admin.updateSetting({
+        key: 'missing-setting',
+        value: { enabled: true },
+        actorUserId: '123456',
+        reason: 'missing setting test',
+      }),
+    ).toThrow(/not found/i);
+    const count = database
+      .prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'setting.updated'")
+      .get() as { count: bigint };
+    expect(count.count).toBe(0n);
+    database.close();
+  });
+
   it('revokes every OAuth session when an administrator is removed', () => {
     const now = 1_000;
     const database = openDatabase(':memory:');

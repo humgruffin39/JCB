@@ -1,5 +1,10 @@
 import { allTrifectaSelections } from '@jcb/domain';
-import { simulateOutcomeOnly, Xoshiro128StarStar, type SimulationInput } from '@jcb/simulation';
+import {
+  createOutcomeSimulator,
+  nextTrialSeed,
+  Xoshiro128StarStar,
+  type SimulationInput,
+} from '@jcb/simulation';
 
 export const ODDS_VERSION = 'outcome-20000-v4-preference-axis-temp18';
 export const DEFAULT_SIMULATION_COUNT = 20_000;
@@ -31,15 +36,10 @@ export function generateProbabilities(
   const trifectaIndex = new Map(trifectaSelections.map((selection, index) => [selection, index]));
   const trifectaCounts = new Uint32Array(trifectaSelections.length);
   const seedGenerator = new Xoshiro128StarStar(oddsSeed);
+  const simulateOutcome = createOutcomeSimulator(input);
 
   for (let run = 0; run < simulationCount; run += 1) {
-    const trialSeed = [
-      seedGenerator.nextUint32(),
-      seedGenerator.nextUint32(),
-      seedGenerator.nextUint32(),
-      seedGenerator.nextUint32(),
-    ].join(':');
-    const finishOrder = simulateOutcomeOnly(input, trialSeed);
+    const finishOrder = simulateOutcome(nextTrialSeed(seedGenerator));
     winCounts[finishOrder[0]! - 1] = winCounts[finishOrder[0]! - 1]! + 1;
     const trifectaCode = `${finishOrder[0]}-${finishOrder[1]}-${finishOrder[2]}`;
     const combinationIndex = trifectaIndex.get(trifectaCode);

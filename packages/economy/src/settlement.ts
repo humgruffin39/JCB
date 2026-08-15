@@ -67,10 +67,11 @@ export function settleWinPool(input: WinSettlementInput): SettlementResult {
     },
   ];
   const allocations = allocateProRata(input.poolBalance, claims);
+  const winningTicketsById = new Map(winningTickets.map((ticket) => [ticket.id, ticket]));
   const payouts = allocations.map((allocation): SettlementPayout => {
     if (allocation.id.startsWith('user:')) {
       const ticketId = allocation.id.slice('user:'.length);
-      const ticket = winningTickets.find((candidate) => candidate.id === ticketId);
+      const ticket = winningTicketsById.get(ticketId);
       if (ticket === undefined) throw new Error('Allocated ticket disappeared.');
       return {
         recipientType: 'user',
@@ -132,9 +133,10 @@ export function settleTrifectaPool(input: TrifectaSettlementInput): SettlementRe
     weight: ticket.stake,
     tieBreaker: String(ticket.createdAt).padStart(16, '0'),
   }));
+  const winningTicketsById = new Map(winningTickets.map((ticket) => [ticket.id, ticket]));
   const carryoverPayouts = allocateProRata(input.carryoverBalance, carryoverClaims).map(
     (allocation): SettlementPayout => {
-      const ticket = winningTickets.find((candidate) => candidate.id === allocation.id);
+      const ticket = winningTicketsById.get(allocation.id);
       if (ticket === undefined) throw new Error('Allocated ticket disappeared.');
       return {
         recipientType: 'user',

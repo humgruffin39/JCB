@@ -1,6 +1,8 @@
 import type { Environment } from '@jcb/config';
 import { z } from 'zod';
 
+const DISCORD_REQUEST_TIMEOUT_MILLISECONDS = 10_000;
+
 const oauthTokenSchema = z
   .object({
     access_token: z.string().min(1),
@@ -78,6 +80,7 @@ export class DiscordHttpActivityApi implements DiscordActivityApi {
         grant_type: 'authorization_code',
         code,
       }),
+      signal: AbortSignal.timeout(DISCORD_REQUEST_TIMEOUT_MILLISECONDS),
     });
     if (!response.ok) throw new DiscordActivityApiError('OAUTH_EXCHANGE_FAILED', response.status);
     const token = oauthTokenSchema.parse(await response.json());
@@ -91,6 +94,7 @@ export class DiscordHttpActivityApi implements DiscordActivityApi {
   public async getCurrentUser(token: DiscordActivityOAuthToken): Promise<DiscordActivityProfile> {
     const response = await fetch('https://discord.com/api/v10/users/@me', {
       headers: { authorization: `${token.tokenType} ${token.accessToken}` },
+      signal: AbortSignal.timeout(DISCORD_REQUEST_TIMEOUT_MILLISECONDS),
     });
     if (!response.ok) throw new DiscordActivityApiError('PROFILE_FAILED', response.status);
     const profile = discordProfileSchema.parse(await response.json());
@@ -106,7 +110,10 @@ export class DiscordHttpActivityApi implements DiscordActivityApi {
     const botToken = requireSetting(this.environment.DISCORD_BOT_TOKEN, 'DISCORD_BOT_TOKEN');
     const response = await fetch(
       `https://discord.com/api/v10/applications/${encodeURIComponent(clientId)}/activity-instances/${encodeURIComponent(instanceId)}`,
-      { headers: { authorization: `Bot ${botToken}` } },
+      {
+        headers: { authorization: `Bot ${botToken}` },
+        signal: AbortSignal.timeout(DISCORD_REQUEST_TIMEOUT_MILLISECONDS),
+      },
     );
     if (!response.ok) throw new DiscordActivityApiError('INSTANCE_FAILED', response.status);
     const instance = activityInstanceSchema.parse(await response.json());

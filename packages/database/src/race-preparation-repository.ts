@@ -22,6 +22,7 @@ import { ODDS_VERSION } from '@jcb/odds';
 import { generateSimulationSeeds, PRNG_VERSION, SIMULATION_VERSION } from '@jcb/simulation';
 import { ulid } from 'ulid';
 import { SqliteGameStore } from './game-store.js';
+import { normalizeMasterSecrets } from './master-secret-keyring.js';
 import { SqliteObjectPublicationStore } from './object-publication-store.js';
 
 interface RacePreparationRow {
@@ -75,12 +76,23 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
       const entries = this.loadEntries(raceId);
       const simulationSettings = parseSimulationSettings(race.simulationConfigJson);
       const seeds = this.loadOrCreateSeeds(race);
-      this.database
+      const markSimulating = this.database
         .prepare(
           `UPDATE races SET status = 'simulating', simulation_version = ?,
-           odds_version = ?, updated_at = ? WHERE id = ?`,
+           odds_version = ?, updated_at = ?
+           WHERE id = ? AND version = ? AND status = ?`,
         )
-        .run(SIMULATION_VERSION, ODDS_VERSION, BigInt(this.now()), raceId);
+        .run(
+          SIMULATION_VERSION,
+          ODDS_VERSION,
+          BigInt(this.now()),
+          raceId,
+          race.version,
+          race.status,
+        );
+      if (markSimulating.changes !== 1) {
+        throw new Error('Race changed while simulation was starting.');
+      }
       return {
         raceId,
         raceVersion: Number(race.version),
@@ -112,7 +124,7 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
         throw new Error('Official simulation input hash does not match locked race input.');
       }
       const now = BigInt(this.now());
-      this.database
+      const completeOfficial = this.database
         .prepare(
           `UPDATE race_simulations
            SET status = 'completed', result_hash = ?, encrypted_result_blob = ?,
@@ -129,6 +141,9 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
           start.raceId,
           start.raceVersion,
         );
+      if (completeOfficial.changes !== 1) {
+        throw new Error('Official simulation record is missing.');
+      }
       const oddsHash = sha256(
         Buffer.from(
           JSON.stringify({
@@ -140,13 +155,14 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
           'utf8',
         ),
       );
-      this.database
+      const completeOdds = this.database
         .prepare(
           `UPDATE race_simulations SET status = 'completed', result_hash = ?,
            completed_at = ?, error_code = NULL, error_detail_redacted = NULL
            WHERE race_id = ? AND race_version = ? AND kind = 'odds'`,
         )
         .run(oddsHash, now, start.raceId, start.raceVersion);
+      if (completeOdds.changes !== 1) throw new Error('Odds simulation record is missing.');
       this.database.prepare('DELETE FROM odds_probabilities WHERE race_id = ?').run(start.raceId);
       const insertOdds = this.database.prepare(
         `INSERT INTO odds_probabilities
@@ -184,12 +200,15 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
           now,
         );
       }
-      this.database
+      const saveTimelineDuration = this.database
         .prepare(
           `UPDATE races SET timeline_duration_ms = ?, updated_at = ?
            WHERE id = ? AND status = 'simulating'`,
         )
         .run(completion.official.timelineDurationMs, now, start.raceId);
+      if (saveTimelineDuration.changes !== 1) {
+        throw new Error('Race changed while simulation was completing.');
+      }
       this.gameStore.openBettingPools({
         raceId: start.raceId,
         winLiquidity: completion.winLiquidity,
@@ -373,14 +392,6 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
     );
     return seeds;
   }
-}
-
-function normalizeMasterSecrets(value: string | readonly string[]): readonly string[] {
-  const secrets = typeof value === 'string' ? [value] : [...value];
-  if (secrets.length === 0 || secrets.some((secret) => secret.length === 0)) {
-    throw new Error('At least one result master secret is required.');
-  }
-  return [...new Set(secrets)];
 }
 
 function parseSimulationSettings(value: string): {

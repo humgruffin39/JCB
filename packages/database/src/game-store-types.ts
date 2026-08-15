@@ -69,7 +69,7 @@ export interface RaceLockSettings {
   readonly raceBetLimits?: Readonly<Record<RaceKind, number>>;
 }
 
-interface SeedClamp {
+export interface SeedClamp {
   readonly winMinimum: number;
   readonly winMaximum: number;
   readonly trifectaMinimum: number;

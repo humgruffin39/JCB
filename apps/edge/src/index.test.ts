@@ -110,6 +110,27 @@ describe('Cloudflare release edge', () => {
     });
   });
 
+  it('accepts a case-insensitive Bearer scheme and rejects oversized tokens early', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const bindings = environment(signedManifest(now - 1_000));
+    const accepted = await handleEdgeRequest(
+      new Request(`https://edge.example.test/edge/v1/races/${raceId}/release`, {
+        headers: { origin: webOrigin, authorization: `bearer ${validToken()}` },
+      }),
+      bindings,
+    );
+    expect(accepted.status).toBe(200);
+
+    const oversized = await handleEdgeRequest(
+      new Request(`https://edge.example.test/edge/v1/races/${raceId}/release`, {
+        headers: { origin: webOrigin, authorization: `Bearer ${'a'.repeat(8_193)}` },
+      }),
+      bindings,
+    );
+    expect(oversized.status).toBe(401);
+    await expect(oversized.json()).resolves.toMatchObject({ error: { code: 'TOKEN_INVALID' } });
+  });
+
   it('returns a server error for an unexpected object-store failure', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(now);
     const bindings = environment(signedManifest(now - 1_000));

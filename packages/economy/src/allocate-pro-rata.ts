@@ -29,6 +29,9 @@ export function allocateProRata(
     if (total === 0n) return [];
     throw new DomainError('INVALID_MONEY', 'A positive total requires at least one claim.');
   }
+  if (new Set(claims.map((claim) => claim.id)).size !== claims.length) {
+    throw new DomainError('INVALID_MONEY', 'Allocation claim IDs must be unique.');
+  }
   const totalWeight = claims.reduce((sum, claim) => sum + claim.weight, 0n);
   if (totalWeight <= 0n || claims.some((claim) => claim.weight < 0n)) {
     throw new DomainError(

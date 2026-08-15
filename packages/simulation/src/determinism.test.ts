@@ -27,6 +27,10 @@ describe('official simulation determinism', () => {
     const second = simulateOfficialRace(input, 'official-seed');
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
     expect(first.resultHash).toBe(second.resultHash);
+    expect(first.resultHash).toBe(
+      '7d0f7cbbc61bb4c16aa759aa5fc4298f59c1cec9216f3053907e11270597065d',
+    );
+    expect(simulateOutcomeOnly(input, 'outcome-seed')).toEqual([7, 4, 3, 1, 5, 2, 6, 8]);
   });
 
   it('finishes all eight horses with consistent positions and times', () => {

@@ -17,6 +17,7 @@ import type { ServerRouteContext } from './server-types.js';
 
 const OAUTH_STATE_COOKIE = 'jcb_oauth_state';
 const ONE_DAY_MILLISECONDS = 24 * 60 * 60 * 1000;
+const DISCORD_REQUEST_TIMEOUT_MILLISECONDS = 10_000;
 
 export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteContext): void {
   const { dependencies, now, authStore, activityStore, gameStore, viewerStore, authenticate } =
@@ -158,6 +159,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
           redirect_uri: oauth.redirectUri,
           code_verifier: oauthState.codeVerifier,
         }),
+        signal: AbortSignal.timeout(DISCORD_REQUEST_TIMEOUT_MILLISECONDS),
       });
       if (!tokenResponse.ok) {
         throw httpError(401, 'DISCORD_OAUTH_EXCHANGE_FAILED', 'Discord sign-in failed.');
@@ -167,6 +169,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
         .parse(await tokenResponse.json());
       const profileResponse = await fetch('https://discord.com/api/v10/users/@me', {
         headers: { authorization: `${token.token_type} ${token.access_token}` },
+        signal: AbortSignal.timeout(DISCORD_REQUEST_TIMEOUT_MILLISECONDS),
       });
       if (!profileResponse.ok) {
         throw httpError(401, 'DISCORD_PROFILE_FAILED', 'Discord profile could not be verified.');

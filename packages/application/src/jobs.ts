@@ -62,18 +62,25 @@ export async function runClaimedJob(
   handlers: JobHandlers,
   job: ScheduledJob,
   workerId: string,
-  now: Timestamp,
+  now: Timestamp | (() => Timestamp),
 ): Promise<JobStatus> {
+  const completionTime = (): Timestamp => (typeof now === 'function' ? now() : now);
   const handler = handlers[job.jobType];
   if (handler === undefined) {
-    return store.fail(job.id, workerId, now, 'JOB_HANDLER_MISSING', 'No handler is registered.');
+    return store.fail(
+      job.id,
+      workerId,
+      completionTime(),
+      'JOB_HANDLER_MISSING',
+      'No handler is registered.',
+    );
   }
   try {
     await handler(job);
-    store.complete(job.id, workerId, now);
+    store.complete(job.id, workerId, completionTime());
     return 'completed';
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 300) : 'Unknown job error';
-    return store.fail(job.id, workerId, now, 'JOB_FAILED', message);
+    return store.fail(job.id, workerId, completionTime(), 'JOB_FAILED', message);
   }
 }

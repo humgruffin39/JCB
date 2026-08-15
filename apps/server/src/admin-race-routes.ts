@@ -295,10 +295,6 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
     }
     const manifestKey = `race-manifests/${raceId}.json`;
     const manifestMetadata = { raceId, type: 'release-manifest' };
-    // The rehearsal is intentionally available as soon as this request succeeds.
-    // Keep the outbox entry below as a retryable record, but publish the small
-    // manifest directly so a viewer does not wait for the scheduler poll.
-    await dependencies.timelineStore.put(manifestKey, manifestPublication, manifestMetadata);
     const run = dependencies.database.transaction(() => {
       dependencies.database
         .prepare(
@@ -373,6 +369,13 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
       });
     });
     run.immediate();
+    // Commit the durable schedule and outbox first. If direct publication fails,
+    // the scheduler can still deliver the exact same manifest from the outbox.
+    try {
+      await dependencies.timelineStore.put(manifestKey, manifestPublication, manifestMetadata);
+    } catch (error) {
+      request.log.error({ err: error, raceId }, 'immediate rehearsal manifest publication failed');
+    }
     return envelope({
       scheduled: true,
       viewerOpensAt: runAt,

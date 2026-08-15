@@ -6,6 +6,8 @@ import {
   deriveResultKey,
   deriveTimelineKey,
   encryptAesGcm,
+  hashOpaqueToken,
+  matchesOpaqueTokenHash,
   signReleaseManifest,
   verifyEdgeAccessToken,
   verifyReleaseManifest,
@@ -78,5 +80,12 @@ describe('result secrecy', () => {
     );
     expect(verifyEdgeAccessToken(token, publicKey, 1_000).raceId).toBe('race-1');
     expect(() => verifyEdgeAccessToken(token, publicKey, 1_100)).toThrow();
+  });
+
+  it('compares opaque token digests without accepting malformed or different values', () => {
+    const token = 'opaque-session-token';
+    expect(matchesOpaqueTokenHash(token, hashOpaqueToken(token))).toBe(true);
+    expect(matchesOpaqueTokenHash('different-token', hashOpaqueToken(token))).toBe(false);
+    expect(matchesOpaqueTokenHash(token, 'not-a-sha256-digest')).toBe(false);
   });
 });

@@ -133,6 +133,20 @@ describe('race lifecycle and settlement', () => {
     const finishAt = 100_000 + completion.official.timelineDurationMs;
     const firstOfficial = lifecycle.markFinished(race.id, timestamp(finishAt));
     expect(lifecycle.markFinished(race.id, timestamp(finishAt))).toEqual(firstOfficial);
+    database
+      .prepare(
+        'UPDATE race_entries SET finish_position = 1 WHERE race_id = ? AND finish_position = 2',
+      )
+      .run(race.id);
+    expect(() => lifecycle.settleRace(race.id, timestamp(finishAt + 3_000))).toThrow(
+      /finish order is incomplete/i,
+    );
+    database
+      .prepare(
+        `UPDATE race_entries SET finish_position = 2
+         WHERE race_id = ? AND horse_number = ?`,
+      )
+      .run(race.id, firstOfficial.finishOrder[1]!.horseNumber);
     lifecycle.settleRace(race.id, timestamp(finishAt + 3_000));
     lifecycle.settleRace(race.id, timestamp(finishAt + 3_000));
     expect(game.getRace(race.id).status).toBe('settled');

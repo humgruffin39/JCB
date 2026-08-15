@@ -35,6 +35,15 @@ describe('economy integrity', () => {
     );
   });
 
+  it('rejects duplicate allocation claim IDs', () => {
+    expect(() =>
+      allocateProRata(money(100n), [
+        { id: 'duplicate', weight: money(1n), tieBreaker: '1' },
+        { id: 'duplicate', weight: money(1n), tieBreaker: '2' },
+      ]),
+    ).toThrow(/unique/i);
+  });
+
   it('carries over all user trifecta stakes when there is no user winner', () => {
     const poolAccountId = identifier<'AccountId'>('pool');
     const centralBankAccountId = identifier<'AccountId'>('bank');

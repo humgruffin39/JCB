@@ -2389,6 +2389,82 @@ main {
   }
 }
 
+@media (orientation: landscape) and (max-width: 72rem),
+  (orientation: landscape) and (max-height: 48rem) {
+  .results-screen {
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, min(27rem, 30vw));
+    gap: clamp(0.6rem, 1.4vw, 1.1rem);
+  }
+
+  .podium {
+    width: 100%;
+    height: min(52vh, 30rem);
+    gap: clamp(0.35rem, 1vw, 0.85rem);
+  }
+
+  .podium-card {
+    padding: clamp(0.5rem, 1.1vw, 0.85rem);
+  }
+
+  .podium-place {
+    top: clamp(0.5rem, 1vw, 0.8rem);
+    font-size: clamp(0.7rem, 1vw, 0.9rem);
+  }
+
+  .podium-name {
+    gap: clamp(0.3rem, 0.7vw, 0.5rem);
+  }
+
+  .podium-horse-number {
+    width: clamp(1.25rem, 2vw, 1.65rem);
+    font-size: clamp(0.65rem, 1vw, 0.78rem);
+  }
+
+  .podium-name strong {
+    overflow: hidden;
+    font-size: clamp(0.7rem, 1.15vw, 1.1rem);
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .payout-board {
+    width: auto;
+    max-height: none;
+    padding: clamp(0.75rem, 1.5vw, 1.25rem);
+    justify-self: stretch;
+  }
+
+  .payout-board ul {
+    margin-top: clamp(0.7rem, 1vw, 1rem);
+  }
+
+  .payout-board li {
+    min-height: clamp(3.5rem, 7vh, 5.25rem);
+    padding: clamp(0.55rem, 1vw, 0.85rem) clamp(0.65rem, 1.4vw, 1rem);
+    gap: clamp(0.65rem, 1.1vw, 1rem);
+  }
+
+  .ticket-type {
+    font-size: clamp(0.7rem, 1vw, 0.82rem);
+  }
+
+  .ticket-horse-number {
+    width: clamp(1.25rem, 2vw, 1.6rem);
+  }
+
+  .ticket-payout strong {
+    font-size: clamp(0.85rem, 1.45vw, 1.3rem);
+  }
+
+  .replay-button {
+    min-height: 2.5rem;
+    padding: 0.55rem 1.6rem;
+    font-size: clamp(0.7rem, 1.1vw, 0.8rem);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

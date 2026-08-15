@@ -200,6 +200,20 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
   });
   await expect(page.getByRole('region', { name: '確定結果' })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.podium-card')).toHaveCount(3);
+  expect(
+    await page.evaluate(() => {
+      const podium = document.querySelector<HTMLElement>('.podium');
+      const payout = document.querySelector<HTMLElement>('.payout-board');
+      const names = [...document.querySelectorAll<HTMLElement>('.podium-name strong')];
+      if (podium === null || payout === null || names.length !== 3) return false;
+      const podiumBounds = podium.getBoundingClientRect();
+      const payoutBounds = payout.getBoundingClientRect();
+      return (
+        payoutBounds.left >= podiumBounds.right &&
+        names.every((name) => getComputedStyle(name).whiteSpace === 'nowrap')
+      );
+    }),
+  ).toBe(true);
   await expect
     .poll(async () =>
       page.evaluate(() => {

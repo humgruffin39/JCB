@@ -456,10 +456,7 @@ export function RaceViewer({
         </p>
       )}
       {viewer.state === 'ready' ? (
-        <RaceOrientationGate
-          isVisible={shouldShowOrientationGate}
-          onEnterImmersiveMode={toggleImmersiveMode}
-        />
+        <RaceOrientationGate isVisible={shouldShowOrientationGate} />
       ) : null}
     </section>
   );

@@ -139,10 +139,27 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
     });
     await page.setViewportSize({ width: 640, height: 360 });
     await expect(page.getByRole('heading', { name: '端末を横向きにしてください' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '全画面で見る' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '全画面で観戦' })).toHaveCount(0);
   }
   await expect(playButton).toBeVisible();
   await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible();
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const controls = document.querySelector<HTMLElement>(
+          '.broadcast-controls:not(.broadcast-loading-controls)',
+        );
+        if (controls === null) return false;
+        const bounds = controls.getBoundingClientRect();
+        return (
+          bounds.top >= 0 &&
+          bounds.left >= 0 &&
+          bounds.bottom <= window.innerHeight &&
+          bounds.right <= window.innerWidth
+        );
+      }),
+    )
+    .toBe(true);
   await expect(page.locator('.broadcast-clock output')).toHaveCSS(
     'font-family',
     /Noto Sans JP Variable/,
@@ -183,6 +200,21 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
   });
   await expect(page.getByRole('region', { name: '確定結果' })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.podium-card')).toHaveCount(3);
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const button = document.querySelector<HTMLElement>('.replay-button');
+        if (button === null) return false;
+        const bounds = button.getBoundingClientRect();
+        return (
+          bounds.top >= 0 &&
+          bounds.left >= 0 &&
+          bounds.bottom <= window.innerHeight &&
+          bounds.right <= window.innerWidth
+        );
+      }),
+    )
+    .toBe(true);
 });
 
 function timelineFixture() {

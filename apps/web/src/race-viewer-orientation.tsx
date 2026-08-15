@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useState, type RefObject } from 'react';
 
 const PORTRAIT_QUERY = '(orientation: portrait)';
 const COARSE_POINTER_QUERY = '(pointer: coarse)';
@@ -103,19 +103,7 @@ export function useRaceViewerOrientation(rootRef: RefObject<HTMLElement | null>)
   } as const;
 }
 
-export function RaceOrientationGate({
-  isVisible,
-  onEnterImmersiveMode,
-}: {
-  readonly isVisible: boolean;
-  readonly onEnterImmersiveMode: () => Promise<void>;
-}) {
-  const actionRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (isVisible) actionRef.current?.focus();
-  }, [isVisible]);
-
+export function RaceOrientationGate({ isVisible }: { readonly isVisible: boolean }) {
   if (!isVisible) return null;
 
   return (
@@ -130,9 +118,6 @@ export function RaceOrientationGate({
         <p id="race-orientation-message">
           画面の向きが固定されている場合は、回転ロックをオフにしてください。
         </p>
-        <button ref={actionRef} type="button" onClick={() => void onEnterImmersiveMode()}>
-          全画面で観戦
-        </button>
       </div>
     </section>
   );

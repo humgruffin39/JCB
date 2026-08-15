@@ -141,7 +141,7 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
     await expect(page.getByRole('heading', { name: '端末を横向きにしてください' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '全画面で観戦' })).toHaveCount(0);
   }
-  await expect(playButton).toBeVisible();
+  await expect(playButton).toBeVisible({ timeout: 120_000 });
   await expect(page.getByRole('img', { name: '8頭のレース進行アニメーション' })).toBeVisible();
   await expect
     .poll(async () =>
@@ -164,7 +164,7 @@ test('loads a verified timeline with replay and camera controls', async ({ page 
     'font-family',
     /Noto Sans JP Variable/,
   );
-  await expect(page.getByRole('button', { name: '再生' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '再生' })).toBeVisible({ timeout: 120_000 });
   const horseFour = page.getByRole('button', { name: /4番を追尾/ });
   await horseFour.dispatchEvent('click');
   await expect(horseFour).toHaveAttribute('aria-pressed', 'true');

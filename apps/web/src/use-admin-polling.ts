@@ -13,6 +13,7 @@ export function useAdminPolling(
   const refreshRef = useRef(refresh);
   const queueRef = useRef(Promise.resolve());
   const autoRefreshQueuedRef = useRef(false);
+  const mountedRef = useRef(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -25,11 +26,15 @@ export function useAdminPolling(
       if (!force && document.hidden) return;
       try {
         await refreshRef.current();
-        setHasLoaded(true);
-        setError(undefined);
+        if (mountedRef.current) {
+          setHasLoaded(true);
+          setError(undefined);
+        }
       } catch (caught) {
-        setHasLoaded(true);
-        setError(caught instanceof Error ? caught.message : '最新情報を取得できません。');
+        if (mountedRef.current) {
+          setHasLoaded(true);
+          setError(caught instanceof Error ? caught.message : '最新情報を取得できません。');
+        }
         if (force) throw caught;
       }
     });
@@ -46,23 +51,37 @@ export function useAdminPolling(
 
   useEffect(() => {
     let active = true;
+    let tickRunning = false;
     let timer: number | undefined;
+    mountedRef.current = true;
     const schedule = (): void => {
-      if (active) timer = window.setTimeout(tick, intervalMilliseconds);
+      if (active && !document.hidden && timer === undefined) {
+        timer = window.setTimeout(tick, Math.max(1_000, intervalMilliseconds));
+      }
     };
     const tick = (): void => {
-      if (!active) return;
-      void enqueue(false).finally(schedule);
+      timer = undefined;
+      if (!active || tickRunning) return;
+      tickRunning = true;
+      void enqueue(false).finally(() => {
+        tickRunning = false;
+        schedule();
+      });
     };
     tick();
     const onVisibilityChange = (): void => {
-      if (document.hidden || !active) return;
-      if (timer !== undefined) window.clearTimeout(timer);
+      if (!active) return;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        timer = undefined;
+      }
+      if (document.hidden) return;
       tick();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       active = false;
+      mountedRef.current = false;
       if (timer !== undefined) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { apiAbsoluteUrl, apiRequest } from './api.js';
 import type { AdminRace } from './race-admin-model.js';
+import { useSubmitLock } from './use-submit-lock.js';
 
 export interface CancellationDialogProps {
   readonly race: AdminRace;
@@ -11,7 +12,11 @@ export interface CancellationDialogProps {
 export function CancellationDialog({ race, onClose, onConfirm }: CancellationDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    isLocked: isSubmitting,
+    lock: lockSubmission,
+    unlock: unlockSubmission,
+  } = useSubmitLock();
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -21,13 +26,13 @@ export function CancellationDialog({ race, onClose, onConfirm }: CancellationDia
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    setIsSubmitting(true);
+    if (!lockSubmission()) return;
     try {
       await onConfirm(race, reason.trim());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'レースを中止できません。');
     } finally {
-      setIsSubmitting(false);
+      unlockSubmission();
     }
   }
 
@@ -86,7 +91,11 @@ export interface RehearsalDialogProps {
 
 export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    isLocked: isSubmitting,
+    lock: lockSubmission,
+    unlock: unlockSubmission,
+  } = useSubmitLock();
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -107,13 +116,13 @@ export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogPro
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          setIsSubmitting(true);
+          if (!lockSubmission()) return;
           setError('');
           void onConfirm(race)
             .catch((caught: unknown) => {
               setError(caught instanceof Error ? caught.message : '今すぐ進行できません。');
             })
-            .finally(() => setIsSubmitting(false));
+            .finally(unlockSubmission);
         }}
       >
         <h2 id="rehearse-race-title">「{race.name}」を今すぐ進行しますか</h2>
@@ -151,7 +160,11 @@ export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogPr
   const [reason, setReason] = useState('');
   const [result, setResult] = useState<unknown>();
   const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    isLocked: isSubmitting,
+    lock: lockSubmission,
+    unlock: unlockSubmission,
+  } = useSubmitLock();
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -160,7 +173,7 @@ export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogPr
 
   async function reveal(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    setIsSubmitting(true);
+    if (!lockSubmission()) return;
     setError('');
     try {
       setResult(
@@ -172,7 +185,7 @@ export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogPr
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '緊急結果を取得できません。');
     } finally {
-      setIsSubmitting(false);
+      unlockSubmission();
     }
   }
 

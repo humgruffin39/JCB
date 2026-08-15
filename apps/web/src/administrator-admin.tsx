@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
+import { useSubmitLock } from './use-submit-lock.js';
 
 const administratorSchema = z.object({
   discordUserId: z.string().regex(/^\d{5,25}$/),
@@ -16,7 +17,7 @@ export function AdministratorAdmin() {
   >([]);
   const [error, setError] = useState('');
   const [removalTarget, setRemovalTarget] = useState<string>();
-  const [isAdding, setIsAdding] = useState(false);
+  const { isLocked: isAdding, lock: lockAdding, unlock: unlockAdding } = useSubmitLock();
   const { success } = useAdminToast();
   const refresh = useCallback(async () => {
     setAdministrators(
@@ -27,10 +28,9 @@ export function AdministratorAdmin() {
 
   async function add(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (isAdding) return;
+    if (!lockAdding()) return;
     const element = event.currentTarget;
     const form = new FormData(element);
-    setIsAdding(true);
     try {
       await apiRequest('/api/v1/admin/administrators', {
         method: 'POST',
@@ -54,7 +54,7 @@ export function AdministratorAdmin() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '管理者を追加できません。');
     } finally {
-      setIsAdding(false);
+      unlockAdding();
     }
   }
 
@@ -156,7 +156,11 @@ function AdministratorRemovalDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    isLocked: isSubmitting,
+    lock: lockSubmission,
+    unlock: unlockSubmission,
+  } = useSubmitLock();
   useEffect(() => {
     dialog.current?.showModal();
     return () => dialog.current?.close();
@@ -174,8 +178,8 @@ function AdministratorRemovalDialog({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          setIsSubmitting(true);
-          void onConfirm(discordUserId, reason.trim()).finally(() => setIsSubmitting(false));
+          if (!lockSubmission()) return;
+          void onConfirm(discordUserId, reason.trim()).finally(unlockSubmission);
         }}
       >
         <h2 id="remove-admin-title">管理者権限を外しますか</h2>

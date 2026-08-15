@@ -8,6 +8,7 @@ import {
   type ScheduleSettings,
 } from './race-admin-model.js';
 import { entriesFor, moveTimestampToJstDate, raceKindForDate } from './race-admin-utils.js';
+import { useSubmitLock } from './use-submit-lock.js';
 
 function shuffled<T>(items: readonly T[]): T[] {
   const result = [...items];
@@ -38,7 +39,11 @@ export function RaceForm({
   returnFocusRef,
 }: RaceFormProps) {
   const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    isLocked: isSubmitting,
+    lock: lockSubmission,
+    unlock: unlockSubmission,
+  } = useSubmitLock();
   const selectedEntries = entriesFor(race);
   const selectedEntriesByNumber = new Map(
     selectedEntries.map((entry) => [entry.horseNumber, entry] as const),
@@ -49,7 +54,6 @@ export function RaceForm({
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (isSubmitting) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const raceDate = String(form.get('raceDate'));
@@ -72,7 +76,7 @@ export function RaceForm({
       setError('引退した馬は出走馬にできません。別の馬へ交換してください。');
       return;
     }
-    setIsSubmitting(true);
+    if (!lockSubmission()) return;
     setError('');
     try {
       await apiRequest(
@@ -118,7 +122,7 @@ export function RaceForm({
         caught instanceof Error ? caught.message : '保存できません。入力内容を確認してください。',
       );
     } finally {
-      setIsSubmitting(false);
+      unlockSubmission();
     }
   }
 

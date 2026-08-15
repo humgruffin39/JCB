@@ -5,17 +5,15 @@ import {
   selectBroadcastCameraShot,
   type BroadcastShotId,
 } from './race-camera-director.js';
+import { RaceCameraBattleTracker } from './race-camera-battle.js';
+import { RaceCameraInputController, type SelectableCameraHorse } from './race-camera-input.js';
 import { raceProgressToCourseProgress, sampleCourse } from './race-course.js';
 import type { RaceCameraMode, RaceWorldState } from './race-world-types.js';
 
 const HORSE_NOSE_OFFSET = 1.05;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
-export interface CameraHorse {
-  readonly rig: {
-    readonly horseNumber: number;
-    readonly root: THREE.Object3D;
-  };
+export interface CameraHorse extends SelectableCameraHorse {
   readonly initialized: boolean;
 }
 
@@ -23,21 +21,20 @@ export class RaceWorldCameraController {
   private cameraInitialized = false;
   private cameraMode: RaceCameraMode = 'follow';
   private readonly cameraTarget = new THREE.Vector3();
+  private readonly targetCamera = new THREE.Vector3();
+  private readonly targetLook = new THREE.Vector3();
   private readonly trackedFocus = new THREE.Vector3();
+  private readonly trackedTarget = new THREE.Vector3();
+  private readonly trackedShift = new THREE.Vector3();
   private trackedHorseNumber: number | undefined;
   private leaderHorseNumber: number | undefined;
   private trackedCameraInitialized = false;
   private broadcastShotId: BroadcastShotId | undefined;
-  private readonly previousRanks = new Map<number, number>();
-  private readonly raycaster = new THREE.Raycaster();
-  private battleHorseNumbers: readonly [number, number] | undefined;
-  private battleUntilMs = 0;
-  private lastBattleCutMs = Number.NEGATIVE_INFINITY;
-  private pointerStart: { readonly id: number; readonly x: number; readonly y: number } | undefined;
-  private interactive = true;
+  private readonly battleTracker: RaceCameraBattleTracker;
+  private readonly inputController: RaceCameraInputController;
 
   constructor(
-    private readonly renderer: THREE.WebGLRenderer,
+    renderer: THREE.WebGLRenderer,
     private readonly camera: THREE.PerspectiveCamera,
     private readonly orbit: OrbitControls,
     private readonly sun: THREE.DirectionalLight,
@@ -47,11 +44,15 @@ export class RaceWorldCameraController {
     private readonly onCameraModeChange?: (mode: RaceCameraMode) => void,
     private readonly onTrackedHorseChange?: (horseNumber: number | undefined) => void,
   ) {
-    this.orbit.addEventListener('start', this.handleOrbitStart);
-    renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
-    renderer.domElement.addEventListener('pointerup', this.handlePointerUp);
-    renderer.domElement.addEventListener('pointercancel', this.handlePointerCancel);
-    renderer.domElement.addEventListener('contextmenu', this.handleContextMenu);
+    this.battleTracker = new RaceCameraBattleTracker(distanceM);
+    this.inputController = new RaceCameraInputController(
+      renderer.domElement,
+      camera,
+      orbit,
+      horses,
+      this.handleOrbitStart,
+      (horseNumber) => this.setTrackedHorse(horseNumber),
+    );
   }
 
   get mode(): RaceCameraMode {
@@ -98,9 +99,7 @@ export class RaceWorldCameraController {
   }
 
   setInteractive(interactive: boolean): void {
-    this.interactive = interactive;
-    this.orbit.enabled = interactive;
-    if (!interactive) this.pointerStart = undefined;
+    this.inputController.setInteractive(interactive);
   }
 
   update(
@@ -110,19 +109,15 @@ export class RaceWorldCameraController {
     snap: boolean,
     deltaSeconds: number,
   ): void {
-    this.leaderHorseNumber =
-      state.frame.horses.find((horse) => horse.rank === 1)?.horseNumber ??
-      [...state.frame.horses].sort(
-        (left, right) => right.progress - left.progress || left.rank - right.rank,
-      )[0]?.horseNumber;
-    this.updateBattleSelection(state, focusRaceProgress, rewound);
+    this.leaderHorseNumber = selectCameraLeaderHorseNumber(state.frame.horses);
+    this.battleTracker.update(state, focusRaceProgress, rewound);
     if (state.isPhoto) return;
     if (this.cameraMode === 'horse') {
       this.updateTrackedHorseCamera();
       return;
     }
     const battleProgress =
-      focusRaceProgress >= 0.9 ? undefined : this.getBattleFocusProgress(state);
+      focusRaceProgress >= 0.9 ? undefined : this.battleTracker.focusProgressFor(state);
     this.updateCamera(
       battleProgress ?? focusRaceProgress,
       battleProgress !== undefined,
@@ -133,12 +128,7 @@ export class RaceWorldCameraController {
   }
 
   dispose(): void {
-    this.orbit.removeEventListener('start', this.handleOrbitStart);
-    this.renderer.domElement.removeEventListener('pointerdown', this.handlePointerDown);
-    this.renderer.domElement.removeEventListener('pointerup', this.handlePointerUp);
-    this.renderer.domElement.removeEventListener('pointercancel', this.handlePointerCancel);
-    this.renderer.domElement.removeEventListener('contextmenu', this.handleContextMenu);
-    this.orbit.dispose();
+    this.inputController.dispose();
   }
 
   private updateCamera(
@@ -167,12 +157,14 @@ export class RaceWorldCameraController {
             this.distanceM,
           )
         : focus;
-    const targetCamera = cameraOrigin.position
-      .clone()
+    const targetCamera = this.targetCamera
+      .copy(cameraOrigin.position)
       .addScaledVector(cameraOrigin.tangent, shot.tangentOffset)
       .addScaledVector(cameraOrigin.normal, shot.normalOffset);
     targetCamera.y = shot.height;
-    const targetLook = focus.position.clone().addScaledVector(focus.tangent, shot.lookAhead);
+    const targetLook = this.targetLook
+      .copy(focus.position)
+      .addScaledVector(focus.tangent, shot.lookAhead);
     targetLook.y = shot.lookHeight;
     const portraitCompensation = THREE.MathUtils.clamp(1.65 / this.camera.aspect, 1, 1.42);
     const targetFieldOfView = shot.fieldOfView * portraitCompensation;
@@ -237,71 +229,6 @@ export class RaceWorldCameraController {
     this.updateSun(focus.position);
   }
 
-  private updateBattleSelection(
-    state: RaceWorldState,
-    focusRaceProgress: number,
-    rewound: boolean,
-  ): void {
-    if (rewound) {
-      this.previousRanks.clear();
-      this.battleHorseNumbers = undefined;
-      this.battleUntilMs = 0;
-      this.lastBattleCutMs = state.positionMs - 12_000;
-    }
-
-    let overtaker: (typeof state.frame.horses)[number] | undefined;
-    let largestGain = 0;
-    for (const horse of state.frame.horses) {
-      const previousRank = this.previousRanks.get(horse.horseNumber);
-      const gain = previousRank === undefined ? 0 : previousRank - horse.rank;
-      if (gain > largestGain) {
-        largestGain = gain;
-        overtaker = horse;
-      }
-      this.previousRanks.set(horse.horseNumber, horse.rank);
-    }
-
-    if (
-      overtaker !== undefined &&
-      focusRaceProgress >= 0.35 &&
-      focusRaceProgress <= 0.9 &&
-      state.positionMs - this.lastBattleCutMs >= 18_000
-    ) {
-      const rival = state.frame.horses
-        .filter((horse) => horse.horseNumber !== overtaker.horseNumber)
-        .sort(
-          (left, right) =>
-            Math.abs(left.rank - overtaker.rank) - Math.abs(right.rank - overtaker.rank) ||
-            Math.abs(left.progress - overtaker.progress) -
-              Math.abs(right.progress - overtaker.progress),
-        )[0];
-      const gapMetres =
-        rival === undefined
-          ? Number.POSITIVE_INFINITY
-          : Math.abs(rival.progress - overtaker.progress) * this.distanceM;
-      if (rival !== undefined && gapMetres <= 6.5) {
-        this.battleHorseNumbers = [overtaker.horseNumber, rival.horseNumber];
-        this.battleUntilMs = state.positionMs + 3_200;
-        this.lastBattleCutMs = state.positionMs;
-      }
-    }
-
-    if (state.isPhoto || state.positionMs > this.battleUntilMs) {
-      this.battleHorseNumbers = undefined;
-    }
-  }
-
-  private getBattleFocusProgress(state: RaceWorldState): number | undefined {
-    if (this.battleHorseNumbers === undefined || state.positionMs > this.battleUntilMs) {
-      return undefined;
-    }
-    const battleHorses = this.battleHorseNumbers
-      .map((horseNumber) => state.frame.horses.find((horse) => horse.horseNumber === horseNumber))
-      .filter((horse): horse is (typeof state.frame.horses)[number] => horse !== undefined);
-    if (battleHorses.length !== 2) return undefined;
-    return (battleHorses[0]!.progress + battleHorses[1]!.progress) / 2;
-  }
-
   private updateSun(focus: THREE.Vector3): void {
     this.sun.position.set(focus.x - 18, 36, focus.z + 24);
     this.sunTarget.position.set(focus.x + 8, 0, focus.z);
@@ -309,7 +236,6 @@ export class RaceWorldCameraController {
   }
 
   private readonly handleOrbitStart = (): void => {
-    if (!this.interactive) return;
     if (this.cameraMode === 'follow' && this.leaderHorseNumber !== undefined) {
       this.setTrackedHorse(this.leaderHorseNumber);
     }
@@ -323,63 +249,40 @@ export class RaceWorldCameraController {
       this.setCameraMode('follow');
       return;
     }
-    const target = trackedHorse.rig.root.position.clone();
+    const target = this.trackedTarget.copy(trackedHorse.rig.root.position);
     target.y = 1.25;
     if (!this.trackedCameraInitialized) {
-      this.camera.position.add(target.clone().sub(this.orbit.target));
+      this.trackedShift.copy(target).sub(this.orbit.target);
+      this.camera.position.add(this.trackedShift);
       this.orbit.target.copy(target);
       this.trackedFocus.copy(target);
       this.trackedCameraInitialized = true;
     } else {
-      const shift = target.clone().sub(this.trackedFocus);
-      this.camera.position.add(shift);
-      this.orbit.target.add(shift);
+      this.trackedShift.copy(target).sub(this.trackedFocus);
+      this.camera.position.add(this.trackedShift);
+      this.orbit.target.add(this.trackedShift);
       this.trackedFocus.copy(target);
     }
     this.orbit.update();
     this.updateSun(trackedHorse.rig.root.position);
   }
+}
 
-  private readonly handlePointerDown = (event: PointerEvent): void => {
-    if (!this.interactive) return;
-    if (event.button !== 0) return;
-    this.pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
-  };
+type CameraFrameHorse = RaceWorldState['frame']['horses'][number];
 
-  private readonly handlePointerUp = (event: PointerEvent): void => {
-    if (!this.interactive) return;
-    const start = this.pointerStart;
-    this.pointerStart = undefined;
-    if (start === undefined || start.id !== event.pointerId) return;
-    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 7) return;
-    const selectedHorse = this.pickHorse(event.clientX, event.clientY);
-    if (selectedHorse !== undefined) this.setTrackedHorse(selectedHorse);
-  };
-
-  private pickHorse(clientX: number, clientY: number): number | undefined {
-    const bounds = this.renderer.domElement.getBoundingClientRect();
-    const pointer = new THREE.Vector2(
-      ((clientX - bounds.left) / bounds.width) * 2 - 1,
-      -((clientY - bounds.top) / bounds.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(pointer, this.camera);
-    let selectedHorse: number | undefined;
-    let selectedDistance = Number.POSITIVE_INFINITY;
-    for (const horse of this.horses) {
-      const intersection = this.raycaster.intersectObject(horse.rig.root, true)[0];
-      if (intersection !== undefined && intersection.distance < selectedDistance) {
-        selectedHorse = horse.rig.horseNumber;
-        selectedDistance = intersection.distance;
-      }
+export function selectCameraLeaderHorseNumber(
+  horses: readonly CameraFrameHorse[],
+): number | undefined {
+  let leader = horses.find((horse) => horse.rank === 1);
+  if (leader !== undefined) return leader.horseNumber;
+  for (const horse of horses) {
+    if (
+      leader === undefined ||
+      horse.progress > leader.progress ||
+      (horse.progress === leader.progress && horse.rank < leader.rank)
+    ) {
+      leader = horse;
     }
-    return selectedHorse;
   }
-
-  private readonly handlePointerCancel = (): void => {
-    this.pointerStart = undefined;
-  };
-
-  private readonly handleContextMenu = (event: MouseEvent): void => {
-    event.preventDefault();
-  };
+  return leader?.horseNumber;
 }

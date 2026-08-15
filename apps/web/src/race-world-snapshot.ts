@@ -3,6 +3,23 @@ import { getFinishCameraShot, type BroadcastCameraShot } from './race-camera-dir
 import type { CourseSample } from './race-course.js';
 import type { FinishSnapshotCamera } from './race-world-types.js';
 
+export const MAX_FINISH_SNAPSHOT_PIXELS = 2_560 * 1_440;
+
+export function fitFinishSnapshotDimensions(
+  width: number,
+  height: number,
+  maximumPixels = MAX_FINISH_SNAPSHOT_PIXELS,
+): { readonly width: number; readonly height: number } {
+  const safeWidth = Number.isFinite(width) ? Math.max(1, Math.round(width)) : 1;
+  const safeHeight = Number.isFinite(height) ? Math.max(1, Math.round(height)) : 1;
+  const safeMaximumPixels = Number.isFinite(maximumPixels) ? Math.max(1, maximumPixels) : 1;
+  const scale = Math.min(1, Math.sqrt(safeMaximumPixels / (safeWidth * safeHeight)));
+  return {
+    width: Math.max(1, Math.round(safeWidth * scale)),
+    height: Math.max(1, Math.round(safeHeight * scale)),
+  };
+}
+
 export function calculateFinishSnapshotCamera(
   finishLine: Pick<CourseSample, 'position' | 'tangent' | 'normal'>,
   aspect: number,
@@ -32,20 +49,20 @@ export function readRenderTargetDataUrl(
 ): string | undefined {
   const pixels = new Uint8Array(width * height * 4);
   renderer.readRenderTargetPixels(renderTarget, 0, 0, width, height, pixels);
-  const flippedPixels = new Uint8ClampedArray(pixels.length);
-  const rowLength = width * 4;
-  for (let row = 0; row < height; row += 1) {
-    const sourceOffset = (height - row - 1) * rowLength;
-    const targetOffset = row * rowLength;
-    flippedPixels.set(pixels.subarray(sourceOffset, sourceOffset + rowLength), targetOffset);
-  }
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext('2d');
   if (context === null) return undefined;
   const imageData = context.createImageData(width, height);
-  imageData.data.set(flippedPixels);
+  const rowLength = width * 4;
+  for (let row = 0; row < height; row += 1) {
+    const sourceOffset = (height - row - 1) * rowLength;
+    imageData.data.set(pixels.subarray(sourceOffset, sourceOffset + rowLength), row * rowLength);
+  }
   context.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/jpeg', 0.92);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  canvas.width = 1;
+  canvas.height = 1;
+  return dataUrl;
 }

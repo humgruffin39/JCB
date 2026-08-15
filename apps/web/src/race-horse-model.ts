@@ -163,6 +163,7 @@ export function createHorseRig(
     lastPosePositionMs: undefined,
     dispose() {
       mixer.stopAllAction();
+      mixer.uncacheRoot(model);
       const materials = new Set<THREE.Material>();
       model.traverse((object) => {
         if (!(object instanceof THREE.Mesh)) return;

@@ -1,31 +1,24 @@
 import * as THREE from 'three';
 import { getFinishCameraShot } from './race-camera-director.js';
-import {
-  courseLengthForDistance,
-  raceProgressToCourseProgress,
-  sampleCourse,
-  sampleCourseWithRunout,
-} from './race-course.js';
+import { raceProgressToCourseProgress, sampleCourse } from './race-course.js';
 import { RaceEnvironment, type RaceSurface } from './race-environment.js';
 import {
   createHorseRig,
-  FINISHING_BLEND_DURATION_MS,
   loadHorseAssets,
-  poseHorse,
   type HorseCoatColor,
   type HorseRig,
 } from './race-horse-model.js';
-import { racingLineOffset } from './race-lines.js';
-import {
-  isPostFinishPoseReady,
-  MIN_VISUAL_FINISH_SPEED_MPS,
-  postFinishCourseProgress,
-} from './race-world-finish.js';
 import type { RaceCameraMode, RaceWorldState } from './race-world-types.js';
-import { calculateFinishSnapshotCamera, readRenderTargetDataUrl } from './race-world-snapshot.js';
+import {
+  calculateFinishSnapshotCamera,
+  fitFinishSnapshotDimensions,
+  readRenderTargetDataUrl,
+} from './race-world-snapshot.js';
 import { RaceWorldCameraController } from './race-world-camera.js';
 import { createRaceWorldScene } from './race-world-scene.js';
 import type { RaceRenderQuality } from './race-viewer-performance.js';
+import { RaceHorseField } from './race-world-horses.js';
+import { RACE_RENDER_QUALITY, renderPixelRatioFor } from './race-world-render-quality.js';
 
 export type {
   FinishPosition,
@@ -44,42 +37,14 @@ export {
 } from './race-world-finish.js';
 export { calculateFinishSnapshotCamera } from './race-world-snapshot.js';
 
-const HORSE_NOSE_OFFSET = 1.05;
-
-const RENDER_QUALITY = {
-  high: { maximumPixelRatio: 1.75, shadows: true },
-  balanced: { maximumPixelRatio: 1.35, shadows: true },
-  low: { maximumPixelRatio: 1, shadows: false },
-  minimal: { maximumPixelRatio: 0.8, shadows: false },
-} as const satisfies Record<
-  RaceRenderQuality,
-  { readonly maximumPixelRatio: number; readonly shadows: boolean }
->;
-
-interface AnimatedHorse {
-  readonly rig: HorseRig;
-  initialized: boolean;
-  courseProgress: number;
-  lateralOffset: number;
-  y: number;
-  visualFinishTimeMs: number | undefined;
-  visualFinishSpeedMps: number | undefined;
-  finishingElapsedMs: number;
-  previousFrameCourseProgress: number | undefined;
-  previousFramePositionMs: number | undefined;
-  visualCourseSpeedMps: number | undefined;
-}
-
 export class RaceWorld {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.PerspectiveCamera;
   private readonly environment: RaceEnvironment;
   private readonly sky: THREE.Mesh;
-  private readonly horses: readonly AnimatedHorse[];
+  private readonly horseField: RaceHorseField;
   private readonly cameraController: RaceWorldCameraController;
-  private readonly courseLength: number;
-  private readonly finishRootProgress: number;
   private finishSnapshotDataUrl: string | undefined;
   private finishSnapshotAttempts = 0;
   private finishSnapshotFailed = false;
@@ -87,6 +52,7 @@ export class RaceWorld {
   private viewportWidth = 1;
   private viewportHeight = 1;
   private renderQuality: RaceRenderQuality = 'high';
+  private renderPixelRatio = 0;
 
   private constructor(
     renderer: THREE.WebGLRenderer,
@@ -104,21 +70,7 @@ export class RaceWorld {
     this.scene = worldScene.scene;
     this.camera = worldScene.camera;
     this.sky = worldScene.sky;
-    this.courseLength = courseLengthForDistance(distanceM);
-    this.finishRootProgress = raceProgressToCourseProgress(1, HORSE_NOSE_OFFSET, distanceM);
-    this.horses = rigs.map((rig) => ({
-      rig,
-      initialized: false,
-      courseProgress: 0,
-      lateralOffset: 0,
-      y: 0,
-      visualFinishTimeMs: undefined,
-      visualFinishSpeedMps: undefined,
-      finishingElapsedMs: 0,
-      previousFrameCourseProgress: undefined,
-      previousFramePositionMs: undefined,
-      visualCourseSpeedMps: undefined,
-    }));
+    this.horseField = new RaceHorseField(rigs, distanceM);
     this.cameraController = new RaceWorldCameraController(
       renderer,
       this.camera,
@@ -126,12 +78,12 @@ export class RaceWorld {
       worldScene.sun,
       worldScene.sunTarget,
       distanceM,
-      this.horses,
+      this.horseField.horses,
       onCameraModeChange,
       onTrackedHorseChange,
     );
 
-    for (const horse of this.horses) this.scene.add(horse.rig.root);
+    for (const horse of this.horseField.horses) this.scene.add(horse.rig.root);
   }
 
   static async create(
@@ -156,7 +108,7 @@ export class RaceWorld {
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
-    const settings = RENDER_QUALITY[initialRenderQuality];
+    const settings = RACE_RENDER_QUALITY[initialRenderQuality];
     renderer.shadowMap.enabled = settings.shadows;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.maximumPixelRatio));
 
@@ -203,14 +155,8 @@ export class RaceWorld {
   setRenderQuality(quality: RaceRenderQuality): void {
     if (quality === this.renderQuality && this.viewportWidth > 1 && this.viewportHeight > 1) return;
     const previousShadows = this.renderer.shadowMap.enabled;
-    const settings = RENDER_QUALITY[quality];
+    const settings = RACE_RENDER_QUALITY[quality];
     this.renderQuality = quality;
-    this.renderer.setPixelRatio(
-      Math.min(
-        typeof window === 'undefined' ? 1 : window.devicePixelRatio,
-        settings.maximumPixelRatio,
-      ),
-    );
     this.renderer.shadowMap.enabled = settings.shadows;
     if (previousShadows !== settings.shadows) {
       this.scene.traverse((object) => {
@@ -223,7 +169,7 @@ export class RaceWorld {
         });
       });
     }
-    this.renderer.setSize(this.viewportWidth, this.viewportHeight, false);
+    this.applyRenderSize();
   }
 
   resize(width: number, height: number): void {
@@ -231,9 +177,23 @@ export class RaceWorld {
     const safeHeight = Math.max(1, Math.floor(height));
     this.viewportWidth = safeWidth;
     this.viewportHeight = safeHeight;
-    this.renderer.setSize(safeWidth, safeHeight, false);
+    this.applyRenderSize();
     this.camera.aspect = safeWidth / safeHeight;
     this.camera.updateProjectionMatrix();
+  }
+
+  private applyRenderSize(): void {
+    const pixelRatio = renderPixelRatioFor(
+      this.renderQuality,
+      typeof window === 'undefined' ? 1 : window.devicePixelRatio,
+      this.viewportWidth,
+      this.viewportHeight,
+    );
+    if (Math.abs(pixelRatio - this.renderPixelRatio) > 0.001) {
+      this.renderPixelRatio = pixelRatio;
+      this.renderer.setPixelRatio(pixelRatio);
+    }
+    this.renderer.setSize(this.viewportWidth, this.viewportHeight, false);
   }
 
   update(state: RaceWorldState, deltaSeconds: number): void {
@@ -250,153 +210,16 @@ export class RaceWorld {
     }
     this.environment.update(state.positionMs);
 
-    const ranked = [...state.frame.horses].sort(
-      (left, right) => right.progress - left.progress || left.rank - right.rank,
-    );
-    const leaderProgress = ranked[0]?.progress ?? 0;
+    const horseUpdate = this.horseField.update(state, rewound, snap, deltaSeconds);
+    const leaderProgress = horseUpdate.leaderProgress;
     const focusRaceProgress = state.isPhoto ? 1 : Math.min(leaderProgress, 1);
-
-    for (const horse of this.horses) {
-      if (rewound) {
-        horse.visualFinishTimeMs = undefined;
-        horse.visualFinishSpeedMps = undefined;
-        horse.finishingElapsedMs = 0;
-        horse.previousFrameCourseProgress = undefined;
-        horse.previousFramePositionMs = undefined;
-        horse.visualCourseSpeedMps = undefined;
-      }
-      const frameHorse = state.frame.horses.find(
-        (candidate) => candidate.horseNumber === horse.rig.horseNumber,
-      );
-      if (frameHorse === undefined) continue;
-      const frameCourseProgress = raceProgressToCourseProgress(
-        frameHorse.progress,
-        HORSE_NOSE_OFFSET,
-        this.distanceM,
-      );
-      if (
-        horse.previousFrameCourseProgress !== undefined &&
-        horse.previousFramePositionMs !== undefined &&
-        state.positionMs > horse.previousFramePositionMs &&
-        frameHorse.progress < 0.9995
-      ) {
-        const elapsedSeconds = (state.positionMs - horse.previousFramePositionMs) / 1_000;
-        const measuredSpeedMps =
-          ((frameCourseProgress - horse.previousFrameCourseProgress) * this.courseLength) /
-          elapsedSeconds;
-        if (Number.isFinite(measuredSpeedMps) && measuredSpeedMps > 0) {
-          horse.visualCourseSpeedMps =
-            horse.visualCourseSpeedMps === undefined
-              ? measuredSpeedMps
-              : THREE.MathUtils.damp(
-                  horse.visualCourseSpeedMps,
-                  measuredSpeedMps,
-                  10,
-                  elapsedSeconds,
-                );
-        }
-      }
-      horse.previousFrameCourseProgress = frameCourseProgress;
-      horse.previousFramePositionMs = state.positionMs;
-      if (horse.visualFinishTimeMs === undefined && frameHorse.progress >= 1) {
-        horse.visualFinishTimeMs = state.positionMs;
-        horse.visualFinishSpeedMps = THREE.MathUtils.clamp(
-          horse.visualCourseSpeedMps ?? 8.5,
-          MIN_VISUAL_FINISH_SPEED_MPS,
-          16,
-        );
-      }
-      let targetProgress = frameCourseProgress;
-      if (horse.visualFinishTimeMs !== undefined) {
-        targetProgress = postFinishCourseProgress(
-          state.positionMs,
-          horse.visualFinishTimeMs,
-          horse.visualFinishSpeedMps ?? 8.5,
-          this.finishRootProgress,
-          this.courseLength,
-        );
-      }
-      const targetLateralOffset =
-        state.isPhoto && horse.initialized
-          ? horse.lateralOffset
-          : racingLineOffset(frameHorse, state.frame.horses, this.distanceM);
-      const hasCrossedFinish = horse.visualFinishTimeMs !== undefined || frameHorse.progress >= 1;
-      const postFinishTimeMs = horse.visualFinishTimeMs ?? state.positionMs;
-      const postFinishPoseReady =
-        hasCrossedFinish &&
-        isPostFinishPoseReady(
-          state.positionMs,
-          postFinishTimeMs,
-          horse.visualFinishSpeedMps ?? 8.5,
-          horse.courseProgress,
-          targetProgress,
-          this.courseLength,
-        );
-      if (postFinishPoseReady) {
-        horse.finishingElapsedMs = Math.min(
-          FINISHING_BLEND_DURATION_MS,
-          horse.finishingElapsedMs + Math.max(0, deltaSeconds) * 1_000,
-        );
-      } else {
-        horse.finishingElapsedMs = 0;
-      }
-      const poseState =
-        frameHorse.animationState === 'waiting'
-          ? 'waiting'
-          : postFinishPoseReady
-            ? 'finishing'
-            : 'running';
-
-      if (!horse.initialized || snap) {
-        horse.courseProgress = targetProgress;
-        horse.lateralOffset = targetLateralOffset;
-        horse.y = 0.025;
-        horse.initialized = true;
-      } else {
-        horse.courseProgress = THREE.MathUtils.damp(
-          horse.courseProgress,
-          targetProgress,
-          16,
-          deltaSeconds,
-        );
-        horse.lateralOffset = THREE.MathUtils.damp(
-          horse.lateralOffset,
-          targetLateralOffset,
-          2.8,
-          deltaSeconds,
-        );
-        horse.y = THREE.MathUtils.damp(horse.y, 0.025, 20, deltaSeconds);
-      }
-      const courseSample = sampleCourseWithRunout(
-        horse.courseProgress,
-        horse.lateralOffset,
-        this.distanceM,
-      );
-      horse.rig.root.position.copy(courseSample.position);
-      horse.rig.root.position.y = horse.y;
-      horse.rig.root.rotation.y = courseSample.heading;
-      const strideLean = THREE.MathUtils.clamp((frameHorse.speed - 17) * -0.012, -0.045, 0.025);
-      horse.rig.root.rotation.z = THREE.MathUtils.damp(
-        horse.rig.root.rotation.z,
-        strideLean,
-        7,
-        deltaSeconds,
-      );
-      poseHorse(
-        horse.rig,
-        state.positionMs,
-        frameHorse.speed,
-        poseState,
-        postFinishPoseReady ? horse.finishingElapsedMs : 0,
-      );
-    }
 
     if (
       !state.isPhoto &&
       !this.finishSnapshotFailed &&
       this.finishSnapshotDataUrl === undefined &&
       this.finishSnapshotAttempts < 3 &&
-      state.frame.horses.some((horse) => horse.progress >= 1)
+      horseUpdate.hasFinisher
     ) {
       this.finishSnapshotAttempts += 1;
       const snapshot = this.captureFinishSnapshot();
@@ -427,8 +250,7 @@ export class RaceWorld {
     const previousRenderTarget = this.renderer.getRenderTarget();
     const drawingBufferSize = new THREE.Vector2();
     this.renderer.getDrawingBufferSize(drawingBufferSize);
-    const width = Math.max(1, Math.round(drawingBufferSize.x));
-    const height = Math.max(1, Math.round(drawingBufferSize.y));
+    const { width, height } = fitFinishSnapshotDimensions(drawingBufferSize.x, drawingBufferSize.y);
     const renderTarget = new THREE.WebGLRenderTarget(width, height, {
       depthBuffer: true,
       stencilBuffer: false,
@@ -459,10 +281,7 @@ export class RaceWorld {
   }
 
   dispose(): void {
-    for (const horse of this.horses) {
-      this.scene.remove(horse.rig.root);
-      horse.rig.dispose();
-    }
+    this.horseField.dispose(this.scene);
     this.environment.dispose();
     this.cameraController.dispose();
     this.sky.geometry.dispose();

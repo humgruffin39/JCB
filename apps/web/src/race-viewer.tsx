@@ -1,15 +1,14 @@
-import { betResponseSchema } from '@jcb/contracts';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { apiRequest, estimateServerOffset, getResult } from './api.js';
+import { estimateServerOffset } from './api.js';
 import { useActivityRuntime } from './activity-runtime.js';
 import type { getRace } from './api.js';
-import { publicErrorMessage } from './public-error-message.js';
 import { shouldCommitPlaybackPosition, synchronizedPosition } from './playback-clock.js';
 import { RaceScene3D } from './race-scene-3d.js';
 import { finishCameraPositionMs } from './race-world-finish.js';
 import type { RaceCameraMode } from './race-world-types.js';
 import { BroadcastHud, BroadcastState } from './race-viewer-hud.js';
+import { useRaceViewerData } from './race-viewer-data.js';
 import { FullscreenControl, PlaybackControls } from './race-viewer-controls.js';
 import {
   FinishSnapshot,
@@ -29,39 +28,25 @@ import {
   useRaceViewerOrientation,
 } from './race-viewer-orientation.js';
 import { deriveRaceViewerPerformance } from './race-viewer-performance.js';
-import { loadTimeline, type TimelineFrame } from './race-timeline-loader.js';
+import { useRaceViewerTimeline } from './race-viewer-timeline.js';
 
 export { SoundControls, VolumeSlider } from './race-viewer-controls.js';
 
 type RaceDetail = Awaited<ReturnType<typeof getRace>>;
-type RaceResult = Awaited<ReturnType<typeof getResult>>;
-type Bet = ReturnType<typeof betResponseSchema.parse>;
-
-type ViewerStatus =
-  | { readonly state: 'waiting'; readonly message: string }
-  | { readonly state: 'loading'; readonly message: string }
-  | {
-      readonly state: 'ready';
-      readonly frames: readonly TimelineFrame[];
-      readonly duration: number;
-    }
-  | { readonly state: 'error'; readonly message: string };
-
 type PresentationPhase = 'race' | 'photo' | 'results';
 
 const RACE_START_HOLD_MS = 3_000;
 
-export function RaceViewer({
-  race,
-  connectionError,
-}: {
+export interface RaceViewerProps {
   readonly race: RaceDetail;
   readonly connectionError?: string;
-}) {
-  const [viewer, setViewer] = useState<ViewerStatus>({
-    state: 'waiting',
-    message: '発走時刻まで待機しています',
-  });
+}
+
+export function RaceViewer(props: RaceViewerProps) {
+  return <RaceViewerSession key={`${props.race.id}:${String(props.race.version)}`} {...props} />;
+}
+
+function RaceViewerSession({ race, connectionError }: RaceViewerProps) {
   const [offset, setOffset] = useState(0);
   const [position, setPosition] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -75,11 +60,11 @@ export function RaceViewer({
   const [cameraMode, setCameraMode] = useState<RaceCameraMode>('follow');
   const [finishSnapshot, setFinishSnapshot] = useState<string>();
   const [finishSnapshotUnavailable, setFinishSnapshotUnavailable] = useState(false);
-  const [bets, setBets] = useState<readonly Bet[]>([]);
-  const [betsLoading, setBetsLoading] = useState(true);
-  const [betsError, setBetsError] = useState<string>();
-  const [result, setResult] = useState<RaceResult>();
-  const [resultError, setResultError] = useState<string>();
+  const { bets, betsLoading, betsError, result, resultError } = useRaceViewerData({
+    raceId: race.id,
+    raceStatus: race.status,
+    resultRequested: phase !== 'race',
+  });
   const broadcastRef = useRef<HTMLElement>(null);
   const activityRuntime = useActivityRuntime();
   const performanceProfile = useMemo(
@@ -89,6 +74,14 @@ export function RaceViewer({
   const playbackPositionRef = useRef(0);
   const displayedPositionRef = useRef(0);
   const replayAnchor = useRef({ local: performance.now(), position: 0 });
+  const viewer = useRaceViewerTimeline({
+    race,
+    serverOffset: offset,
+    onLoadedPastEnd: () => {
+      setIsReplay(true);
+      replayAnchor.current = { local: performance.now(), position: 0 };
+    },
+  });
   const timelineFinishOrder = useMemo(
     () =>
       viewer.state === 'ready'
@@ -123,123 +116,6 @@ export function RaceViewer({
       .then(setOffset)
       .catch(() => setOffset(0));
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setBetsLoading(true);
-    setBetsError(undefined);
-    void apiRequest<unknown>(`/api/v1/races/${encodeURIComponent(race.id)}/my-bets`)
-      .then((value) => betResponseSchema.array().parse(value))
-      .then((value) => {
-        if (!cancelled) {
-          setBets(value);
-          setBetsLoading(false);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setBetsLoading(false);
-          setBetsError(
-            publicErrorMessage(
-              error,
-              '購入情報を取得できません。Discordの#競馬から観戦リンクを開き直してください。',
-            ),
-          );
-        }
-      });
-    if (['finished', 'settling', 'settled'].includes(race.status)) {
-      void getResult(race.id)
-        .then((value) => {
-          if (!cancelled) {
-            setResult(value);
-            setResultError(undefined);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setResultError('公式結果を取得できませんでした。');
-        });
-    }
-    return () => {
-      cancelled = true;
-    };
-  }, [race.id, race.status]);
-
-  useEffect(() => {
-    let isCancelled = false;
-    let isOpening = false;
-    let hasLoaded = false;
-    let hasFailed = false;
-    const open = async (): Promise<void> => {
-      if (isOpening || hasLoaded || hasFailed) return;
-      if (race.status === 'cancelled') {
-        setViewer({ state: 'error', message: 'このレースは中止されました。' });
-        hasFailed = true;
-        return;
-      }
-      if (race.status === 'failed') {
-        setViewer({ state: 'error', message: 'このレースの準備に失敗しました。' });
-        hasFailed = true;
-        return;
-      }
-      const authoritativeNow = Date.now() + offset;
-      if (
-        authoritativeNow < race.viewerOpensAt &&
-        !['running', 'finished', 'settling', 'settled'].includes(race.status)
-      ) {
-        if (!isCancelled) {
-          setViewer({
-            state: 'waiting',
-            message: `${formatCountdown(race.viewerOpensAt - authoritativeNow)}後に観戦できます`,
-          });
-        }
-        return;
-      }
-      isOpening = true;
-      if (!isCancelled) setViewer({ state: 'loading', message: 'レース映像を準備中' });
-      try {
-        const tokenKey = `jcb.edge-token:${race.id}`;
-        let token = sessionStorage.getItem(tokenKey);
-        if (token === null) {
-          const refreshed = await apiRequest<{ edgeAccessToken: string }>(
-            `/api/v1/races/${encodeURIComponent(race.id)}/edge-token`,
-            { method: 'POST' },
-          );
-          token = refreshed.edgeAccessToken;
-          sessionStorage.setItem(tokenKey, token);
-        }
-        const loadedTimeline = await loadTimeline(race.id, race.version, token);
-        if (!isCancelled) {
-          hasLoaded = true;
-          setViewer({
-            state: 'ready',
-            frames: loadedTimeline.frames,
-            duration: loadedTimeline.duration,
-          });
-          if (Date.now() + offset >= race.scheduledAt + loadedTimeline.duration) {
-            setIsReplay(true);
-            replayAnchor.current = { local: performance.now(), position: 0 };
-          }
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          sessionStorage.removeItem(`jcb.edge-token:${race.id}`);
-          hasFailed = true;
-          setViewer({
-            state: 'error',
-            message: publicErrorMessage(error, '通信を確認して、もう一度お試しください。'),
-          });
-        }
-      } finally {
-        isOpening = false;
-      }
-    };
-    void open();
-    const interval = window.setInterval(() => void open(), 1_000);
-    return () => {
-      isCancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [offset, race.id, race.scheduledAt, race.status]);
 
   useEffect(() => {
     if (viewer.state !== 'ready' || phase !== 'race' || !isSceneReady || hasPlaybackStarted) {
@@ -311,27 +187,10 @@ export function RaceViewer({
     return () => window.clearTimeout(timer);
   }, [phase]);
 
-  useEffect(() => {
-    if (viewer.state !== 'ready' || phase === 'race' || result !== undefined) return;
-    let cancelled = false;
-    void getResult(race.id)
-      .then((value) => {
-        if (!cancelled) {
-          setResult(value);
-          setResultError(undefined);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setResultError('公式結果を取得できませんでした。通信状態を確認してください。');
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [phase, race.id, result, viewer]);
-
-  const finalOrder = selectFinalOrder(result?.finishOrder, timelineFinishOrder);
+  const finalOrder = useMemo(
+    () => selectFinalOrder(result?.finishOrder, timelineFinishOrder),
+    [result?.finishOrder, timelineFinishOrder],
+  );
   const currentFrame = useMemo(() => {
     if (viewer.state !== 'ready') return undefined;
     return selectCurrentFrame(viewer.frames, position, finalOrder, viewer.duration);
@@ -349,6 +208,16 @@ export function RaceViewer({
   });
   const effectiveCameraMode = performanceProfile.compact ? 'follow' : cameraMode;
   const effectiveTrackedHorseNumber = performanceProfile.compact ? undefined : trackedHorseNumber;
+  const horseCoats = useMemo(
+    () =>
+      race.entries.map((entry) => ({
+        horseNumber: entry.horseNumber,
+        coatColor: entry.coatColor,
+      })),
+    [race.entries],
+  );
+  const handleFinishSnapshotError = useCallback(() => setFinishSnapshotUnavailable(true), []);
+  const handleSceneReady = useCallback(() => setIsSceneReady(true), []);
 
   useEffect(() => {
     if (!performanceProfile.compact) return;
@@ -401,19 +270,14 @@ export function RaceViewer({
             isPhoto={phase === 'photo'}
             trackedHorseNumber={effectiveTrackedHorseNumber}
             cameraMode={effectiveCameraMode}
-            horseCoats={race.entries.map((entry) => ({
-              horseNumber: entry.horseNumber,
-              coatColor: entry.coatColor,
-            }))}
+            horseCoats={horseCoats}
             distanceM={race.distanceM}
             surface={race.surface}
             onTrackHorse={setTrackedHorseNumber}
             onCameraModeChange={setCameraMode}
             onFinishSnapshot={setFinishSnapshot}
-            onFinishSnapshotError={() => setFinishSnapshotUnavailable(true)}
-            onReady={() => {
-              setIsSceneReady(true);
-            }}
+            onFinishSnapshotError={handleFinishSnapshotError}
+            onReady={handleSceneReady}
             renderQuality={performanceProfile.quality}
             minimumFrameIntervalMs={performanceProfile.minimumFrameIntervalMs}
             isInteractive={!performanceProfile.compact}
@@ -512,10 +376,4 @@ function activitySafeAreaStyle(insets: {
     '--jcb-activity-safe-bottom': `${String(insets.bottom)}px`,
     '--jcb-activity-safe-left': `${String(insets.left)}px`,
   } as CSSProperties;
-}
-
-function formatCountdown(milliseconds: number): string {
-  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
-  const minutes = Math.floor(seconds / 60);
-  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }

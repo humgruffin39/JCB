@@ -54,9 +54,41 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
   }, [raceId]);
 
   useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), pollMilliseconds);
-    return () => window.clearInterval(interval);
+    let active = true;
+    let tickRunning = false;
+    let timer: number | undefined;
+
+    const schedule = (): void => {
+      if (active && !document.hidden && timer === undefined) {
+        timer = window.setTimeout(tick, Math.max(1_000, pollMilliseconds));
+      }
+    };
+    const tick = (): void => {
+      timer = undefined;
+      if (!active || tickRunning) return;
+      tickRunning = true;
+      void refresh().finally(() => {
+        tickRunning = false;
+        schedule();
+      });
+    };
+    const onVisibilityChange = (): void => {
+      if (!active) return;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        timer = undefined;
+      }
+      if (document.hidden) return;
+      tick();
+    };
+
+    tick();
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [pollMilliseconds, refresh]);
 
   if (race === undefined) {

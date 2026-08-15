@@ -1,5 +1,5 @@
 import type { TimelineFrameContract } from '@jcb/contracts';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   RaceWorld,
   type FinishPosition,
@@ -12,26 +12,7 @@ import type { RaceSurface } from './race-environment.js';
 import { PublicState } from './public-state.js';
 import type { RaceRenderQuality } from './race-viewer-performance.js';
 
-export function RaceScene3D({
-  frames,
-  durationMs,
-  playbackPosition,
-  finishOrder,
-  isPhoto,
-  trackedHorseNumber,
-  cameraMode,
-  onTrackHorse,
-  onCameraModeChange,
-  onFinishSnapshot,
-  onFinishSnapshotError,
-  horseCoats,
-  distanceM,
-  surface,
-  onReady,
-  renderQuality = 'high',
-  minimumFrameIntervalMs = 0,
-  isInteractive = true,
-}: {
+export interface RaceScene3DProps {
   readonly frames: readonly TimelineFrameContract[];
   readonly durationMs: number;
   readonly playbackPosition: { readonly current: number };
@@ -53,7 +34,28 @@ export function RaceScene3D({
   readonly renderQuality?: RaceRenderQuality;
   readonly minimumFrameIntervalMs?: number;
   readonly isInteractive?: boolean;
-}) {
+}
+
+function RaceScene3DComponent({
+  frames,
+  durationMs,
+  playbackPosition,
+  finishOrder,
+  isPhoto,
+  trackedHorseNumber,
+  cameraMode,
+  onTrackHorse,
+  onCameraModeChange,
+  onFinishSnapshot,
+  onFinishSnapshotError,
+  horseCoats,
+  distanceM,
+  surface,
+  onReady,
+  renderQuality = 'high',
+  minimumFrameIntervalMs = 0,
+  isInteractive = true,
+}: RaceScene3DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const worldRef = useRef<RaceWorld | undefined>(undefined);
   const stateRef = useRef<RaceWorldState>({
@@ -158,6 +160,7 @@ export function RaceScene3D({
       scheduleRender();
     };
     const resizeObserver = new ResizeObserver((entries) => {
+      if (disposed) return;
       const size = entries[0]?.contentRect;
       if (size !== undefined) world?.resize(size.width, size.height);
     });
@@ -212,7 +215,7 @@ export function RaceScene3D({
       renderQualityRef.current,
     )
       .then((createdWorld) => {
-        if (disposed) {
+        if (disposed || contextLost) {
           createdWorld.dispose();
           return;
         }
@@ -229,7 +232,7 @@ export function RaceScene3D({
         scheduleRender();
       })
       .catch((error: unknown) => {
-        if (!disposed) {
+        if (!disposed && !contextLost) {
           console.error('Failed to initialize 3D race scene', error);
           setStatus('error');
         }
@@ -271,3 +274,5 @@ export function RaceScene3D({
     </div>
   );
 }
+
+export const RaceScene3D = memo(RaceScene3DComponent);

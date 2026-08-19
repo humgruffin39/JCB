@@ -23,6 +23,7 @@ import {
 import { createHash } from 'node:crypto';
 import { DiscordClientGuildMembership } from './guild-membership.js';
 import { SqliteDiscordPurchaseGateway } from './discord-purchase-gateway.js';
+import { resolveFinishOrder } from './discord-race-message-options.js';
 
 export function createDiscordClient(): Client {
   return new Client({
@@ -217,7 +218,8 @@ export async function publishRaceMessage(input: {
   if (channel === null || !channel.isSendable()) {
     throw new Error('The #競馬 channel is not sendable.');
   }
-  const detail = new SqliteViewerStore(input.database).getRaceDetail(input.raceId);
+  const viewerStore = new SqliteViewerStore(input.database);
+  const detail = viewerStore.getRaceDetail(input.raceId);
   const options = renderRaceMessage({
     raceId: detail.id,
     version: detail.version,
@@ -235,6 +237,7 @@ export async function publishRaceMessage(input: {
     carryover: money(BigInt(detail.carryover)),
     canBuy: detail.status === 'betting_open' && input.clock.now() < detail.bettingClosesAt,
     canView: input.clock.now() >= detail.viewerOpensAt,
+    finishOrder: resolveFinishOrder(viewerStore, input.raceId, detail.status),
   });
   const messages = new SqliteDiscordMessageStore(input.database, () => input.clock.now());
   const existing = messages.get('race', input.raceId);

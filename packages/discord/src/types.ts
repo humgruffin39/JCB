@@ -7,6 +7,11 @@ export interface DiscordRaceHorse {
   readonly currentWinOdds: string;
 }
 
+export interface DiscordFinishOrder {
+  readonly horseNumber: number;
+  readonly position: number;
+}
+
 export interface DiscordRaceCard {
   readonly raceId: string;
   readonly version: number;
@@ -19,6 +24,7 @@ export interface DiscordRaceCard {
   readonly carryover: Money;
   readonly canBuy: boolean;
   readonly canView: boolean;
+  readonly finishOrder?: readonly DiscordFinishOrder[] | undefined;
 }
 
 export interface PurchaseSession {

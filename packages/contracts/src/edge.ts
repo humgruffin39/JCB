@@ -57,12 +57,34 @@ export const timelineHorseFrameSchema = z.object({
   animationState: z.enum(['waiting', 'running', 'finished']),
 });
 
-export const timelineFrameSchema = z.object({
-  timeMs: z.number().int().nonnegative(),
-  horses: z.array(timelineHorseFrameSchema).length(8),
-});
+export const timelineFrameSchema = z
+  .object({
+    timeMs: z.number().int().nonnegative(),
+    horses: z.array(timelineHorseFrameSchema).length(8),
+  })
+  .superRefine((frame, context) => {
+    if (new Set(frame.horses.map((horse) => horse.horseNumber)).size !== 8) {
+      context.addIssue({ code: 'custom', message: 'Each horse must appear exactly once.' });
+    }
+    if (new Set(frame.horses.map((horse) => horse.rank)).size !== 8) {
+      context.addIssue({ code: 'custom', message: 'Each rank must appear exactly once.' });
+    }
+  });
 
-export const timelineSchema = z.array(timelineFrameSchema).min(1);
+export const timelineSchema = z
+  .array(timelineFrameSchema)
+  .min(1)
+  .superRefine((frames, context) => {
+    for (let index = 1; index < frames.length; index += 1) {
+      if (frames[index]!.timeMs <= frames[index - 1]!.timeMs) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Timeline times must be strictly increasing.',
+          path: [index, 'timeMs'],
+        });
+      }
+    }
+  });
 
 export type EdgeRelease = z.infer<typeof edgeReleaseSchema>;
 export type TimelineFrameContract = z.infer<typeof timelineFrameSchema>;

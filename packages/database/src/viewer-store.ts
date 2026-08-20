@@ -16,6 +16,7 @@ interface RaceDetailRow {
   readonly scheduledAt: bigint;
   readonly bettingClosesAt: bigint;
   readonly viewerOpensAt: bigint;
+  readonly finalOddsJson: string | null;
 }
 
 export class SqliteViewerStore {
@@ -46,7 +47,8 @@ export class SqliteViewerStore {
       .prepare(
         `SELECT id, race_date AS raceDate, name, kind, status, version,
                 distance_m AS distanceM, surface, scheduled_at AS scheduledAt,
-                betting_closes_at AS bettingClosesAt, viewer_opens_at AS viewerOpensAt
+                betting_closes_at AS bettingClosesAt, viewer_opens_at AS viewerOpensAt,
+                final_odds_json AS finalOddsJson
          FROM races WHERE id = ?`,
       )
       .get(raceId) as RaceDetailRow | undefined;
@@ -91,6 +93,7 @@ export class SqliteViewerStore {
     const carryover = this.database
       .prepare("SELECT amount_projection AS amount FROM trifecta_carryover WHERE id = 'global'")
       .get() as { amount: bigint } | undefined;
+    const finalWinOdds = parseFinalWinOdds(race.finalOddsJson);
     return {
       id: race.id,
       raceDate: race.raceDate,
@@ -112,7 +115,8 @@ export class SqliteViewerStore {
         condition: entry.condition,
         baseWinOdds: entry.baseOdds === null ? '—' : entry.baseOdds.toFixed(1),
         currentWinOdds:
-          entry.seedStake === null || entry.seedLiquidity === null || entry.totalUserStake === null
+          finalWinOdds.get(Number(entry.horseNumber)) ??
+          (entry.seedStake === null || entry.seedLiquidity === null || entry.totalUserStake === null
             ? '—'
             : formatOdds(
                 currentOddsTenths(
@@ -121,7 +125,7 @@ export class SqliteViewerStore {
                   money(entry.seedStake),
                   money(entry.userSelectionStake),
                 ),
-              ),
+              )),
       })),
       trifectaPoolTotal: (trifectaPool?.amount ?? 0n).toString(),
       carryover: (carryover?.amount ?? 0n).toString(),
@@ -269,5 +273,23 @@ export class SqliteViewerStore {
       .get(24n * 60n * 60n * 1000n, raceId) as { expiry: bigint } | undefined;
     if (row === undefined) throw new Error('Race not found.');
     return Number(row.expiry);
+  }
+}
+
+export function parseFinalWinOdds(value: string | null): ReadonlyMap<number, string> {
+  if (value === null) return new Map();
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return new Map();
+    const odds = new Map<number, string>();
+    for (let horseNumber = 1; horseNumber <= 8; horseNumber += 1) {
+      const candidate = (parsed as Readonly<Record<string, unknown>>)[`win:${String(horseNumber)}`];
+      if (typeof candidate === 'string' && /^\d+(?:\.\d+)?$/.test(candidate)) {
+        odds.set(horseNumber, candidate);
+      }
+    }
+    return odds;
+  } catch {
+    return new Map();
   }
 }

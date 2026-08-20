@@ -55,8 +55,8 @@ describe('resolveFinishOrder', () => {
     ).toBeUndefined();
   });
 
-  it('falls back to undefined when the race result is unavailable after settlement', () => {
-    expect(
+  it('propagates unavailable settled results so publication can be retried', () => {
+    expect(() =>
       resolveFinishOrder(
         fakeViewerStore(() => {
           throw new Error('RACE_NOT_FINISHED');
@@ -64,6 +64,6 @@ describe('resolveFinishOrder', () => {
         'race-1',
         'settled',
       ),
-    ).toBeUndefined();
+    ).toThrow('RACE_NOT_FINISHED');
   });
 });

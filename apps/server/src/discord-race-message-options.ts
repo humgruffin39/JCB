@@ -6,9 +6,5 @@ export function resolveFinishOrder(
   status: string,
 ): readonly { readonly horseNumber: number; readonly position: number }[] | undefined {
   if (status !== 'settling' && status !== 'settled') return undefined;
-  try {
-    return viewerStore.getResult(raceId).finishOrder;
-  } catch {
-    return undefined;
-  }
+  return viewerStore.getResult(raceId).finishOrder;
 }

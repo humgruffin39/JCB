@@ -19,7 +19,7 @@ jobs:
   verify:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_verify != true }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4

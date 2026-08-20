@@ -25,8 +25,8 @@ describe('Discord contracts', () => {
       })),
       trifectaPoolTotal: money(15_000n),
       carryover: money(0n),
-      canBuy: true,
-      canView: false,
+      canBuy: false,
+      canView: true,
       finishOrder: [
         { horseNumber: 4, position: 1 },
         { horseNumber: 1, position: 2 },
@@ -50,6 +50,8 @@ describe('Discord contracts', () => {
       '**7着** `03` <:normal:1538151937269301348> 試験馬3  **4.2倍**',
       '**8着** `06` <:normal:1538151937269301348> 試験馬6  **4.2倍**',
     ]);
+    expect(message.components[0].components[0]?.toJSON()).toMatchObject({ disabled: true });
+    expect(message.components[0].components[3]?.toJSON()).toMatchObject({ disabled: false });
   });
 
   it('falls back to horse-number order when no finish order is provided', () => {

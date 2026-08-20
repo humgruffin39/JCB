@@ -68,11 +68,6 @@ export function wireDiscordGateway(input: {
         await safeEphemeralReply(interaction, 'このDiscordサーバーでは利用できません。');
         return;
       }
-      const isMember = await membership.isCurrentMember(interaction.user.id);
-      if (!isMember) {
-        await safeEphemeralReply(interaction, '現在のギルドメンバーだけが利用できます。');
-        return;
-      }
       gameStore.registerUser(
         interaction.user.id,
         interaction.user.globalName ?? interaction.user.username,

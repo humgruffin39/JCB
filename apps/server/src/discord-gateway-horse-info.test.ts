@@ -146,6 +146,7 @@ describe('Discord horse information gateway path', () => {
       name: '<:horse_1:1539913567787159653> 経路馬1',
       inline: false,
     });
+    expect(Reflect.get(client.guilds, 'fetch')).not.toHaveBeenCalled();
     database.close();
   });
 

@@ -125,7 +125,7 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
       new SqliteJobStore(this.database, cryptoUnit, () => this.clock.now()).enqueue({
         jobType: 'refresh_race_message',
         deduplicationKey: `refresh-race:${input.raceId}:${String(input.raceVersion)}:${String(refreshAt)}`,
-        payload: { raceId: input.raceId },
+        payload: { raceId: input.raceId, raceVersion: input.raceVersion },
         runAt: refreshAt,
       });
     }

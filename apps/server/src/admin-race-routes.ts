@@ -159,7 +159,17 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
     const cancelledAt = now();
     dependencies.database
       .transaction(() => {
+        const race = gameStore.getRace(raceId);
         lifecycle.cancelAndRefund(raceId, reason, cancelledAt);
+        const cancellationCleanupKey = `refresh-race:${raceId}:${String(race.version)}:cancellation`;
+        if (jobStore.getByDeduplicationKey(cancellationCleanupKey) === undefined) {
+          jobStore.enqueue({
+            jobType: 'refresh_race_message',
+            deduplicationKey: cancellationCleanupKey,
+            payload: { cancellationCleanup: true, raceId, raceVersion: race.version },
+            runAt: cancelledAt,
+          });
+        }
         jobStore.enqueue({
           jobType: 'refresh_rankings',
           deduplicationKey: `rankings:cancel:${raceId}:${String(cancelledAt)}`,

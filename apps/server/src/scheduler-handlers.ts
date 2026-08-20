@@ -74,12 +74,26 @@ export function createHandlers(
       return payloadVersion;
     }
     const keyVersion =
-      /^(?:simulate|publish|notify-race-start|open-viewer|close|running|finished|settle):[^:]+:(\d+)(?::|$)/.exec(
+      /^(?:simulate|publish|refresh-race|notify-race-start|open-viewer|close|running|finished|settle):[^:]+:(\d+)(?::|$)/.exec(
         job.deduplicationKey,
       )?.[1];
     if (keyVersion === undefined) return undefined;
     const parsed = Number(keyVersion);
     return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
+  };
+  const cancellationRaceVersion = (job: ScheduledJob): number | undefined => {
+    const payloadVersion = job.payload.raceVersion;
+    if (
+      typeof payloadVersion === 'number' &&
+      Number.isSafeInteger(payloadVersion) &&
+      payloadVersion >= 0
+    ) {
+      return payloadVersion;
+    }
+    const keyVersion = /^refresh-race:[^:]+:(\d+)(?::|$)/.exec(job.deduplicationKey)?.[1];
+    if (keyVersion === undefined) return undefined;
+    const parsed = Number(keyVersion);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
   };
   const isCurrentRaceJob = (job: ScheduledJob): boolean => {
     const expectedVersion = raceVersion(job);
@@ -103,6 +117,37 @@ export function createHandlers(
         ? {}
         : { disablePreviousViewers: options.disablePreviousViewers }),
     });
+  };
+  const cleanupCancelledRace = async (job: ScheduledJob): Promise<void> => {
+    const id = raceId(job);
+    const version = cancellationRaceVersion(job);
+    if (version === undefined) throw new Error('Cancellation cleanup raceVersion is missing.');
+    const race = gameStore.getRace(id);
+    if (race.version !== version || race.status !== 'cancelled') return;
+    if (dependencies.discordClient === undefined) return;
+    const messages = new SqliteDiscordMessageStore(dependencies.database, () =>
+      dependencies.clock.now(),
+    );
+    if (
+      messages.get('race', id) !== undefined &&
+      dependencies.environment.DISCORD_RACE_CHANNEL_ID !== undefined
+    ) {
+      await publishRaceMessage({
+        client: dependencies.discordClient,
+        database: dependencies.database,
+        environment: dependencies.environment,
+        clock: dependencies.clock,
+        raceId: id,
+      });
+    }
+    const reminder = messages.get('race_reminder', id);
+    if (reminder === undefined) return;
+    await deleteRaceStartReminder({
+      client: dependencies.discordClient,
+      channelId: reminder.channelId,
+      messageId: reminder.messageId,
+    });
+    messages.remove('race_reminder', id);
   };
 
   return {
@@ -244,7 +289,13 @@ export function createHandlers(
         messageId: sent.messageId,
       });
     },
-    refresh_race_message: publish,
+    async refresh_race_message(job) {
+      if (job.payload.cancellationCleanup === true) {
+        await cleanupCancelledRace(job);
+        return;
+      }
+      await publish(job);
+    },
     async open_viewer(job) {
       await publish(job, { disablePreviousViewers: true });
     },
@@ -267,6 +318,7 @@ export function createHandlers(
     async settle_race(job) {
       if (!isCurrentRaceJob(job)) return;
       const id = raceId(job);
+      const version = raceVersion(job) ?? gameStore.getRace(id).version;
       lifecycle.settleRace(id, dependencies.clock.now());
       await publish(job);
       if (dependencies.discordClient !== undefined) {
@@ -291,7 +343,7 @@ export function createHandlers(
       });
       jobStore.enqueue({
         jobType: 'refresh_rankings',
-        deduplicationKey: `rankings:${id}:${String(dependencies.clock.now())}`,
+        deduplicationKey: `rankings:${id}:${String(version)}`,
         payload: { raceId: id },
         runAt: dependencies.clock.now(),
       });

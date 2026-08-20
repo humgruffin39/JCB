@@ -36,10 +36,11 @@ type AppState =
 
 export function App() {
   const [state, setState] = useState<AppState>({ status: 'loading' });
-  const isAdmin = window.location.pathname.startsWith('/admin');
+  const isAdmin = isAdminPathname(window.location.pathname);
   const isActivity = !isAdmin && isDiscordActivityLaunch(window.location.search);
   const isRace =
-    !isAdmin && (state.status === 'race' || window.location.pathname.startsWith('/races/'));
+    !isAdmin &&
+    (state.status === 'race' || raceIdFromPathname(window.location.pathname) !== undefined);
   const isState = !isAdmin && !isRace;
 
   useEffect(() => {
@@ -213,8 +214,17 @@ async function initialize(): Promise<AppState> {
 export { initializationErrorMessage } from './public-error-message.js';
 
 export function raceIdFromPathname(pathname: string): string | undefined {
-  const pathMatch = /^\/races\/([^/]+)/.exec(pathname);
-  return pathMatch === null ? undefined : decodeURIComponent(pathMatch[1]!);
+  const pathMatch = /^\/races\/([^/]+)\/?$/.exec(pathname);
+  if (pathMatch === null) return undefined;
+  try {
+    return decodeURIComponent(pathMatch[1]!);
+  } catch {
+    return undefined;
+  }
+}
+
+export function isAdminPathname(pathname: string): boolean {
+  return /^\/admin(?:\/|$)/.test(pathname);
 }
 
 function LoadingState() {

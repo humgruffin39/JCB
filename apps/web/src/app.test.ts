@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiRequestError } from './api.js';
-import { initializationErrorMessage, raceIdFromPathname } from './app.js';
+import { initializationErrorMessage, isAdminPathname, raceIdFromPathname } from './app.js';
 
 describe('raceIdFromPathname', () => {
   it('does not restore a previous race from the generic ticket path', () => {
@@ -9,6 +9,15 @@ describe('raceIdFromPathname', () => {
 
   it('reads a race id only from a race route', () => {
     expect(raceIdFromPathname('/races/race-1')).toBe('race-1');
+    expect(raceIdFromPathname('/races/race-1/')).toBe('race-1');
+    expect(raceIdFromPathname('/races/race-1/extra')).toBeUndefined();
+    expect(raceIdFromPathname('/races/%')).toBeUndefined();
+  });
+
+  it('matches only the admin route boundary', () => {
+    expect(isAdminPathname('/admin')).toBe(true);
+    expect(isAdminPathname('/admin/settings')).toBe(true);
+    expect(isAdminPathname('/administrator')).toBe(false);
   });
 
   it('keeps expired ticket errors Japanese and actionable', () => {

@@ -57,6 +57,8 @@ export function useRaceViewerTimeline({
     let permanentlyUnavailable = false;
     const retryPolicy = createViewerRetryPolicy();
     let retryAt = 0;
+    let retryTimer: number | undefined;
+    const controller = new AbortController();
 
     const open = async (): Promise<void> => {
       if (cancelled || opening || loaded || permanentlyUnavailable || Date.now() < retryAt) return;
@@ -101,24 +103,24 @@ export function useRaceViewerTimeline({
         if (token === null) {
           const refreshed = await apiRequest<{ edgeAccessToken: string }>(
             `/api/v1/races/${encodeURIComponent(race.id)}/edge-token`,
-            { method: 'POST' },
+            { method: 'POST', signal: controller.signal },
           );
           token = refreshed.edgeAccessToken;
           sessionStorage.setItem(tokenKey, token);
         }
         let timeline: Awaited<ReturnType<typeof loadTimeline>>;
         try {
-          timeline = await loadTimeline(race.id, race.version, token);
+          timeline = await loadTimeline(race.id, race.version, token, controller.signal);
         } catch (error) {
           if (!isRefreshableEdgeTokenError(error)) throw error;
           sessionStorage.removeItem(tokenKey);
           const refreshed = await apiRequest<{ edgeAccessToken: string }>(
             `/api/v1/races/${encodeURIComponent(race.id)}/edge-token`,
-            { method: 'POST' },
+            { method: 'POST', signal: controller.signal },
           );
           token = refreshed.edgeAccessToken;
           sessionStorage.setItem(tokenKey, token);
-          timeline = await loadTimeline(race.id, race.version, token);
+          timeline = await loadTimeline(race.id, race.version, token, controller.signal);
         }
         if (cancelled) return;
         retryPolicy.stop();
@@ -147,11 +149,17 @@ export function useRaceViewerTimeline({
       }
     };
 
-    void open();
-    const interval = window.setInterval(() => void open(), 1_000);
+    const tick = async (): Promise<void> => {
+      await open();
+      if (!cancelled && !loaded && !permanentlyUnavailable) {
+        retryTimer = window.setTimeout(() => void tick(), 1_000);
+      }
+    };
+    void tick();
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      controller.abort();
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
   }, [race.id, race.scheduledAt, race.status, race.version, race.viewerOpensAt, serverOffset]);
 

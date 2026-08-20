@@ -57,26 +57,31 @@ describe('readLimitedJsonStream', () => {
 
 describe('loadTimeline request errors', () => {
   it('preserves the retryable release status and code', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            apiVersion: 'v1',
-            error: { code: 'RACE_NOT_STARTED', message: 'not started' },
-          }),
-          { status: 425, headers: { 'content-type': 'application/json' } },
-        ),
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          apiVersion: 'v1',
+          error: { code: 'RACE_NOT_STARTED', message: 'not started' },
+        }),
+        { status: 425, headers: { 'content-type': 'application/json' } },
       ),
     );
+    vi.stubGlobal('fetch', fetchMock);
 
-    const error = await loadTimeline('race-1', 1, 'token').catch((reason: unknown) => reason);
+    const controller = new AbortController();
+    const error = await loadTimeline('race-1', 1, 'token', controller.signal).catch(
+      (reason: unknown) => reason,
+    );
     expect(error).toBeInstanceOf(TimelineRequestError);
     expect(error).toMatchObject({
       status: 425,
       code: 'RACE_NOT_STARTED',
       message: '発走時刻前です',
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/edge/v1/races/race-1/release'),
+      expect.objectContaining({ cache: 'no-store', signal: controller.signal }),
+    );
   });
 
   it('preserves a server status even when the error body is not JSON', async () => {

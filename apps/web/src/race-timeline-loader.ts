@@ -31,11 +31,12 @@ export async function loadTimeline(
   raceId: string,
   raceVersion: number,
   token: string,
+  signal?: AbortSignal,
 ): Promise<LoadedTimeline> {
   const headers = { authorization: `Bearer ${token}` };
   const releaseResponse = await fetch(
     `${EDGE_ORIGIN}/edge/v1/races/${encodeURIComponent(raceId)}/release`,
-    { headers, cache: 'no-store' },
+    { headers, cache: 'no-store', ...(signal === undefined ? {} : { signal }) },
   );
   if (!releaseResponse.ok) {
     const code = await readApiErrorCode(releaseResponse);
@@ -52,6 +53,7 @@ export async function loadTimeline(
   const timelineResponse = await fetch(`${EDGE_ORIGIN}${release.timelinePath}`, {
     headers,
     cache: 'no-store',
+    ...(signal === undefined ? {} : { signal }),
   });
   if (!timelineResponse.ok) {
     throw new TimelineRequestError(

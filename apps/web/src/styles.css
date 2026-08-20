@@ -1024,6 +1024,17 @@
   }
 }
 
+@media (pointer: coarse) and (orientation: landscape) {
+  .running-order {
+    scale: 0.94;
+    transform-origin: top center;
+  }
+
+  .race-broadcast--activity .broadcast-race-status {
+    margin-inline-end: clamp(4rem, 8vw, 5.5rem);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

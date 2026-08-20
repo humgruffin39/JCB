@@ -125,7 +125,7 @@ export async function handleEdgeRequest(
       return errorResponse(409, 'TIMELINE_METADATA_INVALID', responseOrigin);
     }
     const headers = corsHeaders(responseOrigin);
-    headers.set('cache-control', 'private, max-age=60');
+    headers.set('cache-control', 'no-store');
     if (match[2] === 'timeline') {
       const timelineBytes = await new Response(timelineObject.body).arrayBuffer();
       if ((await sha256Hex(timelineBytes)) !== manifest.ciphertextSha256) {

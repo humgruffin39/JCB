@@ -159,6 +159,7 @@ describe('Cloudflare release edge', () => {
       }),
     );
     expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
     const body = (await response.json()) as { result: { scheduledStart: number } };
     expect(body.result.scheduledStart).toBe(now - 1_000);
   });
@@ -168,6 +169,7 @@ describe('Cloudflare release edge', () => {
     const response = await requestTimeline(validToken(), environment(signedManifest(now - 1_000)));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
     await expect(response.arrayBuffer()).resolves.toEqual(timelineBody.buffer);
   });
 

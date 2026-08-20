@@ -35,7 +35,7 @@ export async function loadTimeline(
   const headers = { authorization: `Bearer ${token}` };
   const releaseResponse = await fetch(
     `${EDGE_ORIGIN}/edge/v1/races/${encodeURIComponent(raceId)}/release`,
-    { headers },
+    { headers, cache: 'no-store' },
   );
   if (!releaseResponse.ok) {
     const code = await readApiErrorCode(releaseResponse);
@@ -49,7 +49,10 @@ export async function loadTimeline(
   if (release.raceId !== raceId || release.raceVersion !== raceVersion) {
     throw new Error('レース情報の版が一致しません');
   }
-  const timelineResponse = await fetch(`${EDGE_ORIGIN}${release.timelinePath}`, { headers });
+  const timelineResponse = await fetch(`${EDGE_ORIGIN}${release.timelinePath}`, {
+    headers,
+    cache: 'no-store',
+  });
   if (!timelineResponse.ok) {
     throw new TimelineRequestError(
       '暗号化されたレース映像を取得できません',

@@ -7,7 +7,7 @@ import { selectionFromSession } from './purchase-flow-validation.js';
 import type { PurchaseSession, PurchaseSessionStore } from './types.js';
 
 describe('purchase flow', () => {
-  it('starts with an ephemeral embed and a disabled continuation button', async () => {
+  it('starts with only the pool menu and a disabled continuation button', async () => {
     const store = memoryStore(poolSession());
     let rendered: unknown;
 
@@ -21,18 +21,17 @@ describe('purchase flow', () => {
     ).toBe(true);
 
     const message = rendered as {
-      readonly content: null;
-      readonly embeds: readonly [{ toJSON(): { readonly description?: string } }];
       readonly components: readonly [
         { toJSON(): { readonly components: readonly [{ readonly options: readonly unknown[] }] } },
         { toJSON(): { readonly components: readonly [{ readonly disabled?: boolean }] } },
       ];
     };
-    expect(message.content).toBeNull();
-    expect(message.embeds[0].toJSON().description).toBe('券種を選択してください。');
+    expect(rendered).not.toHaveProperty('content');
+    expect(rendered).not.toHaveProperty('embeds');
     const options = message.components[0].toJSON().components[0].options as readonly {
       readonly label: string;
       readonly value: string;
+      readonly default?: boolean;
     }[];
     expect(options.map((option) => option.label)).toEqual([
       '単勝',
@@ -52,10 +51,11 @@ describe('purchase flow', () => {
       'trio',
       'trifecta',
     ]);
+    expect(options.filter((option) => option.default).map((option) => option.value)).toEqual([]);
     expect(message.components[1].toJSON().components[0].disabled).toBe(true);
   });
 
-  it('updates the same ephemeral message with the selected pool description', async () => {
+  it('updates the same ephemeral message with the selected pool', async () => {
     const store = memoryStore(poolSession());
     let rendered: unknown;
     const interaction = poolSelectInteraction('wide', (message) => {
@@ -66,17 +66,30 @@ describe('purchase flow', () => {
     expect(store.current().step).toBe('pool');
     expect(store.current().payload).toEqual({ poolType: 'wide' });
     expect(interaction.deferUpdate.mock.calls).toHaveLength(1);
+    expect(interaction.editReply.mock.calls).toHaveLength(1);
 
     const message = rendered as {
-      readonly embeds: readonly [{ toJSON(): { readonly description?: string } }];
       readonly components: readonly [
-        unknown,
+        {
+          toJSON(): {
+            readonly components: readonly [
+              {
+                readonly placeholder?: string;
+                readonly options: readonly [{ readonly value: string; readonly default?: boolean }];
+              },
+            ];
+          };
+        },
         { toJSON(): { readonly components: readonly [{ readonly disabled?: boolean }] } },
       ];
     };
-    expect(message.embeds[0].toJSON().description).toBe(
-      '3着までに入る2頭を、着順を問わずに当てる馬券。',
-    );
+    expect(rendered).not.toHaveProperty('content');
+    expect(rendered).not.toHaveProperty('embeds');
+    const menu = message.components[0].toJSON().components[0];
+    expect(menu.placeholder).toBe('ワイド');
+    expect(menu.options.filter((option) => option.default).map((option) => option.value)).toEqual([
+      'wide',
+    ]);
     expect(message.components[1].toJSON().components[0].disabled).toBe(false);
   });
 
@@ -347,7 +360,10 @@ function beginInteraction(editReply: (message: unknown) => void): Interaction {
 function poolSelectInteraction(
   poolType: string,
   editReply: (message: unknown) => void,
-): Interaction & { readonly deferUpdate: ReturnType<typeof vi.fn> } {
+): Interaction & {
+  readonly deferUpdate: ReturnType<typeof vi.fn>;
+  readonly editReply: ReturnType<typeof vi.fn>;
+} {
   return {
     id: 'pool-interaction',
     customId: 'jcb:pool:session',
@@ -358,7 +374,10 @@ function poolSelectInteraction(
     isModalSubmit: () => false,
     deferUpdate: vi.fn(async () => undefined),
     editReply: vi.fn(async (message: unknown) => editReply(message)),
-  } as unknown as Interaction & { readonly deferUpdate: ReturnType<typeof vi.fn> };
+  } as unknown as Interaction & {
+    readonly deferUpdate: ReturnType<typeof vi.fn>;
+    readonly editReply: ReturnType<typeof vi.fn>;
+  };
 }
 
 function buttonInteraction(customId: string, editReply: (message: unknown) => void): Interaction {

@@ -2,7 +2,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
   LabelBuilder,
   ModalBuilder,
   StringSelectMenuBuilder,
@@ -42,12 +41,6 @@ export function poolChoice(session: PurchaseSession) {
     .setStyle(ButtonStyle.Primary)
     .setDisabled(selectedDefinition === undefined);
   return {
-    content: null,
-    embeds: [
-      new EmbedBuilder()
-        .setTitle('券種を選んでください。')
-        .setDescription(selectedDefinition?.description ?? '券種を選択してください。'),
-    ],
     components: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
       new ActionRowBuilder<ButtonBuilder>().addComponents(continueButton),

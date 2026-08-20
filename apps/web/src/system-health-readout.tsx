@@ -107,7 +107,7 @@ function formatHealthValue(key: string, value: unknown): string {
     typeof value === 'string' &&
     /^-?\d+$/.test(value)
   ) {
-    return `${BigInt(value).toLocaleString('ja-JP')} R`;
+    return `${BigInt(value).toLocaleString('ja-JP')} CP`;
   }
   if (key === 'topTwentyPercentShareBasisPoints' && typeof value === 'number') {
     return `${(value / 100).toFixed(1)}%`;
@@ -166,7 +166,7 @@ const HEALTH_LABELS: Readonly<Record<string, string>> = {
 };
 
 function formatRupees(value: string): string {
-  return /^-?\d+$/.test(value) ? `${BigInt(value).toLocaleString('ja-JP')} R` : value;
+  return /^-?\d+$/.test(value) ? `${BigInt(value).toLocaleString('ja-JP')} CP` : value;
 }
 
 function formatTimestamp(value: unknown): string {

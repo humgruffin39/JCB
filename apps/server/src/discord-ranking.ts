@@ -120,12 +120,12 @@ function safeName(user: UserRanking): string {
 }
 
 function rup(value: string): string {
-  return `${BigInt(value).toLocaleString('ja-JP')} R`;
+  return `${BigInt(value).toLocaleString('ja-JP')} CP`;
 }
 
 function signedRup(value: string): string {
   const amount = BigInt(value);
-  return `${amount >= 0n ? '+' : ''}${amount.toLocaleString('ja-JP')} R`;
+  return `${amount >= 0n ? '+' : ''}${amount.toLocaleString('ja-JP')} CP`;
 }
 
 function formatRate(basisPoints: number): string {

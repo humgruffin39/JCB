@@ -311,7 +311,7 @@ export function createHandlers(
           action: 'economy.central_bank_low',
           targetType: 'account',
           targetId: 'central-bank',
-          reason: 'Central bank balance is below 2,000,000 R.',
+          reason: 'Central bank balance is below 2,000,000 CP.',
           after: { balance: health.centralBankBalance },
         });
         await sendAdminNotice(dependencies, {
@@ -321,9 +321,9 @@ export function createHandlers(
           fields: [
             {
               name: '現在の残高',
-              value: `${BigInt(health.centralBankBalance).toLocaleString('ja-JP')} R`,
+              value: `${BigInt(health.centralBankBalance).toLocaleString('ja-JP')} CP`,
             },
-            { name: '警告水準', value: '2,000,000 R', inline: true },
+            { name: '警告水準', value: '2,000,000 CP', inline: true },
           ],
         });
       }

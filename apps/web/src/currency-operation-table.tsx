@@ -79,7 +79,7 @@ function transactionKindLabel(kind: string): string {
 
 export function formatMoney(value: string | number | null | undefined): string {
   const text = String(value ?? '');
-  return /^-?\d+$/.test(text) ? `${BigInt(text).toLocaleString('ja-JP')} R` : '—';
+  return /^-?\d+$/.test(text) ? `${BigInt(text).toLocaleString('ja-JP')} CP` : '—';
 }
 
 export function formatTimestamp(value: string | number | null | undefined): string {

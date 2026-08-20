@@ -142,7 +142,7 @@ export function wireDiscordGateway(input: {
       }
       if (action === 'balance') {
         const me = viewerStore.getMe(interaction.user.id);
-        await safeEphemeralReply(interaction, `現在残高: ${me.balance} R`);
+        await safeEphemeralReply(interaction, `現在残高: ${me.balance} CP`);
         return;
       }
       if (action === 'bets' && raceId !== undefined) {
@@ -154,7 +154,7 @@ export function wireDiscordGateway(input: {
             : bets
                 .map(
                   (bet) =>
-                    `${POOL_TYPE_DEFINITIONS[bet.poolType].label} ${bet.selectionCode} / ${bet.stake} R / 状態: ${betStatusLabel(bet.status)}`,
+                    `${POOL_TYPE_DEFINITIONS[bet.poolType].label} ${bet.selectionCode} / ${bet.stake} CP / 状態: ${betStatusLabel(bet.status)}`,
                 )
                 .join('\n'),
         );

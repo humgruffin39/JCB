@@ -99,7 +99,9 @@ export async function showAmountModal(
     .setMinLength(3)
     .setMaxLength(12)
     .setPlaceholder('100以上の整数');
-  const label = new LabelBuilder().setLabel('賭け金（ルピー）').setTextInputComponent(input);
+  const label = new LabelBuilder()
+    .setLabel('賭け金（チャレンジャーポイント）')
+    .setTextInputComponent(input);
   const modal = new ModalBuilder()
     .setCustomId(`jcb:amount:${session.id}`)
     .setTitle('賭け金を入力')
@@ -128,10 +130,10 @@ export function purchasePreviewMessage(input: {
     content: [
       `券種: ${poolDefinition(input.poolType).label}`,
       `買い目: ${input.selectionCode}`,
-      `賭け金: ${input.stake} R`,
-      `購入後見込み払戻: ${input.preview.estimatedBasePayout.toString()} R`,
-      `キャリーオーバー見込み: ${input.preview.estimatedCarryoverBonus.toString()} R`,
-      `購入後残高: ${input.preview.balanceAfter.toString()} R`,
+      `賭け金: ${input.stake} CP`,
+      `購入後見込み払戻: ${input.preview.estimatedBasePayout.toString()} CP`,
+      `キャリーオーバー見込み: ${input.preview.estimatedCarryoverBonus.toString()} CP`,
+      `購入後残高: ${input.preview.balanceAfter.toString()} CP`,
       '締切までの他ユーザーの投票で払戻見込みは変動します。',
     ].join('\n'),
     components: [rows],
@@ -143,7 +145,7 @@ export function purchaseReceiptMessage(receipt: PurchaseReceipt) {
     content: [
       receipt.wasDuplicate ? 'この購入はすでに処理済みです。' : '馬券を購入しました。',
       `購入ID: ${receipt.betId}`,
-      `購入後残高: ${receipt.balanceAfter.toString()} R`,
+      `購入後残高: ${receipt.balanceAfter.toString()} CP`,
       '購入確定後の取消はできません。',
     ].join('\n'),
     components: [],

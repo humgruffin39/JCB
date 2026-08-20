@@ -110,7 +110,7 @@ export function App() {
       {isAdmin || isRace ? null : (
         <footer className="footer-strip">
           <span>Discordサーバー参加者限定</span>
-          <span>ルピーは実通貨と交換できません</span>
+          <span>チャレンジャーポイントは実通貨と交換できません</span>
         </footer>
       )}
     </div>

@@ -5,7 +5,7 @@ import { SystemHealthReadout } from './system-health-readout.js';
 
 describe('admin presenters', () => {
   it('formats integer balances without losing precision', () => {
-    expect(formatMoney('900719925474099312345')).toBe('900,719,925,474,099,312,345 R');
+    expect(formatMoney('900719925474099312345')).toBe('900,719,925,474,099,312,345 CP');
     expect(formatMoney('not-a-balance')).toBe('—');
   });
 
@@ -24,7 +24,7 @@ describe('admin presenters', () => {
 
     expect(markup).toContain('<caption class="visually-hidden">口座残高</caption>');
     expect(markup).toContain('利用者');
-    expect(markup).toContain('1,234 R');
+    expect(markup).toContain('1,234 CP');
   });
 
   it('groups and localizes system health values', () => {
@@ -40,7 +40,7 @@ describe('admin presenters', () => {
 
     expect(markup).toContain('接続・稼働');
     expect(markup).toContain('データベース読み書き');
-    expect(markup).toContain('25,000 R');
+    expect(markup).toContain('25,000 CP');
     expect(markup).toContain('12.3%');
   });
 });

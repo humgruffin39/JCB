@@ -42,7 +42,7 @@ export function formatOddsRange(race: AdminRace): string {
 }
 
 export function formatRupees(value: string): string {
-  return /^\d+$/.test(value) ? `${BigInt(value).toLocaleString('ja-JP')} R` : value;
+  return /^\d+$/.test(value) ? `${BigInt(value).toLocaleString('ja-JP')} CP` : value;
 }
 
 export function formatSeedLiquidity(race: AdminRace): string {

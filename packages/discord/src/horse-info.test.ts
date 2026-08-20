@@ -39,12 +39,12 @@ describe('Discord horse information', () => {
     expect(embed.fields).toHaveLength(8);
     expect(embed.fields?.[0]).toEqual({
       name: '<:horse_1:1539913567787159653> 情報馬1',
-      value: '逃げ　距離 △　芝 △',
+      value: '逃げ馬 適正: 距離 △ 馬場 △',
       inline: false,
     });
     expect(embed.fields?.[7]).toEqual({
       name: '<:horse_8:1539913577345851412> 情報馬8',
-      value: '逃げ　距離 △　芝 △',
+      value: '逃げ馬 適正: 距離 △ 馬場 △',
       inline: false,
     });
   });
@@ -59,8 +59,8 @@ describe('Discord horse information', () => {
   });
 
   it('maps running styles and keeps preference labels concise', () => {
-    expect(runningStyleLabel('front_runner')).toBe('逃げ');
-    expect(runningStyleLabel('closer')).toBe('差し');
+    expect(runningStyleLabel('front_runner')).toBe('逃げ馬');
+    expect(runningStyleLabel('closer')).toBe('差し馬');
     const message = renderHorseInfoMessage({
       distanceM: 1800,
       surface: 'dirt',
@@ -71,7 +71,7 @@ describe('Discord horse information', () => {
       })),
     });
     expect(message.embeds[0].toJSON().fields?.[0]).toMatchObject({
-      value: '差し　距離 ○　ダート ◎',
+      value: '差し馬 適正: 距離 ○ 馬場 ◎',
     });
   });
 });

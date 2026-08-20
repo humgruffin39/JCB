@@ -157,7 +157,7 @@ export async function submitAmount(
   const pickStep = finalPickStep(poolType);
   if (parsedStake === undefined) {
     rollbackSession(dependencies, session, pickStep, payloadBeforeFinalPick(session, poolType));
-    await interaction.editReply('賭け金は100ルピー以上の整数で入力してください。');
+    await interaction.editReply('賭け金は100CP以上の整数で入力してください。');
     return;
   }
 

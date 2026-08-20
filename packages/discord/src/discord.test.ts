@@ -76,7 +76,9 @@ describe('Discord contracts', () => {
       canView: false,
     });
     const description = message.embeds[0].data.description ?? '';
-    expect(description).toContain('`01` <:normal:1538151937269301348> 試験馬1  **4.2倍**');
+    expect(description).toContain(
+      '<:horse_1:1539913567787159653> <:normal:1538151937269301348> 試験馬1  **4.2倍**',
+    );
     expect(description).not.toContain('1着');
   });
 

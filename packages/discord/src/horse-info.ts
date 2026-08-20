@@ -51,13 +51,14 @@ function formatHorseInfoValue(
 ): string {
   return [
     runningStyleLabel(entry.runningStyle),
+    '適正:',
     `距離 ${distancePreferenceMark(distancePreferenceScore(entry, distanceM))}`,
-    `${surfaceShortLabel(surface)} ${surfacePreferenceMark(surfacePreferenceScore(entry, surface))}`,
-  ].join('　');
+    `馬場 ${surfacePreferenceMark(surfacePreferenceScore(entry, surface))}`,
+  ].join(' ');
 }
 
-export function runningStyleLabel(style: RunningStyle): '逃げ' | '差し' {
-  return style === 'front_runner' ? '逃げ' : '差し';
+export function runningStyleLabel(style: RunningStyle): '逃げ馬' | '差し馬' {
+  return style === 'front_runner' ? '逃げ馬' : '差し馬';
 }
 
 export function preferenceMark(score: number, threshold = SURFACE_MARK_THRESHOLD): '◎' | '○' | '△' {
@@ -72,8 +73,4 @@ export function distancePreferenceMark(score: number): '◎' | '○' | '△' {
 
 export function surfacePreferenceMark(score: number): '◎' | '○' | '△' {
   return preferenceMark(score, SURFACE_MARK_THRESHOLD);
-}
-
-function surfaceShortLabel(surface: Surface): '芝' | 'ダート' {
-  return surface === 'turf' ? '芝' : 'ダート';
 }

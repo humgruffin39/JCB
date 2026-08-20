@@ -161,7 +161,7 @@ describe('purchase flow', () => {
 
     expect(store.current().step).toBe('confirm');
     expect(store.current().payload.stake).toBe('100');
-    expect((rendered as { readonly content: string }).content).toContain('賭け金: 100 R');
+    expect((rendered as { readonly content: string }).content).toContain('賭け金: 100 CP');
   });
 
   it('returns an invalid amount to the final selection step so the user can retry', async () => {
@@ -179,7 +179,7 @@ describe('purchase flow', () => {
       ),
     ).toBe(true);
 
-    expect(rendered).toBe('賭け金は100ルピー以上の整数で入力してください。');
+    expect(rendered).toBe('賭け金は100CP以上の整数で入力してください。');
     expect(store.current().step).toBe('pick-3');
     expect(store.current().payload).toEqual({ poolType: 'trifecta', first: '1', second: '2' });
   });

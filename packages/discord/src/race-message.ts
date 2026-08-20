@@ -37,8 +37,8 @@ export function renderRaceMessage(card: DiscordRaceCard): {
         '',
         ...lines,
         '',
-        `三連単プール: ${card.trifectaPoolTotal.toString()} R`,
-        `キャリーオーバー: ${card.carryover.toString()} R`,
+        `三連単プール: ${card.trifectaPoolTotal.toString()} CP`,
+        `キャリーオーバー: ${card.carryover.toString()} CP`,
       ].join('\n'),
     )
     .setColor(0x25d9ff);
@@ -89,9 +89,6 @@ function renderHorseLines(
 function formatHorseLine(horse: DiscordRaceHorse, position: number | undefined): string {
   const prefix =
     position === undefined ? '' : `**${PLACE_LABELS[position - 1] ?? String(position)}** `;
-  const horseNumber =
-    position === undefined
-      ? `\`${String(horse.horseNumber).padStart(2, '0')}\``
-      : horseNumberEmoji(horse.horseNumber);
+  const horseNumber = horseNumberEmoji(horse.horseNumber);
   return `${prefix}${horseNumber} ${CONDITION_EMOJIS[horse.condition]} ${horse.name}  **${horse.currentWinOdds}倍**`;
 }

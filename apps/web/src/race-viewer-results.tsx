@@ -145,5 +145,5 @@ export function getSaddleclothStyle(horseNumber: number): CSSProperties {
 }
 
 export function formatRupees(value: string): string {
-  return `${BigInt(value).toLocaleString('ja-JP')} R`;
+  return `${BigInt(value).toLocaleString('ja-JP')} CP`;
 }

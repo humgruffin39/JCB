@@ -87,7 +87,7 @@ export class SqliteRankingStore {
       .prepare(
         `SELECT u.id AS userId, u.display_name AS displayName,
                 ab.amount AS currentBalance,
-                COALESCE(SUM(CASE WHEN b.status != 'refunded' THEN b.stake ELSE 0 END), 0)
+                COALESCE(SUM(CASE WHEN b.status IN ('won', 'lost') THEN b.stake ELSE 0 END), 0)
                   AS totalStake,
                 COALESCE(SUM(CASE WHEN b.status = 'won' THEN b.payout ELSE 0 END), 0)
                   AS totalPayout,

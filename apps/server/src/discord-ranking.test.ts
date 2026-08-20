@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { applyMigrations, openDatabase, SqliteGameStore } from '@jcb/database';
+import { applyMigrations, openDatabase, SqliteAdminStore, SqliteGameStore } from '@jcb/database';
 import type { Clock } from '@jcb/domain';
 import type { Client } from 'discord.js';
 import {
+  captureWealthRankingLeaders,
   publishWealthRankingMessage,
   publishRankingMessages,
   renderRankingMessages,
@@ -13,6 +14,37 @@ import {
 } from './discord-ranking.js';
 
 describe('Discord fixed ranking messages', () => {
+  it('excludes accounts that have only received their initial grant', () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(
+        dirname(dirname(dirname(fileURLToPath(import.meta.url)))),
+        '..',
+        'packages',
+        'database',
+        'migrations',
+      ),
+      1,
+    );
+    const game = new SqliteGameStore(database, () => 1);
+    game.initializeEconomy([]);
+    const active = game.registerUser('100000000000000001', '参加者', true);
+    game.registerUser('100000000000000002', '初期状態', true);
+    new SqliteAdminStore(database, () => 2).adjustBalance({
+      targetAccountId: active.accountId,
+      signedAmount: 1n,
+      reason: '番付対象の確認',
+      idempotencyKey: 'wealth-ranking-activity',
+      actorUserId: active.id,
+    });
+
+    expect(captureWealthRankingLeaders({ database, clock: { now: () => 3 } as Clock })).toEqual([
+      { discordUserId: '100000000000000001', currentBalance: '50001' },
+    ]);
+    database.close();
+  });
+
   it('splits all required metrics into no more than three messages', () => {
     const messages = renderRankingMessages({
       calculatedAt: 1_800_000_000_000,

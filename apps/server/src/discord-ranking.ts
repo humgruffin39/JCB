@@ -29,7 +29,21 @@ export function captureWealthRankingLeaders(input: {
   const snapshot = new SqliteRankingStore(input.database, () =>
     input.clock.now(),
   ).calculateAndSave();
+  const activeUserIds = new Set(
+    (
+      input.database
+        .prepare(
+          `SELECT DISTINCT a.owner_key AS userId
+           FROM accounts a
+           JOIN ledger_entries le ON le.account_id = a.id
+           JOIN ledger_transactions lt ON lt.id = le.transaction_id
+           WHERE a.account_type = 'user' AND lt.kind <> 'initial_grant'`,
+        )
+        .all() as { readonly userId: string }[]
+    ).map((row) => row.userId),
+  );
   return [...snapshot.users]
+    .filter((user) => activeUserIds.has(user.userId))
     .sort(
       (left, right) =>
         compareDecimal(right.currentBalance, left.currentBalance) ||

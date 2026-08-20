@@ -6,6 +6,7 @@ import {
   type RunningStyle,
   type Surface,
 } from '@jcb/domain';
+import { horseNumberEmoji } from './horse-number-emoji.js';
 
 export interface DiscordHorseInfoEntry extends HorseAbilities {
   readonly horseNumber: number;
@@ -34,7 +35,7 @@ export function renderHorseInfoMessage(race: DiscordHorseInfoRace): DiscordHorse
     .setTitle('出走馬情報')
     .addFields(
       race.entries.map((entry) => ({
-        name: `${String(entry.horseNumber).padStart(2, '0')} ${entry.name}`,
+        name: `${horseNumberEmoji(entry.horseNumber)} ${entry.name}`,
         value: formatHorseInfoValue(entry, race.distanceM, race.surface),
         inline: false,
       })),

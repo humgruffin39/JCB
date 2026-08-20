@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { formatDateKeyForDisplay, JST_OFFSET_MILLISECONDS } from '@jcb/domain';
 import type { Condition } from '@jcb/domain';
+import { horseNumberEmoji } from './horse-number-emoji.js';
 import type { DiscordRaceCard, DiscordRaceHorse } from './types.js';
 
 const CONDITION_EMOJIS: Readonly<Record<Condition, string>> = {
@@ -88,5 +89,9 @@ function renderHorseLines(
 function formatHorseLine(horse: DiscordRaceHorse, position: number | undefined): string {
   const prefix =
     position === undefined ? '' : `**${PLACE_LABELS[position - 1] ?? String(position)}** `;
-  return `${prefix}\`${String(horse.horseNumber).padStart(2, '0')}\` ${CONDITION_EMOJIS[horse.condition]} ${horse.name}  **${horse.currentWinOdds}倍**`;
+  const horseNumber =
+    position === undefined
+      ? `\`${String(horse.horseNumber).padStart(2, '0')}\``
+      : horseNumberEmoji(horse.horseNumber);
+  return `${prefix}${horseNumber} ${CONDITION_EMOJIS[horse.condition]} ${horse.name}  **${horse.currentWinOdds}倍**`;
 }

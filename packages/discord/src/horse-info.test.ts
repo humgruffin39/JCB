@@ -38,12 +38,12 @@ describe('Discord horse information', () => {
     expect(embed.description).toBeUndefined();
     expect(embed.fields).toHaveLength(8);
     expect(embed.fields?.[0]).toEqual({
-      name: '01 情報馬1',
+      name: '<:horse_1:1539913567787159653> 情報馬1',
       value: '逃げ　距離 △　芝 △',
       inline: false,
     });
     expect(embed.fields?.[7]).toEqual({
-      name: '08 情報馬8',
+      name: '<:horse_8:1539913577345851412> 情報馬8',
       value: '逃げ　距離 △　芝 △',
       inline: false,
     });

@@ -70,7 +70,6 @@ describe('ranking calculation', () => {
 
     const ranking = new SqliteRankingStore(database, () => 2);
     expect(ranking.calculateAndSave().users[0]).toMatchObject({
-      discordUserId: 'ranking-user',
       lifetimeProfit: '0',
       totalPayout: '0',
     });

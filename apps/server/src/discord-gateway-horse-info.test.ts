@@ -69,6 +69,9 @@ function createClient(channels: Readonly<Record<string, unknown>> = {}) {
     on: vi.fn((event: string, handler: (interaction: Interaction) => unknown) => {
       handlers.set(event, handler);
     }),
+    once: vi.fn((event: string, handler: (interaction: Interaction) => unknown) => {
+      handlers.set(event, handler);
+    }),
     guilds: {
       fetch: vi.fn(async () => ({ members: { fetch: vi.fn(async () => undefined) } })),
     },
@@ -88,6 +91,7 @@ function createButtonInteraction(customId: string) {
     deferred: false,
     replied: false,
     isButton: () => true,
+    isChatInputCommand: () => false,
     isStringSelectMenu: () => false,
     isModalSubmit: () => false,
     isRepliable: () => true,

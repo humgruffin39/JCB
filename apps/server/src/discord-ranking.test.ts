@@ -3,17 +3,18 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyMigrations, openDatabase, SqliteAdminStore, SqliteGameStore } from '@jcb/database';
 import type { Clock } from '@jcb/domain';
-import type { Client } from 'discord.js';
+import type { ChatInputCommandInteraction, Client } from 'discord.js';
 import {
-  captureWealthRankingLeaders,
-  publishWealthRankingMessage,
+  FORBES_COMMAND_NAME,
   publishRankingMessages,
+  readWealthRankingLeaders,
+  registerForbesCommand,
+  replyWithForbesRanking,
   renderRankingMessages,
   renderWealthRankingEmbed,
-  WEALTH_RANKING_CHANNEL_ID,
 } from './discord-ranking.js';
 
-describe('Discord fixed ranking messages', () => {
+describe('Discord rankings', () => {
   it('excludes accounts that have only received their initial grant', () => {
     const database = openDatabase(':memory:');
     applyMigrations(
@@ -39,9 +40,70 @@ describe('Discord fixed ranking messages', () => {
       actorUserId: active.id,
     });
 
-    expect(captureWealthRankingLeaders({ database, clock: { now: () => 3 } as Clock })).toEqual([
+    expect(readWealthRankingLeaders(database)).toEqual([
       { discordUserId: '100000000000000001', currentBalance: '50001' },
     ]);
+    database.close();
+  });
+
+  it('registers the forbes guild command', async () => {
+    const create = vi.fn(async () => ({ id: 'forbes-command' }));
+    const client = {
+      guilds: {
+        fetch: vi.fn(async () => ({
+          commands: { fetch: vi.fn(async () => []), create, edit: vi.fn() },
+        })),
+      },
+    } as unknown as Client;
+
+    await registerForbesCommand({ client, guildId: 'guild-1' });
+
+    expect(create).toHaveBeenCalledWith({
+      name: FORBES_COMMAND_NAME,
+      description: '現在の長者番付を表示します',
+      options: [],
+    });
+  });
+
+  it('replies publicly with the current ranking embed', async () => {
+    const database = openDatabase(':memory:');
+    applyMigrations(
+      database,
+      join(
+        dirname(dirname(dirname(fileURLToPath(import.meta.url)))),
+        '..',
+        'packages',
+        'database',
+        'migrations',
+      ),
+      1,
+    );
+    const game = new SqliteGameStore(database, () => 1);
+    game.initializeEconomy([]);
+    const active = game.registerUser('100000000000000001', '参加者', true);
+    new SqliteAdminStore(database, () => 2).adjustBalance({
+      targetAccountId: active.accountId,
+      signedAmount: 1n,
+      reason: '番付応答の確認',
+      idempotencyKey: 'forbes-command-reply',
+      actorUserId: active.id,
+    });
+    const reply = vi.fn<(options: unknown) => Promise<void>>(async () => undefined);
+
+    await replyWithForbesRanking({
+      interaction: { reply } as unknown as ChatInputCommandInteraction,
+      database,
+    });
+
+    expect(reply).toHaveBeenCalledTimes(1);
+    const response = reply.mock.calls[0]?.[0] as unknown as {
+      readonly embeds: readonly [{ readonly data: { readonly description?: string } }];
+      readonly allowedMentions: { readonly parse: readonly string[] };
+      readonly flags?: unknown;
+    };
+    expect(response.embeds[0]?.data.description).toBe('**１位** <@100000000000000001> 50,001CP');
+    expect(response.allowedMentions).toEqual({ parse: [] });
+    expect(response.flags).toBeUndefined();
     database.close();
   });
 
@@ -51,7 +113,6 @@ describe('Discord fixed ranking messages', () => {
       highestCarryover: '123456',
       users: Array.from({ length: 20 }, (_, index) => ({
         userId: `user-${String(index)}`,
-        discordUserId: `1000000000000000${String(index).padStart(2, '0')}`,
         displayName: `利用者_${String(index + 1)}@everyone`,
         currentBalance: String(50_000 + index),
         lifetimeProfit: String(index - 5),
@@ -90,59 +151,6 @@ describe('Discord fixed ranking messages', () => {
     );
     expect(embed.footer).toBeUndefined();
     expect(embed.fields).toBeUndefined();
-  });
-
-  it('edits the persisted wealth ranking message after its first publication', async () => {
-    const database = openDatabase(':memory:');
-    applyMigrations(
-      database,
-      join(
-        dirname(dirname(dirname(fileURLToPath(import.meta.url)))),
-        '..',
-        'packages',
-        'database',
-        'migrations',
-      ),
-      1,
-    );
-    const edit = vi.fn<(options: unknown) => Promise<void>>(async () => undefined);
-    const send = vi.fn(async () => ({ id: 'wealth-message' }));
-    const channel = {
-      isSendable: () => true,
-      messages: { fetch: vi.fn(async () => ({ edit })) },
-      send,
-    };
-    const client = {
-      channels: {
-        fetch: vi.fn(async (channelId: string) => {
-          expect(channelId).toBe(WEALTH_RANKING_CHANNEL_ID);
-          return channel;
-        }),
-      },
-    } as unknown as Client;
-    const input = {
-      client,
-      database,
-      clock: { now: () => 1 } as Clock,
-      leaders: [{ discordUserId: '100000000000000000', currentBalance: '50000' }],
-    };
-
-    await publishWealthRankingMessage(input);
-    await publishWealthRankingMessage(input);
-
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(edit).toHaveBeenCalledTimes(1);
-    expect(edit.mock.calls[0]?.[0]).toMatchObject({
-      allowedMentions: { parse: [], users: ['100000000000000000'] },
-    });
-    expect(
-      database
-        .prepare(
-          "SELECT channel_id AS channelId, message_id AS messageId FROM discord_messages WHERE purpose = 'wealth-ranking'",
-        )
-        .get(),
-    ).toEqual({ channelId: WEALTH_RANKING_CHANNEL_ID, messageId: 'wealth-message' });
-    database.close();
   });
 
   it('recreates deleted fixed messages and persists their replacement IDs', async () => {

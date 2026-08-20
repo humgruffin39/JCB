@@ -6,99 +6,65 @@ import {
   type UserRanking,
 } from '@jcb/database';
 import type { Clock } from '@jcb/domain';
-import { EmbedBuilder, type Client } from 'discord.js';
+import { EmbedBuilder, type ChatInputCommandInteraction, type Client } from 'discord.js';
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
 
 const MESSAGE_LIMIT = 2_000;
-export const WEALTH_RANKING_CHANNEL_ID = '1539952943690813500';
-const WEALTH_RANKING_PURPOSE = 'wealth-ranking';
+export const FORBES_COMMAND_NAME = 'forbes';
 const PLACE_LABELS = ['１位', '２位', '３位', '４位', '５位'] as const;
 
-const wealthRankingLeaderSchema = z.object({
-  discordUserId: z.string().regex(/^\d{17,20}$/),
-  currentBalance: z.string().regex(/^\d+$/),
-});
+export interface WealthRankingLeader {
+  readonly discordUserId: string;
+  readonly currentBalance: string;
+}
 
-export type WealthRankingLeader = z.infer<typeof wealthRankingLeaderSchema>;
-
-export function captureWealthRankingLeaders(input: {
-  readonly database: SqliteDatabase;
-  readonly clock: Clock;
-}): readonly WealthRankingLeader[] {
-  const snapshot = new SqliteRankingStore(input.database, () =>
-    input.clock.now(),
-  ).calculateAndSave();
-  const activeUserIds = new Set(
-    (
-      input.database
-        .prepare(
-          `SELECT DISTINCT a.owner_key AS userId
-           FROM accounts a
-           JOIN ledger_entries le ON le.account_id = a.id
+export function readWealthRankingLeaders(database: SqliteDatabase): readonly WealthRankingLeader[] {
+  return (
+    database
+      .prepare(
+        `SELECT u.discord_user_id AS discordUserId, ab.amount AS currentBalance
+         FROM users u
+         JOIN accounts a ON a.account_type = 'user' AND a.owner_key = u.id
+         JOIN account_balances ab ON ab.account_id = a.id
+         WHERE EXISTS (
+           SELECT 1
+           FROM ledger_entries le
            JOIN ledger_transactions lt ON lt.id = le.transaction_id
-           WHERE a.account_type = 'user' AND lt.kind <> 'initial_grant'`,
-        )
-        .all() as { readonly userId: string }[]
-    ).map((row) => row.userId),
-  );
-  return [...snapshot.users]
-    .filter((user) => activeUserIds.has(user.userId))
-    .sort(
-      (left, right) =>
-        compareDecimal(right.currentBalance, left.currentBalance) ||
-        left.discordUserId.localeCompare(right.discordUserId),
-    )
-    .slice(0, 5)
-    .map(({ discordUserId, currentBalance }) => ({ discordUserId, currentBalance }));
+           WHERE le.account_id = a.id AND lt.kind <> 'initial_grant'
+         )
+         ORDER BY ab.amount DESC, u.created_at, u.id
+         LIMIT 5`,
+      )
+      .all() as { readonly discordUserId: string; readonly currentBalance: bigint }[]
+  ).map((leader) => ({
+    discordUserId: leader.discordUserId,
+    currentBalance: leader.currentBalance.toString(),
+  }));
 }
 
-export function parseWealthRankingLeaders(
-  value: unknown,
-): readonly WealthRankingLeader[] | undefined {
-  const parsed = z.array(wealthRankingLeaderSchema).max(5).safeParse(value);
-  return parsed.success ? parsed.data : undefined;
-}
-
-export async function publishWealthRankingMessage(input: {
+export async function registerForbesCommand(input: {
   readonly client: Client;
-  readonly database: SqliteDatabase;
-  readonly clock: Clock;
-  readonly leaders: readonly WealthRankingLeader[];
+  readonly guildId: string;
 }): Promise<void> {
-  const channel = await input.client.channels.fetch(WEALTH_RANKING_CHANNEL_ID);
-  if (channel === null || !channel.isSendable() || !('messages' in channel)) {
-    throw new Error('Wealth ranking channel is not a text message channel.');
-  }
-  const embed = renderWealthRankingEmbed(input.leaders);
-  const allowedMentions = {
-    parse: [] as const,
-    users: input.leaders.map((leader) => leader.discordUserId),
+  const guild = await input.client.guilds.fetch(input.guildId);
+  const commands = await guild.commands.fetch();
+  const existing = commands.find((command) => command.name === FORBES_COMMAND_NAME);
+  const definition = {
+    name: FORBES_COMMAND_NAME,
+    description: '現在の長者番付を表示します',
+    options: [],
   };
-  const messageStore = new SqliteDiscordMessageStore(input.database, () => input.clock.now());
-  const existing = messageStore.get(WEALTH_RANKING_PURPOSE);
-  if (existing !== undefined && existing.channelId === WEALTH_RANKING_CHANNEL_ID) {
-    try {
-      const message = await channel.messages.fetch(existing.messageId);
-      await message.edit({ embeds: [embed], allowedMentions });
-      return;
-    } catch (error) {
-      if (!isMissingDiscordMessage(error)) throw error;
-    }
-  }
-  const created = await channel.send({
-    embeds: [embed],
-    allowedMentions,
-    nonce: createHash('sha256')
-      .update(`${WEALTH_RANKING_PURPOSE}:${JSON.stringify(input.leaders)}`)
-      .digest('hex')
-      .slice(0, 25),
-    enforceNonce: true,
-  });
-  messageStore.save({
-    purpose: WEALTH_RANKING_PURPOSE,
-    channelId: WEALTH_RANKING_CHANNEL_ID,
-    messageId: created.id,
+  if (existing === undefined) await guild.commands.create(definition);
+  else await guild.commands.edit(existing.id, definition);
+}
+
+export async function replyWithForbesRanking(input: {
+  readonly interaction: ChatInputCommandInteraction;
+  readonly database: SqliteDatabase;
+}): Promise<void> {
+  await input.interaction.reply({
+    embeds: [renderWealthRankingEmbed(readWealthRankingLeaders(input.database))],
+    allowedMentions: { parse: [] },
   });
 }
 
@@ -239,10 +205,4 @@ function compareDecimal(left: string, right: string): number {
   const first = BigInt(left);
   const second = BigInt(right);
   return first === second ? 0 : first > second ? 1 : -1;
-}
-
-function isMissingDiscordMessage(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const candidate = error as { readonly code?: unknown; readonly status?: unknown };
-  return candidate.code === 10_008 || candidate.status === 404;
 }

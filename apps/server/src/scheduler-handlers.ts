@@ -18,12 +18,7 @@ import { promisify } from 'node:util';
 import { publishRaceMessage } from './discord-gateway.js';
 import { assignRacingRole } from './discord-racing-role.js';
 import { deleteRaceStartReminder, sendRaceStartReminder } from './discord-race-reminder.js';
-import {
-  captureWealthRankingLeaders,
-  parseWealthRankingLeaders,
-  publishRankingMessages,
-  publishWealthRankingMessage,
-} from './discord-ranking.js';
+import { publishRankingMessages } from './discord-ranking.js';
 import { verifyBackupProbe } from './scheduler-backup.js';
 import { enqueueRaceFollowUpJobs, loadPreparedRaceTiming } from './scheduler-race-jobs.js';
 import {
@@ -327,14 +322,10 @@ export function createHandlers(
       lifecycle.settleRace(id, dependencies.clock.now());
       const rankingKey = `rankings:${id}:${String(version)}`;
       if (jobStore.getByDeduplicationKey(rankingKey) === undefined) {
-        const wealthLeaders = captureWealthRankingLeaders({
-          database: dependencies.database,
-          clock: dependencies.clock,
-        });
         jobStore.enqueue({
           jobType: 'refresh_rankings',
           deduplicationKey: rankingKey,
-          payload: { raceId: id, wealthLeaders },
+          payload: { raceId: id },
           runAt: dependencies.clock.now(),
         });
       }
@@ -410,7 +401,7 @@ export function createHandlers(
         });
       }
     },
-    async refresh_rankings(job) {
+    async refresh_rankings() {
       if (dependencies.discordClient === undefined) return;
       if (dependencies.environment.DISCORD_RANKING_CHANNEL_ID !== undefined) {
         await publishRankingMessages({
@@ -418,15 +409,6 @@ export function createHandlers(
           database: dependencies.database,
           clock: dependencies.clock,
           channelId: dependencies.environment.DISCORD_RANKING_CHANNEL_ID,
-        });
-      }
-      const leaders = parseWealthRankingLeaders(job.payload.wealthLeaders);
-      if (leaders !== undefined) {
-        await publishWealthRankingMessage({
-          client: dependencies.discordClient,
-          database: dependencies.database,
-          clock: dependencies.clock,
-          leaders,
         });
       }
     },

@@ -29,6 +29,11 @@ import type { EmbedBuilder } from 'discord.js';
 import { createHash } from 'node:crypto';
 import { DiscordClientGuildMembership } from './guild-membership.js';
 import { SqliteDiscordPurchaseGateway } from './discord-purchase-gateway.js';
+import {
+  FORBES_COMMAND_NAME,
+  registerForbesCommand,
+  replyWithForbesRanking,
+} from './discord-ranking.js';
 import { resolveFinishOrder } from './discord-race-message-options.js';
 import {
   latestViewableRaceId,
@@ -66,6 +71,9 @@ export function wireDiscordGateway(input: {
   input.client.on(Events.InteractionCreate, (interaction) => {
     void handleInteraction(interaction).catch(reportDiscordError);
   });
+  input.client.once(Events.ClientReady, () => {
+    void registerForbesCommand({ client: input.client, guildId }).catch(reportDiscordError);
+  });
 
   async function handleInteraction(interaction: Interaction): Promise<void> {
     try {
@@ -78,6 +86,10 @@ export function wireDiscordGateway(input: {
         interaction.user.globalName ?? interaction.user.username,
         true,
       );
+      if (interaction.isChatInputCommand() && interaction.commandName === FORBES_COMMAND_NAME) {
+        await replyWithForbesRanking({ interaction, database: input.database });
+        return;
+      }
       if (
         await handlePurchaseInteraction(interaction, {
           sessions,

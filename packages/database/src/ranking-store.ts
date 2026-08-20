@@ -3,7 +3,6 @@ import { ulid } from 'ulid';
 
 export interface UserRanking {
   readonly userId: string;
-  readonly discordUserId: string;
   readonly displayName: string;
   readonly currentBalance: string;
   readonly lifetimeProfit: string;
@@ -23,7 +22,6 @@ export interface RankingSnapshot {
 
 interface UserSummaryRow {
   readonly userId: string;
-  readonly discordUserId: string;
   readonly displayName: string;
   readonly currentBalance: bigint;
   readonly totalStake: bigint;
@@ -52,7 +50,6 @@ export class SqliteRankingStore {
       const streaks = streaksByUser.get(row.userId) ?? { current: 0, longest: 0 };
       return {
         userId: row.userId,
-        discordUserId: row.discordUserId,
         displayName: row.displayName,
         currentBalance: row.currentBalance.toString(),
         lifetimeProfit: (row.totalPayout - row.totalStake).toString(),
@@ -88,8 +85,7 @@ export class SqliteRankingStore {
   private userSummaries(): readonly UserSummaryRow[] {
     return this.database
       .prepare(
-        `SELECT u.id AS userId, u.discord_user_id AS discordUserId,
-                u.display_name AS displayName,
+        `SELECT u.id AS userId, u.display_name AS displayName,
                 ab.amount AS currentBalance,
                 COALESCE(SUM(CASE WHEN b.status IN ('won', 'lost') THEN b.stake ELSE 0 END), 0)
                   AS totalStake,
@@ -108,7 +104,7 @@ export class SqliteRankingStore {
          JOIN account_balances ab ON ab.account_id = a.id
          LEFT JOIN bets b ON b.user_id = u.id
          LEFT JOIN bet_pools bp ON bp.id = b.pool_id
-         GROUP BY u.id, u.discord_user_id, u.display_name, ab.amount
+         GROUP BY u.id, u.display_name, ab.amount
          ORDER BY ab.amount DESC, u.created_at, u.id`,
       )
       .all() as UserSummaryRow[];

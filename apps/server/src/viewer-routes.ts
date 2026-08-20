@@ -1,6 +1,7 @@
 import { createEdgeAccessToken, createOpaqueToken } from '@jcb/application';
 import { gameSettingsSchema } from '@jcb/config';
 import { raceIdParamsSchema } from '@jcb/contracts';
+import { POOL_TYPES } from '@jcb/domain';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { envelope, httpError } from './server-support.js';
@@ -40,7 +41,7 @@ export function registerViewerRoutes(app: FastifyInstance, context: ServerRouteC
     await authenticate(request, { raceId });
     const query = z
       .object({
-        poolType: z.enum(['win', 'trifecta']).default('win'),
+        poolType: z.enum(POOL_TYPES).default('win'),
         selectionCode: z.string().max(20).optional(),
       })
       .parse(request.query);

@@ -24,7 +24,7 @@ import {
   type OfficialSimulationResult,
   type SimulationInput,
 } from '@jcb/simulation';
-import type { Money, RaceKind, Timestamp } from '@jcb/domain';
+import { POOL_TYPES, type Money, type PoolType, type RaceKind, type Timestamp } from '@jcb/domain';
 
 export interface RacePreparationStart {
   readonly raceId: string;
@@ -49,6 +49,13 @@ export interface RacePreparationCompletion {
   readonly trifectaLiquidity: Money;
   readonly winPositions: readonly SeedPositionAllocation[];
   readonly trifectaPositions: readonly SeedPositionAllocation[];
+  readonly pools: readonly RacePoolPreparation[];
+}
+
+export interface RacePoolPreparation {
+  readonly poolType: PoolType;
+  readonly liquidity: Money;
+  readonly positions: readonly SeedPositionAllocation[];
 }
 
 export interface RacePreparationRepository {
@@ -116,6 +123,15 @@ export async function prepareRace(
       dependencies.manifestPrivateKey,
     );
     const liquidity = dependencies.seedLiquidity ?? INITIAL_SEED_LIQUIDITY[start.raceKind];
+    const pools = POOL_TYPES.map((poolType): RacePoolPreparation => {
+      const poolLiquidity =
+        poolType === 'trio' || poolType === 'trifecta' ? liquidity.trifecta : liquidity.win;
+      return {
+        poolType,
+        liquidity: poolLiquidity,
+        positions: allocateSeedLiquidity(poolLiquidity, probabilities[poolType]),
+      };
+    });
     const completion: RacePreparationCompletion = {
       official,
       probabilities,
@@ -128,6 +144,7 @@ export async function prepareRace(
       trifectaLiquidity: liquidity.trifecta,
       winPositions: allocateSeedLiquidity(liquidity.win, probabilities.win),
       trifectaPositions: allocateSeedLiquidity(liquidity.trifecta, probabilities.trifecta),
+      pools,
     };
     dependencies.repository.complete(start, completion);
     return completion;

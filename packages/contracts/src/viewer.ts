@@ -1,6 +1,19 @@
 import { z } from 'zod';
 import { moneyStringSchema, timestampSchema } from './common.js';
 
+export const POOL_TYPES = [
+  'win',
+  'place',
+  'quinella',
+  'exacta',
+  'wide',
+  'trio',
+  'trifecta',
+] as const;
+
+export const poolTypeSchema = z.enum(POOL_TYPES);
+export type PoolType = z.infer<typeof poolTypeSchema>;
+
 export const ticketExchangeSchema = z
   .object({
     ticket: z.string().min(40).max(200),
@@ -57,7 +70,7 @@ export const raceDetailSchema = z.object({
 
 export const betResponseSchema = z.object({
   id: z.string(),
-  poolType: z.enum(['win', 'trifecta']),
+  poolType: poolTypeSchema,
   selectionCode: z.string(),
   stake: moneyStringSchema,
   status: z.enum(['open', 'won', 'lost', 'refunded']),

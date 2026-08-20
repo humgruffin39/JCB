@@ -1,6 +1,7 @@
 import { parseEnvironment } from '@jcb/config';
 import { deriveResultKey, encryptAesGcm } from '@jcb/application';
 import { applyMigrations, openDatabase, SqliteAuthStore, SqliteGameStore } from '@jcb/database';
+import { POOL_TYPES } from '@jcb/contracts';
 import { identifier, timestamp } from '@jcb/domain';
 import { SIMULATION_VERSION, simulateOfficialRace } from '@jcb/simulation';
 import { dirname, join } from 'node:path';
@@ -151,6 +152,23 @@ describe('server API contract', () => {
     expect(result.json()).toMatchObject({
       error: { code: 'RACE_NOT_FINISHED' },
     });
+    for (const poolType of POOL_TYPES) {
+      const selectionQuery = ['exacta', 'trio', 'trifecta'].includes(poolType)
+        ? '&selectionCode=1'
+        : '';
+      const odds = await app.inject({
+        method: 'GET',
+        url: `/api/v1/races/${race.id}/odds?poolType=${poolType}${selectionQuery}`,
+        headers: { cookie: cookie! },
+      });
+      expect(odds.statusCode).toBe(200);
+    }
+    const unknownPool = await app.inject({
+      method: 'GET',
+      url: `/api/v1/races/${race.id}/odds?poolType=unknown`,
+      headers: { cookie: cookie! },
+    });
+    expect(unknownPool.statusCode).toBe(400);
     const otherRace = await app.inject({
       method: 'GET',
       url: '/api/v1/races/another-race/result',

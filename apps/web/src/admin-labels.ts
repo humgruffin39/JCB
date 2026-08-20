@@ -70,8 +70,23 @@ const ACCOUNT_TYPE_LABELS: Readonly<Record<string, string>> = {
   issuance: '発行',
   burn: '償却',
   race_win_pool: '単勝プール',
-  race_trifecta_pool: '三連単プール',
-  trifecta_carryover: '三連単キャリーオーバー',
+  race_place_pool: '複勝プール',
+  race_quinella_pool: '馬連プール',
+  race_exacta_pool: '馬単プール',
+  race_wide_pool: 'ワイドプール',
+  race_trio_pool: '3連複プール',
+  race_trifecta_pool: '3連単プール',
+  trifecta_carryover: '3連単キャリーオーバー',
+};
+
+const POOL_TYPE_LABELS: Readonly<Record<string, string>> = {
+  win: '単勝',
+  place: '複勝',
+  quinella: '馬連',
+  exacta: '馬単',
+  wide: 'ワイド',
+  trio: '3連複',
+  trifecta: '3連単',
 };
 
 const BET_STATUS_LABELS: Readonly<Record<string, string>> = {
@@ -162,7 +177,7 @@ export function accountTypeLabel(accountType: string): string {
 }
 
 export function poolTypeLabel(poolType: string): string {
-  return poolType === 'trifecta' ? '三連単' : poolType === 'win' ? '単勝' : 'その他';
+  return POOL_TYPE_LABELS[poolType] ?? 'その他';
 }
 
 export function betStatusLabel(status: string): string {

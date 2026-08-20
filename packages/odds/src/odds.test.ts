@@ -25,17 +25,23 @@ const input: SimulationInput = {
 describe('odds generation', () => {
   it('produces positive normalized probabilities without official result input', () => {
     const result = generateProbabilities(input, 'odds-only-seed', 250);
-    expect(result.win).toHaveLength(8);
-    expect(result.trifecta).toHaveLength(336);
-    expect(result.win.every((selection) => selection.modelProbability > 0)).toBe(true);
-    expect(result.trifecta.every((selection) => selection.modelProbability > 0)).toBe(true);
-    expect(result.win.reduce((sum, selection) => sum + selection.modelProbability, 0)).toBeCloseTo(
-      1,
-      14,
-    );
-    expect(
-      result.trifecta.reduce((sum, selection) => sum + selection.modelProbability, 0),
-    ).toBeCloseTo(1, 14);
+    const expected = {
+      win: [8, 1],
+      place: [8, 3],
+      quinella: [28, 1],
+      exacta: [56, 1],
+      wide: [28, 3],
+      trio: [56, 1],
+      trifecta: [336, 1],
+    } as const;
+    for (const [poolType, [length, total]] of Object.entries(expected)) {
+      const selections = result[poolType as keyof typeof expected];
+      expect(selections).toHaveLength(length);
+      expect(selections.every((selection) => selection.modelProbability > 0)).toBe(true);
+      expect(
+        selections.reduce((sum, selection) => sum + selection.modelProbability, 0),
+      ).toBeCloseTo(total, 12);
+    }
     for (const selection of result.win) {
       expect(selection.baseOdds).toBeCloseTo(1 / selection.modelProbability, 1);
     }

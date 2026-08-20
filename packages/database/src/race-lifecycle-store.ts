@@ -3,7 +3,9 @@ import { decryptAesGcmWithKeys, deriveResultKey, type EncryptedPayload } from '@
 import {
   identifier,
   money,
+  POOL_TYPES,
   transitionRace,
+  winningSelections,
   type AccountId,
   type PoolType,
   type RaceStatus,
@@ -168,18 +170,22 @@ export class SqliteRaceLifecycleStore {
       ) {
         throw new Error('Materialized finish order is incomplete.');
       }
-      const winSelection = String(finish[0]!.horseNumber);
-      const trifectaSelection = `${finish[0]!.horseNumber}-${finish[1]!.horseNumber}-${finish[2]!.horseNumber}`;
       const centralBankAccountId = this.findAccount('central_bank', 'global');
       const pools = loadRacePools(this.database, raceId);
       if (
-        pools.length !== 2 ||
+        (pools.length !== 2 && pools.length !== POOL_TYPES.length) ||
         !pools.some((pool) => pool.poolType === 'win') ||
-        !pools.some((pool) => pool.poolType === 'trifecta')
+        !pools.some((pool) => pool.poolType === 'trifecta') ||
+        (pools.length === POOL_TYPES.length &&
+          POOL_TYPES.some((poolType) => !pools.some((pool) => pool.poolType === poolType)))
       ) {
         throw new Error('Race pools are incomplete.');
       }
       for (const pool of pools) {
+        const winning = winningSelections(
+          pool.poolType,
+          finish.map((entry) => Number(entry.horseNumber)),
+        );
         settleRacePool({
           database: this.database,
           ledger: this.ledger,
@@ -187,7 +193,7 @@ export class SqliteRaceLifecycleStore {
           raceId,
           raceVersion: Number(race.version),
           pool,
-          winningSelection: pool.poolType === 'win' ? winSelection : trifectaSelection,
+          winningSelections: winning,
           at,
         });
       }

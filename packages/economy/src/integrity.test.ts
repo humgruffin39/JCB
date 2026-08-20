@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { identifier, money, timestamp } from '@jcb/domain';
 import { allocateProRata } from './allocate-pro-rata.js';
 import { assertBalancedTransaction, sumLedgerEntries, transfer } from './ledger.js';
-import { settleTrifectaPool, settleWinPool } from './settlement.js';
+import { settleParimutuelPool, settleTrifectaPool, settleWinPool } from './settlement.js';
 import { estimatedGrossPayout, validatePurchase } from './betting.js';
 
 describe('economy integrity', () => {
@@ -114,6 +114,41 @@ describe('economy integrity', () => {
       seedPositions: [{ selectionCode: '1', stake: money(1_000n) }],
     });
     expect(result.payouts.reduce((sum, payout) => sum + payout.amount, 0n)).toBe(1_500n);
+    expect(sumLedgerEntries(result.ledgerEntries)).toBe(0n);
+  });
+
+  it('allocates a multi-selection pool across all winning selections', () => {
+    const result = settleParimutuelPool({
+      poolAccountId: identifier('place-pool'),
+      centralBankAccountId: identifier('bank'),
+      winningSelections: ['1', '2', '3'],
+      poolBalance: money(500n),
+      tickets: [
+        {
+          id: 'place-winner-1',
+          accountId: identifier('winner-account-1'),
+          selectionCode: '1',
+          stake: money(50n),
+          createdAt: 1,
+        },
+        {
+          id: 'place-winner-2',
+          accountId: identifier('winner-account-2'),
+          selectionCode: '2',
+          stake: money(50n),
+          createdAt: 2,
+        },
+      ],
+      seedPositions: [
+        { selectionCode: '1', stake: money(100n) },
+        { selectionCode: '2', stake: money(100n) },
+        { selectionCode: '3', stake: money(100n) },
+        { selectionCode: '4', stake: money(100n) },
+      ],
+    });
+    expect(result.hasUserWinner).toBe(true);
+    expect(result.payouts.reduce((sum, payout) => sum + payout.amount, 0n)).toBe(500n);
+    expect(result.payouts.filter((payout) => payout.recipientType === 'seed')).toHaveLength(3);
     expect(sumLedgerEntries(result.ledgerEntries)).toBe(0n);
   });
 

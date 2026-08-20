@@ -36,6 +36,15 @@ export interface TrifectaSettlementInput extends WinSettlementInput {
   readonly carryoverBalance: Money;
 }
 
+export interface ParimutuelSettlementInput {
+  readonly poolAccountId: AccountId;
+  readonly centralBankAccountId: AccountId;
+  readonly winningSelections: readonly string[];
+  readonly poolBalance: Money;
+  readonly tickets: readonly OpenTicket[];
+  readonly seedPositions: readonly SeedPosition[];
+}
+
 export interface SettlementResult {
   readonly payouts: readonly SettlementPayout[];
   readonly ledgerEntries: readonly LedgerEntryDraft[];
@@ -44,14 +53,25 @@ export interface SettlementResult {
 }
 
 export function settleWinPool(input: WinSettlementInput): SettlementResult {
+  return settleParimutuelPool({
+    ...input,
+    winningSelections: [input.winningSelection],
+  });
+}
+
+export function settleParimutuelPool(input: ParimutuelSettlementInput): SettlementResult {
   assertPoolBalance(input);
-  const winningTickets = input.tickets.filter(
-    (ticket) => ticket.selectionCode === input.winningSelection,
+  if (input.winningSelections.length === 0) {
+    throw new DomainError('INVALID_SELECTION', 'At least one winning selection is required.');
+  }
+  const winningSelectionSet = new Set(input.winningSelections);
+  const winningTickets = input.tickets.filter((ticket) =>
+    winningSelectionSet.has(ticket.selectionCode),
   );
-  const seed = input.seedPositions.find(
-    (position) => position.selectionCode === input.winningSelection,
+  const winningSeeds = input.seedPositions.filter((position) =>
+    winningSelectionSet.has(position.selectionCode),
   );
-  if (seed === undefined) {
+  if (winningSeeds.length === 0) {
     throw new DomainError('INVALID_SELECTION', 'Winning seed position is missing.');
   }
   const claims: AllocationClaim[] = [
@@ -60,11 +80,11 @@ export function settleWinPool(input: WinSettlementInput): SettlementResult {
       weight: ticket.stake,
       tieBreaker: String(ticket.createdAt).padStart(16, '0'),
     })),
-    {
+    ...winningSeeds.map((seed) => ({
       id: `seed:${seed.selectionCode}`,
       weight: seed.stake,
       tieBreaker: `seed:${seed.selectionCode}`,
-    },
+    })),
   ];
   const allocations = allocateProRata(input.poolBalance, claims);
   const winningTicketsById = new Map(winningTickets.map((ticket) => [ticket.id, ticket]));
@@ -80,9 +100,10 @@ export function settleWinPool(input: WinSettlementInput): SettlementResult {
         amount: allocation.amount,
       };
     }
+    const selectionCode = allocation.id.slice('seed:'.length);
     return {
       recipientType: 'seed',
-      recipientId: seed.selectionCode,
+      recipientId: selectionCode,
       accountId: input.centralBankAccountId,
       amount: allocation.amount,
     };
@@ -127,7 +148,10 @@ export function settleTrifectaPool(input: TrifectaSettlementInput): SettlementRe
     };
   }
 
-  const base = settleWinPool(input);
+  const base = settleParimutuelPool({
+    ...input,
+    winningSelections: [input.winningSelection],
+  });
   const carryoverClaims = winningTickets.map((ticket) => ({
     id: ticket.id,
     weight: ticket.stake,
@@ -159,7 +183,11 @@ export function settleTrifectaPool(input: TrifectaSettlementInput): SettlementRe
   };
 }
 
-function assertPoolBalance(input: WinSettlementInput): void {
+function assertPoolBalance(input: {
+  readonly poolBalance: Money;
+  readonly tickets: readonly OpenTicket[];
+  readonly seedPositions: readonly SeedPosition[];
+}): void {
   const seedTotal = input.seedPositions.reduce((sum, position) => sum + position.stake, 0n);
   const userTotal = input.tickets.reduce((sum, ticket) => sum + ticket.stake, 0n);
   if (seedTotal + userTotal !== input.poolBalance) {

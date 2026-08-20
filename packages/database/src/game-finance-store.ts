@@ -12,6 +12,7 @@ import {
   type RaceStatus,
   type Timestamp,
 } from '@jcb/domain';
+import type { RacePoolPreparation } from '@jcb/application';
 import { calculateRelief, reliefIdempotencyKey, transfer, validatePurchase } from '@jcb/economy';
 import {
   planAdaptiveSeedLiquidity,
@@ -47,10 +48,11 @@ export interface PurchasedBet {
 
 export interface OpenBettingPoolsInput {
   readonly raceId: string;
-  readonly winLiquidity: Money;
-  readonly trifectaLiquidity: Money;
-  readonly winPositions: readonly SeedPositionAllocation[];
-  readonly trifectaPositions: readonly SeedPositionAllocation[];
+  readonly pools?: readonly RacePoolPreparation[];
+  readonly winLiquidity?: Money;
+  readonly trifectaLiquidity?: Money;
+  readonly winPositions?: readonly SeedPositionAllocation[];
+  readonly trifectaPositions?: readonly SeedPositionAllocation[];
 }
 
 export class SqliteGameFinanceStore {
@@ -68,13 +70,12 @@ export class SqliteGameFinanceStore {
       if (race === undefined) throw new Error('Race not found.');
       transitionRace(race.status, 'betting_open');
       const centralBank = this.findSystemAccount('central_bank');
-      const win = this.createPool(input.raceId, 'win', input.winLiquidity, input.winPositions);
-      const trifecta = this.createPool(
-        input.raceId,
-        'trifecta',
-        input.trifectaLiquidity,
-        input.trifectaPositions,
+      const pools = input.pools ?? legacyPoolPreparations(input);
+      if (pools.length === 0) throw new Error('Betting pools are missing.');
+      const createdPools = pools.map((pool) =>
+        this.createPool(input.raceId, pool.poolType, pool.liquidity, pool.positions),
       );
+      const totalLiquidity = pools.reduce((sum, pool) => sum + pool.liquidity, 0n);
       this.ledger.post({
         kind: 'seed_liquidity',
         referenceType: 'race',
@@ -84,10 +85,12 @@ export class SqliteGameFinanceStore {
         entries: [
           {
             accountId: centralBank,
-            amount: money(-(input.winLiquidity + input.trifectaLiquidity)),
+            amount: money(-totalLiquidity),
           },
-          { accountId: win.accountId, amount: input.winLiquidity },
-          { accountId: trifecta.accountId, amount: input.trifectaLiquidity },
+          ...createdPools.map((pool, index) => ({
+            accountId: pool.accountId,
+            amount: pools[index]!.liquidity,
+          })),
         ],
       });
       const update = this.database
@@ -338,7 +341,7 @@ export class SqliteGameFinanceStore {
     const accountId = this.ledger.createAccount({
       ownerType: 'race',
       ownerKey: raceId,
-      accountType: poolType === 'win' ? 'race_win_pool' : 'race_trifecta_pool',
+      accountType: racePoolAccountType(poolType),
     });
     const poolId = ulid();
     this.database
@@ -389,6 +392,41 @@ export class SqliteGameFinanceStore {
     if (row === undefined) throw new Error('User account missing.');
     return identifier(row.id);
   }
+}
+
+function racePoolAccountType(poolType: PoolType): string {
+  return {
+    win: 'race_win_pool',
+    place: 'race_place_pool',
+    quinella: 'race_quinella_pool',
+    exacta: 'race_exacta_pool',
+    wide: 'race_wide_pool',
+    trio: 'race_trio_pool',
+    trifecta: 'race_trifecta_pool',
+  }[poolType];
+}
+
+function legacyPoolPreparations(input: OpenBettingPoolsInput): readonly RacePoolPreparation[] {
+  if (
+    input.winLiquidity === undefined ||
+    input.trifectaLiquidity === undefined ||
+    input.winPositions === undefined ||
+    input.trifectaPositions === undefined
+  ) {
+    throw new Error('Legacy betting pool inputs are incomplete.');
+  }
+  return [
+    {
+      poolType: 'win',
+      liquidity: input.winLiquidity,
+      positions: input.winPositions,
+    },
+    {
+      poolType: 'trifecta',
+      liquidity: input.trifectaLiquidity,
+      positions: input.trifectaPositions,
+    },
+  ];
 }
 
 function parseRaceFinancialSettings(

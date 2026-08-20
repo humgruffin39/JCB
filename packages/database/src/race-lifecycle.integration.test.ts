@@ -7,7 +7,7 @@ import {
   prepareRace,
   type ProbabilityGenerator,
 } from '@jcb/application';
-import { money, timestamp } from '@jcb/domain';
+import { money, timestamp, type PoolType, winningSelections } from '@jcb/domain';
 import { generateProbabilities } from '@jcb/odds';
 import { openDatabase } from './connection.js';
 import { SqliteGameStore, type HorseWrite } from './game-store.js';
@@ -27,7 +27,7 @@ const horseBase: Omit<HorseWrite, 'name' | 'speed' | 'runningStyle'> = {
 };
 
 describe('race lifecycle and settlement', () => {
-  it('materializes only after the race and settles win plus trifecta carryover idempotently', async () => {
+  it('materializes only after the race and settles every bet type idempotently', async () => {
     let now = 1_000;
     const database = openDatabase(':memory:');
     applyMigrations(
@@ -88,29 +88,29 @@ describe('race lifecycle and settlement', () => {
          WHERE race_id = ? AND race_version = 1 AND kind = 'official'`,
       )
       .run(legacySimulationVersion, JSON.stringify(legacyEncryptedResult), race.id);
-    const winner = completion.official.finishOrder[0]!.horseNumber;
-    const winningTrifecta = completion.official.finishOrder
-      .slice(0, 3)
-      .map((finish) => finish.horseNumber)
-      .join('-');
-    const losingTrifecta = winningTrifecta === '1-2-3' ? '8-7-6' : '1-2-3';
+    const finishOrder = completion.official.finishOrder.map((finish) => finish.horseNumber);
     const pools = database
       .prepare('SELECT id, pool_type AS poolType FROM bet_pools WHERE race_id = ?')
-      .all(race.id) as Array<{ id: string; poolType: 'win' | 'trifecta' }>;
+      .all(race.id) as Array<{ id: string; poolType: PoolType }>;
     now = 20_000;
     for (const pool of pools) {
-      game.purchaseBet({
-        userId: user.id,
-        poolId: pool.id,
-        poolType: pool.poolType,
-        selectionCode: pool.poolType === 'win' ? String(winner) : losingTrifecta,
-        stake: money(500n),
-        interactionId: `interaction-${pool.poolType}`,
-        idempotencyKey: `purchase:${pool.poolType}`,
-        expectedRaceVersion: 1,
-        isGuildMember: true,
-        now: timestamp(now),
-      });
+      for (const [index, selectionCode] of winningSelections(
+        pool.poolType,
+        finishOrder,
+      ).entries()) {
+        game.purchaseBet({
+          userId: user.id,
+          poolId: pool.id,
+          poolType: pool.poolType,
+          selectionCode,
+          stake: money(500n),
+          interactionId: `interaction-${pool.poolType}-${String(index)}`,
+          idempotencyKey: `purchase:${pool.poolType}:${String(index)}`,
+          expectedRaceVersion: 1,
+          isGuildMember: true,
+          now: timestamp(now),
+        });
+      }
     }
     const lifecycle = new SqliteRaceLifecycleStore(database, () => now, resultMasterSecret);
     expect(() => lifecycle.closeBetting(race.id, timestamp(89_999))).toThrow();
@@ -150,25 +150,26 @@ describe('race lifecycle and settlement', () => {
     lifecycle.settleRace(race.id, timestamp(finishAt + 3_000));
     lifecycle.settleRace(race.id, timestamp(finishAt + 3_000));
     expect(game.getRace(race.id).status).toBe('settled');
-    const winBet = database
+    const settledPools = database
       .prepare(
-        `SELECT b.status, b.payout FROM bets b JOIN bet_pools bp ON bp.id = b.pool_id
-         WHERE bp.race_id = ? AND bp.pool_type = 'win'`,
+        'SELECT pool_type AS poolType, status FROM bet_pools WHERE race_id = ? ORDER BY pool_type',
       )
-      .get(race.id) as { status: string; payout: bigint };
-    expect(winBet.status).toBe('won');
-    expect(winBet.payout).toBeGreaterThan(0n);
-    const trifectaBet = database
+      .all(race.id) as Array<{ poolType: PoolType; status: string }>;
+    expect(settledPools).toHaveLength(7);
+    expect(settledPools.every((pool) => pool.status === 'settled')).toBe(true);
+    const bets = database
       .prepare(
-        `SELECT b.status, b.payout FROM bets b JOIN bet_pools bp ON bp.id = b.pool_id
-         WHERE bp.race_id = ? AND bp.pool_type = 'trifecta'`,
+        `SELECT bp.pool_type AS poolType, b.status, b.payout
+         FROM bets b JOIN bet_pools bp ON bp.id = b.pool_id
+         WHERE bp.race_id = ? ORDER BY bp.pool_type, b.id`,
       )
-      .get(race.id) as { status: string; payout: bigint };
-    expect(trifectaBet).toEqual({ status: 'lost', payout: 0n });
+      .all(race.id) as Array<{ poolType: PoolType; status: string; payout: bigint }>;
+    expect(bets).toHaveLength(11);
+    expect(bets.every((bet) => bet.status === 'won' && bet.payout > 0n)).toBe(true);
     const carryover = database
       .prepare("SELECT amount_projection AS amount FROM trifecta_carryover WHERE id = 'global'")
       .get() as { amount: bigint };
-    expect(carryover.amount).toBe(500n);
+    expect(carryover.amount).toBe(0n);
     expect(() => game.ledgerStore().assertProjectionIntegrity()).not.toThrow();
     database.close();
   });

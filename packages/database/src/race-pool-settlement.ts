@@ -1,8 +1,8 @@
 import type Database from 'better-sqlite3';
 import { identifier, money, type AccountId, type PoolType, type Timestamp } from '@jcb/domain';
 import {
+  settleParimutuelPool,
   settleTrifectaPool,
-  settleWinPool,
   type OpenTicket,
   type SeedPosition,
   type SettlementResult,
@@ -70,7 +70,8 @@ export function settleRacePool(input: {
   readonly raceId: string;
   readonly raceVersion: number;
   readonly pool: RacePoolRow;
-  readonly winningSelection: string;
+  readonly winningSelections?: readonly string[];
+  readonly winningSelection?: string;
   readonly at: Timestamp;
 }): void {
   const { database, ledger, pool } = input;
@@ -88,19 +89,23 @@ export function settleRacePool(input: {
     throw new Error('Pool projection does not match its ledger balance.');
   }
 
+  const winningSelections =
+    input.winningSelections ??
+    (input.winningSelection === undefined ? [] : [input.winningSelection]);
+  if (winningSelections.length === 0) throw new Error('Winning selections are missing.');
   const common = {
     poolAccountId,
     centralBankAccountId: input.centralBankAccountId,
-    winningSelection: input.winningSelection,
     poolBalance,
     tickets,
     seedPositions: seeds,
   };
   let settlement: SettlementResult;
   let carryoverAccountId: AccountId | undefined;
-  if (pool.poolType === 'win') {
-    settlement = settleWinPool(common);
-  } else {
+  if (pool.poolType === 'trifecta') {
+    if (winningSelections.length !== 1) {
+      throw new Error('Trifecta must have exactly one winning selection.');
+    }
     carryoverAccountId = findAccount(database, 'trifecta_carryover', 'global');
     const carryoverProjection = database
       .prepare(
@@ -116,8 +121,14 @@ export function settleRacePool(input: {
     }
     settlement = settleTrifectaPool({
       ...common,
+      winningSelection: winningSelections[0]!,
       carryoverAccountId,
       carryoverBalance,
+    });
+  } else {
+    settlement = settleParimutuelPool({
+      ...common,
+      winningSelections,
     });
   }
 

@@ -2,6 +2,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   LabelBuilder,
   ModalBuilder,
   StringSelectMenuBuilder,
@@ -9,28 +10,47 @@ import {
   TextInputStyle,
   type StringSelectMenuInteraction,
 } from 'discord.js';
-import type { PoolType } from '@jcb/domain';
+import { isPoolType, POOL_TYPE_DEFINITIONS, POOL_TYPES, type PoolType } from '@jcb/domain';
 import type {
   DiscordPurchaseGateway,
   PurchasePreview,
   PurchaseReceipt,
   PurchaseSession,
 } from './types.js';
+import { poolDefinition } from './purchase-flow-validation.js';
 
 export function poolChoice(session: PurchaseSession) {
+  const selectedPoolType = session.payload.poolType;
+  const selectedDefinition =
+    selectedPoolType !== undefined && isPoolType(selectedPoolType)
+      ? POOL_TYPE_DEFINITIONS[selectedPoolType]
+      : undefined;
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`jcb:pool:${session.id}`)
+    .setPlaceholder(selectedDefinition?.label ?? '券種を選択')
+    .addOptions(
+      POOL_TYPES.map((value) => ({
+        label: POOL_TYPE_DEFINITIONS[value].label,
+        description: POOL_TYPE_DEFINITIONS[value].description,
+        value,
+        default: value === selectedPoolType,
+      })),
+    );
+  const continueButton = new ButtonBuilder()
+    .setCustomId(`jcb:pool-confirm:${session.id}`)
+    .setLabel('この券種で進む')
+    .setStyle(ButtonStyle.Primary)
+    .setDisabled(selectedDefinition === undefined);
   return {
-    content: '券種を選んでください。',
+    content: null,
+    embeds: [
+      new EmbedBuilder()
+        .setTitle('券種を選んでください。')
+        .setDescription(selectedDefinition?.description ?? '券種を選択してください。'),
+    ],
     components: [
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`jcb:pool:${session.id}:win`)
-          .setLabel('単勝')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`jcb:pool:${session.id}:trifecta`)
-          .setLabel('三連単')
-          .setStyle(ButtonStyle.Primary),
-      ),
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(continueButton),
     ],
   };
 }
@@ -39,11 +59,23 @@ export async function horseChoice(session: PurchaseSession, gateway: DiscordPurc
   const horses = await gateway.raceHorses(session.raceId);
   assertEightDistinctHorses(horses);
   const position = Number(session.step.slice('pick-'.length));
-  const selected = new Set([session.payload.first, session.payload.second].filter(Boolean));
+  const poolType = session.payload.poolType;
+  if (poolType === undefined || !isPoolType(poolType)) throw new Error('Pool type is missing.');
+  const definition = poolDefinition(poolType);
+  const selected = new Set(
+    [session.payload.first, session.payload.second, session.payload.third].filter(
+      (value): value is string => value !== undefined,
+    ),
+  );
+  const orderedPrompt = definition.ordered
+    ? `${String(position)}着候補`
+    : `${String(position)}頭目`;
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`jcb:pick:${session.id}`)
     .setPlaceholder(
-      session.payload.poolType === 'win' ? '単勝の馬を選択' : `${String(position)}着候補を選択`,
+      definition.selectionSize === 1
+        ? `${definition.label}の馬を選択`
+        : `${definition.label} ${orderedPrompt}を選択`,
     )
     .addOptions(
       horses
@@ -55,9 +87,10 @@ export async function horseChoice(session: PurchaseSession, gateway: DiscordPurc
     );
   return {
     content:
-      session.payload.poolType === 'win'
-        ? '単勝の馬を選んでください。'
-        : `三連単 ${String(position)}着候補を選んでください。`,
+      definition.selectionSize === 1
+        ? `${definition.label}の馬を選んでください。`
+        : `${definition.label} ${orderedPrompt}を選んでください。`,
+    embeds: [],
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
   };
 }
@@ -100,7 +133,7 @@ export function purchasePreviewMessage(input: {
   );
   return {
     content: [
-      `券種: ${input.poolType === 'win' ? '単勝' : '三連単'}`,
+      `券種: ${poolDefinition(input.poolType).label}`,
       `買い目: ${input.selectionCode}`,
       `賭け金: ${input.stake} R`,
       `購入後見込み払戻: ${input.preview.estimatedBasePayout.toString()} R`,

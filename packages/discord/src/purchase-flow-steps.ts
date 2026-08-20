@@ -4,7 +4,7 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from 'discord.js';
-import { money } from '@jcb/domain';
+import { money, type PoolType } from '@jcb/domain';
 import type { PurchaseFlowDependencies } from './purchase-flow-context.js';
 import {
   horseChoice,
@@ -17,6 +17,7 @@ import {
   finalPickStep,
   parsePoolType,
   parseStake,
+  poolDefinition,
   requireHorseNumber,
   requireStep,
   selectionFromSession,
@@ -45,20 +46,51 @@ export async function beginPurchase(
   await interaction.editReply(poolChoice(session));
 }
 
-export async function choosePool(
+export async function choosePoolType(
+  interaction: StringSelectMenuInteraction,
+  session: PurchaseSession,
+  poolTypeValue: string | undefined,
+  dependencies: PurchaseFlowDependencies,
+): Promise<void> {
+  requireStep(session, 'pool');
+  const poolType = parsePoolType(poolTypeValue);
+  await interaction.deferUpdate();
+  const updated = dependencies.sessions.update(session.id, 'pool', 'pool', { poolType });
+  try {
+    await interaction.editReply(poolChoice(updated));
+  } catch (error) {
+    rollbackSession(dependencies, updated, 'pool', session.payload);
+    throw error;
+  }
+}
+
+export async function confirmPool(
+  interaction: ButtonInteraction,
+  session: PurchaseSession,
+  dependencies: PurchaseFlowDependencies,
+): Promise<void> {
+  requireStep(session, 'pool');
+  const poolType = parsePoolType(session.payload.poolType);
+  await interaction.deferUpdate();
+  const updated = dependencies.sessions.update(session.id, 'pool', 'pick-1', { poolType });
+  try {
+    await interaction.editReply(await horseChoice(updated, dependencies.gateway));
+  } catch (error) {
+    rollbackSession(dependencies, updated, 'pool', session.payload);
+    throw error;
+  }
+}
+
+export async function chooseLegacyPool(
   interaction: ButtonInteraction,
   session: PurchaseSession,
   poolTypeValue: string | undefined,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
   requireStep(session, 'pool');
+  const poolType = parsePoolType(poolTypeValue);
   await interaction.deferUpdate();
-  if (poolTypeValue !== 'win' && poolTypeValue !== 'trifecta') {
-    throw new Error('Unknown pool type.');
-  }
-  const updated = dependencies.sessions.update(session.id, 'pool', 'pick-1', {
-    poolType: poolTypeValue,
-  });
+  const updated = dependencies.sessions.update(session.id, 'pool', 'pick-1', { poolType });
   try {
     await interaction.editReply(await horseChoice(updated, dependencies.gateway));
   } catch (error) {
@@ -75,28 +107,19 @@ export async function chooseHorse(
   if (!/^pick-[1-3]$/.test(session.step)) throw new Error('Purchase session step is stale.');
   const selected = requireHorseNumber(interaction.values[0]);
   const poolType = parsePoolType(session.payload.poolType);
-  if (poolType === 'win') {
-    const updated = dependencies.sessions.update(session.id, session.step, 'amount', {
-      ...session.payload,
-      first: selected,
-    });
-    try {
-      await showAmountModal(interaction, updated);
-    } catch (error) {
-      rollbackSession(dependencies, updated, session.step, session.payload);
-      throw error;
-    }
-    return;
-  }
-
+  const definition = poolDefinition(poolType);
   const position = Number(session.step.slice('pick-'.length));
-  const selectedAlready = [session.payload.first, session.payload.second].filter(Boolean);
+  const selectedAlready = [
+    session.payload.first,
+    session.payload.second,
+    session.payload.third,
+  ].filter((value): value is string => value !== undefined);
   if (selectedAlready.includes(selected)) {
     throw new Error('The same horse cannot fill two positions.');
   }
   const key = position === 1 ? 'first' : position === 2 ? 'second' : 'third';
   const payload = { ...session.payload, [key]: selected };
-  if (position < 3) {
+  if (position < definition.selectionSize) {
     await interaction.deferUpdate();
     const updated = dependencies.sessions.update(
       session.id,
@@ -261,13 +284,13 @@ function rollbackSession(
 
 function payloadBeforeFinalPick(
   session: PurchaseSession,
-  poolType: 'win' | 'trifecta',
+  poolType: PoolType,
 ): Readonly<Record<string, string>> {
-  if (poolType === 'win') return { poolType };
   const { first, second } = session.payload;
+  const definition = poolDefinition(poolType);
   return {
     poolType,
-    ...(first === undefined ? {} : { first }),
-    ...(second === undefined ? {} : { second }),
+    ...(definition.selectionSize >= 2 && first !== undefined ? { first } : {}),
+    ...(definition.selectionSize >= 3 && second !== undefined ? { second } : {}),
   };
 }

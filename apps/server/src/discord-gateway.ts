@@ -9,7 +9,7 @@ import {
   type SqliteDatabase,
 } from '@jcb/database';
 import { handlePurchaseInteraction, renderRaceMessage } from '@jcb/discord';
-import { DomainError, money, timestamp, type Clock } from '@jcb/domain';
+import { DomainError, money, POOL_TYPE_DEFINITIONS, timestamp, type Clock } from '@jcb/domain';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -136,7 +136,7 @@ export function wireDiscordGateway(input: {
             : bets
                 .map(
                   (bet) =>
-                    `${bet.poolType === 'win' ? '単勝' : '三連単'} ${bet.selectionCode} / ${bet.stake} R / 状態: ${betStatusLabel(bet.status)}`,
+                    `${POOL_TYPE_DEFINITIONS[bet.poolType].label} ${bet.selectionCode} / ${bet.stake} R / 状態: ${betStatusLabel(bet.status)}`,
                 )
                 .join('\n'),
         );

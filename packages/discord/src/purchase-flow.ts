@@ -3,7 +3,9 @@ import type { PurchaseFlowDependencies } from './purchase-flow-context.js';
 import {
   beginPurchase,
   chooseHorse,
-  choosePool,
+  chooseLegacyPool,
+  choosePoolType,
+  confirmPool,
   confirmPurchase,
   renderCurrentStep,
   submitAmount,
@@ -32,10 +34,22 @@ export async function handlePurchaseInteraction(
     await beginPurchase(interaction, route.raceId, dependencies);
     return true;
   }
-  if (route.action === 'pool') {
+  if (route.action === 'pool-select') {
+    if (!interaction.isStringSelectMenu()) return false;
+    const session = requireSession(interaction, route.sessionId, dependencies);
+    await choosePoolType(interaction, session, interaction.values[0], dependencies);
+    return true;
+  }
+  if (route.action === 'pool-confirm') {
     if (!interaction.isButton()) return false;
     const session = requireSession(interaction, route.sessionId, dependencies);
-    await choosePool(interaction, session, route.poolType, dependencies);
+    await confirmPool(interaction, session, dependencies);
+    return true;
+  }
+  if (route.action === 'pool-legacy') {
+    if (!interaction.isButton()) return false;
+    const session = requireSession(interaction, route.sessionId, dependencies);
+    await chooseLegacyPool(interaction, session, route.poolType, dependencies);
     return true;
   }
   if (route.action === 'pick') {
@@ -67,7 +81,9 @@ export async function handlePurchaseInteraction(
 
 type PurchaseRoute =
   | { readonly action: 'buy'; readonly raceId: string }
-  | { readonly action: 'pool'; readonly sessionId: string; readonly poolType: string }
+  | { readonly action: 'pool-select'; readonly sessionId: string }
+  | { readonly action: 'pool-confirm'; readonly sessionId: string }
+  | { readonly action: 'pool-legacy'; readonly sessionId: string; readonly poolType: string }
   | {
       readonly action: 'pick' | 'amount' | 'confirm' | 'back';
       readonly sessionId: string;
@@ -79,8 +95,14 @@ function purchaseRoute(customId: string): PurchaseRoute | undefined {
   if (parts[1] === 'buy' && parts.length === 3 && hasValue(parts[2])) {
     return { action: 'buy', raceId: parts[2] };
   }
+  if (parts[1] === 'pool' && parts.length === 3 && hasValue(parts[2])) {
+    return { action: 'pool-select', sessionId: parts[2] };
+  }
+  if (parts[1] === 'pool-confirm' && parts.length === 3 && hasValue(parts[2])) {
+    return { action: 'pool-confirm', sessionId: parts[2] };
+  }
   if (parts[1] === 'pool' && parts.length === 4 && hasValue(parts[2]) && hasValue(parts[3])) {
-    return { action: 'pool', sessionId: parts[2], poolType: parts[3] };
+    return { action: 'pool-legacy', sessionId: parts[2], poolType: parts[3] };
   }
   if (
     (parts[1] === 'pick' ||

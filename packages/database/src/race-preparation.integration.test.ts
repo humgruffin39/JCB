@@ -162,7 +162,7 @@ describe('race preparation workflow', () => {
           .prepare('SELECT COUNT(*) AS count FROM odds_probabilities WHERE race_id = ?')
           .get(race.id) as { count: bigint }
       ).count,
-    ).toBe(344n);
+    ).toBe(520n);
     expect(timelineStore.objects.has(completion.timelineObjectKey)).toBe(false);
     expect(timelineStore.objects.has(`race-manifests/${race.id}.json`)).toBe(false);
     const publicationStore = new SqliteObjectPublicationStore(database);

@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3';
-import { money, type PoolType, type RaceStatus } from '@jcb/domain';
+import { POOL_TYPE_DEFINITIONS, money, type PoolType, type RaceStatus } from '@jcb/domain';
 import { currentOddsTenths, formatOdds } from '@jcb/odds';
+
+const HIGH_CARDINALITY_POOL_TYPES = new Set<PoolType>(['exacta', 'trio', 'trifecta']);
 
 interface RaceDetailRow {
   readonly id: string;
@@ -135,8 +137,10 @@ export class SqliteViewerStore {
     readonly baseOdds: string;
     readonly currentOdds: string;
   }[] {
-    if (poolType === 'trifecta' && selectionCode === undefined) {
-      throw new Error('A trifecta selection is required; the 336-combination list is not exposed.');
+    if (selectionCode === undefined && HIGH_CARDINALITY_POOL_TYPES.has(poolType)) {
+      throw new Error(
+        `${POOL_TYPE_DEFINITIONS[poolType].label} selection is required; the full odds list is not exposed.`,
+      );
     }
     const rows = this.database
       .prepare(

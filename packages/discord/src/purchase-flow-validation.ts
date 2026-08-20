@@ -1,4 +1,10 @@
-import { money, type PoolType } from '@jcb/domain';
+import {
+  isPoolType,
+  money,
+  POOL_TYPE_DEFINITIONS,
+  selectionCode,
+  type PoolType,
+} from '@jcb/domain';
 import type {
   ButtonInteraction,
   ModalSubmitInteraction,
@@ -54,23 +60,28 @@ export function isPurchaseSessionValid(
 }
 
 export function parsePoolType(value: string | undefined): PoolType {
-  if (value !== 'win' && value !== 'trifecta') throw new Error('Pool type is missing.');
+  if (value === undefined || !isPoolType(value)) throw new Error('Pool type is missing.');
   return value;
 }
 
+export function poolDefinition(poolType: PoolType) {
+  return POOL_TYPE_DEFINITIONS[poolType];
+}
+
 export function selectionFromSession(session: PurchaseSession, poolType: PoolType): string {
-  if (poolType === 'win') {
-    if (!isHorseNumber(session.payload.first)) throw new Error('Win selection is missing.');
-    return session.payload.first;
+  const definition = poolDefinition(poolType);
+  const selections = [session.payload.first, session.payload.second, session.payload.third].slice(
+    0,
+    definition.selectionSize,
+  );
+  if (selections.some((value) => !isHorseNumber(value))) {
+    throw new Error(`${definition.label} selection is incomplete.`);
   }
-  const { first, second, third } = session.payload;
-  if (!isHorseNumber(first) || !isHorseNumber(second) || !isHorseNumber(third)) {
-    throw new Error('Trifecta selection is incomplete.');
-  }
-  if (new Set([first, second, third]).size !== 3) {
+  try {
+    return selectionCode(poolType, (selections as string[]).map(Number));
+  } catch {
     throw new Error('The same horse cannot fill two positions.');
   }
-  return `${first}-${second}-${third}`;
 }
 
 export function requireHorseNumber(value: string | undefined): string {
@@ -82,8 +93,8 @@ export function requireStep(session: PurchaseSession, expected: string): void {
   if (session.step !== expected) throw new Error('Purchase session step is stale.');
 }
 
-export function finalPickStep(poolType: PoolType): 'pick-1' | 'pick-3' {
-  return poolType === 'win' ? 'pick-1' : 'pick-3';
+export function finalPickStep(poolType: PoolType): 'pick-1' | 'pick-2' | 'pick-3' {
+  return `pick-${String(poolDefinition(poolType).selectionSize)}` as 'pick-1' | 'pick-2' | 'pick-3';
 }
 
 function isHorseNumber(value: string | undefined): value is string {

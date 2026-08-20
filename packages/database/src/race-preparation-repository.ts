@@ -11,6 +11,7 @@ import {
 } from '@jcb/application';
 import {
   identifier,
+  POOL_TYPES,
   timestamp,
   transitionRace,
   type Condition,
@@ -149,8 +150,9 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
           JSON.stringify({
             oddsVersion: completion.probabilities.oddsVersion,
             simulationCount: completion.probabilities.simulationCount,
-            win: completion.probabilities.win,
-            trifecta: completion.probabilities.trifecta,
+            ...Object.fromEntries(
+              POOL_TYPES.map((poolType) => [poolType, completion.probabilities[poolType]]),
+            ),
           }),
           'utf8',
         ),
@@ -170,35 +172,27 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
           seed_stake, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       );
-      const winStake = new Map(
-        completion.winPositions.map((position) => [position.selectionCode, position.stake]),
+      const positionsByPool = new Map(
+        completion.pools.map((pool) => [
+          pool.poolType,
+          new Map(pool.positions.map((position) => [position.selectionCode, position.stake])),
+        ]),
       );
-      const trifectaStake = new Map(
-        completion.trifectaPositions.map((position) => [position.selectionCode, position.stake]),
-      );
-      for (const selection of completion.probabilities.win) {
-        insertOdds.run(
-          ulid(),
-          start.raceId,
-          'win',
-          selection.selectionCode,
-          selection.modelProbability,
-          selection.baseOdds,
-          winStake.get(selection.selectionCode) ?? 0n,
-          now,
-        );
-      }
-      for (const selection of completion.probabilities.trifecta) {
-        insertOdds.run(
-          ulid(),
-          start.raceId,
-          'trifecta',
-          selection.selectionCode,
-          selection.modelProbability,
-          selection.baseOdds,
-          trifectaStake.get(selection.selectionCode) ?? 0n,
-          now,
-        );
+      for (const poolType of POOL_TYPES) {
+        const stakeBySelection = positionsByPool.get(poolType);
+        if (stakeBySelection === undefined) throw new Error(`Seed positions missing: ${poolType}`);
+        for (const selection of completion.probabilities[poolType]) {
+          insertOdds.run(
+            ulid(),
+            start.raceId,
+            poolType,
+            selection.selectionCode,
+            selection.modelProbability,
+            selection.baseOdds,
+            stakeBySelection.get(selection.selectionCode) ?? 0n,
+            now,
+          );
+        }
       }
       const saveTimelineDuration = this.database
         .prepare(
@@ -211,6 +205,7 @@ export class SqliteRacePreparationRepository implements RacePreparationRepositor
       }
       this.gameStore.openBettingPools({
         raceId: start.raceId,
+        pools: completion.pools,
         winLiquidity: completion.winLiquidity,
         trifectaLiquidity: completion.trifectaLiquidity,
         winPositions: completion.winPositions,

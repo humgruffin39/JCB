@@ -59,7 +59,7 @@ export class SqliteAdminHealthStore {
         `SELECT
            COALESCE(SUM(ab.amount), 0) AS allAccounts,
            COALESCE(SUM(CASE WHEN a.account_type = 'user' THEN ab.amount ELSE 0 END), 0) AS users,
-           COALESCE(SUM(CASE WHEN a.account_type IN ('race_win_pool', 'race_trifecta_pool')
+           COALESCE(SUM(CASE WHEN a.account_type LIKE 'race_%_pool'
                             THEN ab.amount ELSE 0 END), 0) AS pools,
            COALESCE(SUM(CASE WHEN a.account_type = 'trifecta_carryover'
                             THEN ab.amount ELSE 0 END), 0) AS carryover

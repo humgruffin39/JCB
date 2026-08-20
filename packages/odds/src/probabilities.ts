@@ -1,4 +1,4 @@
-import { allTrifectaSelections } from '@jcb/domain';
+import { allSelections, POOL_TYPES, winningSelections, type PoolType } from '@jcb/domain';
 import {
   createOutcomeSimulator,
   nextTrialSeed,
@@ -6,7 +6,7 @@ import {
   type SimulationInput,
 } from '@jcb/simulation';
 
-export const ODDS_VERSION = 'outcome-20000-v4-preference-axis-temp18';
+export const ODDS_VERSION = 'outcome-20000-v5-seven-bet-types-temp18';
 export const DEFAULT_SIMULATION_COUNT = 20_000;
 export const ODDS_TEMPERATURE = 1.8;
 
@@ -20,6 +20,11 @@ export interface ProbabilityResult {
   readonly oddsVersion: string;
   readonly simulationCount: number;
   readonly win: readonly SelectionProbability[];
+  readonly place: readonly SelectionProbability[];
+  readonly quinella: readonly SelectionProbability[];
+  readonly exacta: readonly SelectionProbability[];
+  readonly wide: readonly SelectionProbability[];
+  readonly trio: readonly SelectionProbability[];
   readonly trifecta: readonly SelectionProbability[];
 }
 
@@ -31,41 +36,74 @@ export function generateProbabilities(
   if (!Number.isInteger(simulationCount) || simulationCount <= 0) {
     throw new Error('Simulation count must be a positive integer.');
   }
-  const winCounts = new Uint32Array(8);
-  const trifectaSelections = allTrifectaSelections();
-  const trifectaIndex = new Map(trifectaSelections.map((selection, index) => [selection, index]));
-  const trifectaCounts = new Uint32Array(trifectaSelections.length);
+  const selectionCodes = Object.fromEntries(
+    POOL_TYPES.map((poolType) => [poolType, allSelections(poolType)]),
+  ) as Record<PoolType, readonly string[]>;
+  const counts = Object.fromEntries(
+    POOL_TYPES.map((poolType) => [
+      poolType,
+      new Map(selectionCodes[poolType].map((code) => [code, 0])),
+    ]),
+  ) as Record<PoolType, Map<string, number>>;
   const seedGenerator = new Xoshiro128StarStar(oddsSeed);
   const simulateOutcome = createOutcomeSimulator(input);
 
   for (let run = 0; run < simulationCount; run += 1) {
     const finishOrder = simulateOutcome(nextTrialSeed(seedGenerator));
-    winCounts[finishOrder[0]! - 1] = winCounts[finishOrder[0]! - 1]! + 1;
-    const trifectaCode = `${finishOrder[0]}-${finishOrder[1]}-${finishOrder[2]}`;
-    const combinationIndex = trifectaIndex.get(trifectaCode);
-    if (combinationIndex === undefined) throw new Error('Simulator produced an invalid trifecta.');
-    trifectaCounts[combinationIndex] = trifectaCounts[combinationIndex]! + 1;
+    for (const poolType of POOL_TYPES) {
+      for (const selection of winningSelections(poolType, finishOrder)) {
+        const poolCounts = counts[poolType];
+        const current = poolCounts.get(selection);
+        if (current === undefined) throw new Error(`Simulator produced an invalid ${poolType}.`);
+        poolCounts.set(selection, current + 1);
+      }
+    }
   }
 
-  const winRaw = Array.from(winCounts, (count) => {
-    const smoothed = (count + 0.5) / (simulationCount + 0.5 * 8);
-    return 0.95 * smoothed + 0.05 * (1 / 8);
+  const results = Object.fromEntries(
+    POOL_TYPES.map((poolType) => [
+      poolType,
+      createSelectionProbabilities(
+        selectionCodes[poolType],
+        counts[poolType],
+        simulationCount,
+        poolType === 'place' || poolType === 'wide' ? 3 : 1,
+      ),
+    ]),
+  ) as Record<PoolType, readonly SelectionProbability[]>;
+  return {
+    oddsVersion: ODDS_VERSION,
+    simulationCount,
+    win: results.win,
+    place: results.place,
+    quinella: results.quinella,
+    exacta: results.exacta,
+    wide: results.wide,
+    trio: results.trio,
+    trifecta: results.trifecta,
+  };
+}
+
+function createSelectionProbabilities(
+  selections: readonly string[],
+  counts: ReadonlyMap<string, number>,
+  simulationCount: number,
+  totalProbability: number,
+): readonly SelectionProbability[] {
+  const raw = selections.map((selection) => {
+    const count = counts.get(selection);
+    if (count === undefined) throw new Error('Selection count is missing.');
+    const smoothed = (count + 0.5) / (simulationCount + 0.5 * selections.length);
+    return 0.95 * smoothed + 0.05 * (1 / selections.length);
   });
-  const trifectaRaw = Array.from(trifectaCounts, (count) => {
-    const smoothed = (count + 0.25) / (simulationCount + 0.25 * 336);
-    return 0.9 * smoothed + 0.1 * (1 / 336);
+  return temperProbabilities(raw, ODDS_TEMPERATURE).map((probability, index) => {
+    const modelProbability = probability * totalProbability;
+    return {
+      selectionCode: selections[index]!,
+      modelProbability,
+      baseOdds: 1 / modelProbability,
+    };
   });
-  const win = temperProbabilities(winRaw, ODDS_TEMPERATURE).map((probability, index) => ({
-    selectionCode: String(index + 1),
-    modelProbability: probability,
-    baseOdds: 1 / probability,
-  }));
-  const trifecta = temperProbabilities(trifectaRaw, ODDS_TEMPERATURE).map((probability, index) => ({
-    selectionCode: trifectaSelections[index]!,
-    modelProbability: probability,
-    baseOdds: 1 / probability,
-  }));
-  return { oddsVersion: ODDS_VERSION, simulationCount, win, trifecta };
 }
 
 export function normalizeProbabilities(values: readonly number[]): readonly number[] {
@@ -106,7 +144,9 @@ export function createCalibrationReport(result: ProbabilityResult): string {
     '|---:|---:|---:|',
     winRows,
     '',
-    `Trifecta selections: ${result.trifecta.length}`,
-    `Probability sum: ${result.trifecta.reduce((sum, entry) => sum + entry.modelProbability, 0).toFixed(12)}`,
+    ...POOL_TYPES.map(
+      (poolType) =>
+        `${poolType} selections: ${result[poolType].length}, probability sum: ${result[poolType].reduce((sum, entry) => sum + entry.modelProbability, 0).toFixed(12)}`,
+    ),
   ].join('\n');
 }

@@ -1,14 +1,16 @@
 import { type CSSProperties } from 'react';
+import type { PoolType } from '@jcb/contracts';
 import { PodiumHorsePreview } from './podium-horse-preview.js';
 import { SADDLECLOTH_COLORS } from './race-horse-model.js';
 import type { FinishOrder } from './race-viewer-selectors.js';
 import type { getRace } from './api.js';
+import { poolTypeLabel } from './admin-labels.js';
 import { PublicState } from './public-state.js';
 
 type RaceDetail = Awaited<ReturnType<typeof getRace>>;
 export interface Bet {
   readonly id: string;
-  readonly poolType: 'win' | 'trifecta';
+  readonly poolType: PoolType;
   readonly selectionCode: string;
   readonly stake: string;
   readonly status: 'open' | 'won' | 'lost' | 'refunded';
@@ -100,7 +102,7 @@ export function ResultsScreen({
             {bets.map((bet) => (
               <li key={bet.id}>
                 <div className="ticket-selection">
-                  <span className="ticket-type">{bet.poolType === 'win' ? '単勝' : '三連単'}</span>
+                  <span className="ticket-type">{poolTypeLabel(bet.poolType)}</span>
                   <span
                     className="ticket-horses"
                     aria-label={`${bet.selectionCode.replaceAll('-', '番、')}番`}

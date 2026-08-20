@@ -5,19 +5,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      skip_verify:
-        description: Skip Verify
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_verify != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -50,14 +43,7 @@ jobs:
         always() &&
         github.ref == 'refs/heads/main' &&
         (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-        (
-          needs.verify.result == 'success' ||
-          (
-            github.event_name == 'workflow_dispatch' &&
-            inputs.skip_verify == true &&
-            needs.verify.result == 'skipped'
-          )
-        )
+        needs.verify.result == 'success'
       }}
     needs: verify
     runs-on: ubuntu-latest

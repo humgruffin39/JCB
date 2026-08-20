@@ -106,29 +106,34 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
       .prepare('SELECT id FROM bet_pools WHERE race_id = ? AND pool_type = ?')
       .get(input.raceId, input.poolType) as { id: string } | undefined;
     if (pool === undefined) throw new Error('Bet pool is not open.');
-    const purchased = this.gameStore.purchaseBet({
-      userId: user.id,
-      poolId: pool.id,
-      poolType: input.poolType,
-      selectionCode: input.selectionCode,
-      stake: input.stake,
-      interactionId: input.interactionId,
-      idempotencyKey: `discord-session:${input.operationId}`,
-      expectedRaceVersion: input.raceVersion,
-      isGuildMember,
-      now: this.clock.now(),
-    });
-    if (!purchased.wasDuplicate) {
-      const current = this.clock.now();
-      const interval = this.oddsRefreshInterval();
-      const refreshAt = nextOddsRefreshAt(current, interval);
-      new SqliteJobStore(this.database, cryptoUnit, () => this.clock.now()).enqueue({
-        jobType: 'refresh_race_message',
-        deduplicationKey: `refresh-race:${input.raceId}:${String(input.raceVersion)}:${String(refreshAt)}`,
-        payload: { raceId: input.raceId, raceVersion: input.raceVersion },
-        runAt: refreshAt,
-      });
-    }
+    const purchased = this.database
+      .transaction(() => {
+        const result = this.gameStore.purchaseBet({
+          userId: user.id,
+          poolId: pool.id,
+          poolType: input.poolType,
+          selectionCode: input.selectionCode,
+          stake: input.stake,
+          interactionId: input.interactionId,
+          idempotencyKey: `discord-session:${input.operationId}`,
+          expectedRaceVersion: input.raceVersion,
+          isGuildMember,
+          now: this.clock.now(),
+        });
+        if (!result.wasDuplicate) {
+          const current = this.clock.now();
+          const interval = this.oddsRefreshInterval();
+          const refreshAt = nextOddsRefreshAt(current, interval);
+          new SqliteJobStore(this.database, cryptoUnit, () => this.clock.now()).enqueue({
+            jobType: 'refresh_race_message',
+            deduplicationKey: `refresh-race:${input.raceId}:${String(input.raceVersion)}:${String(refreshAt)}`,
+            payload: { raceId: input.raceId, raceVersion: input.raceVersion },
+            runAt: refreshAt,
+          });
+        }
+        return result;
+      })
+      .immediate();
     return {
       betId: purchased.id,
       balanceAfter: purchased.balanceAfter,

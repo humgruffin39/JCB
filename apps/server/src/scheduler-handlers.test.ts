@@ -59,7 +59,9 @@ describe('scheduler cancellation cleanup', () => {
                 ('reminder-row', 'race_reminder', ?, 'race-channel', 'reminder-message', ?)`,
       )
       .run(race.id, BigInt(now), race.id, BigInt(now));
-    const raceMessage = { edit: vi.fn(async () => undefined) };
+    const editRaceMessage = vi.fn<(options: unknown) => Promise<void>>();
+    editRaceMessage.mockResolvedValue(undefined);
+    const raceMessage = { edit: editRaceMessage };
     const channel = {
       isSendable: () => true,
       messages: {

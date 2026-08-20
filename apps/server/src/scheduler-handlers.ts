@@ -18,7 +18,12 @@ import { promisify } from 'node:util';
 import { publishRaceMessage } from './discord-gateway.js';
 import { assignRacingRole } from './discord-racing-role.js';
 import { deleteRaceStartReminder, sendRaceStartReminder } from './discord-race-reminder.js';
-import { publishRankingMessages } from './discord-ranking.js';
+import {
+  captureWealthRankingLeaders,
+  parseWealthRankingLeaders,
+  publishRankingMessages,
+  publishWealthRankingMessage,
+} from './discord-ranking.js';
 import { verifyBackupProbe } from './scheduler-backup.js';
 import { enqueueRaceFollowUpJobs, loadPreparedRaceTiming } from './scheduler-race-jobs.js';
 import {
@@ -320,6 +325,19 @@ export function createHandlers(
       const id = raceId(job);
       const version = raceVersion(job) ?? gameStore.getRace(id).version;
       lifecycle.settleRace(id, dependencies.clock.now());
+      const rankingKey = `rankings:${id}:${String(version)}`;
+      if (jobStore.getByDeduplicationKey(rankingKey) === undefined) {
+        const wealthLeaders = captureWealthRankingLeaders({
+          database: dependencies.database,
+          clock: dependencies.clock,
+        });
+        jobStore.enqueue({
+          jobType: 'refresh_rankings',
+          deduplicationKey: rankingKey,
+          payload: { raceId: id, wealthLeaders },
+          runAt: dependencies.clock.now(),
+        });
+      }
       await publish(job);
       if (dependencies.discordClient !== undefined) {
         const messages = new SqliteDiscordMessageStore(dependencies.database, () =>
@@ -340,12 +358,6 @@ export function createHandlers(
         title: 'レースの精算が完了しました',
         description: '払戻と残高を更新しました。',
         fields: [{ name: 'レースID', value: id }],
-      });
-      jobStore.enqueue({
-        jobType: 'refresh_rankings',
-        deduplicationKey: `rankings:${id}:${String(version)}`,
-        payload: { raceId: id },
-        runAt: dependencies.clock.now(),
       });
     },
     async grant_relief(job) {
@@ -398,19 +410,25 @@ export function createHandlers(
         });
       }
     },
-    async refresh_rankings() {
-      if (
-        dependencies.discordClient === undefined ||
-        dependencies.environment.DISCORD_RANKING_CHANNEL_ID === undefined
-      ) {
-        return;
+    async refresh_rankings(job) {
+      if (dependencies.discordClient === undefined) return;
+      if (dependencies.environment.DISCORD_RANKING_CHANNEL_ID !== undefined) {
+        await publishRankingMessages({
+          client: dependencies.discordClient,
+          database: dependencies.database,
+          clock: dependencies.clock,
+          channelId: dependencies.environment.DISCORD_RANKING_CHANNEL_ID,
+        });
       }
-      await publishRankingMessages({
-        client: dependencies.discordClient,
-        database: dependencies.database,
-        clock: dependencies.clock,
-        channelId: dependencies.environment.DISCORD_RANKING_CHANNEL_ID,
-      });
+      const leaders = parseWealthRankingLeaders(job.payload.wealthLeaders);
+      if (leaders !== undefined) {
+        await publishWealthRankingMessage({
+          client: dependencies.discordClient,
+          database: dependencies.database,
+          clock: dependencies.clock,
+          leaders,
+        });
+      }
     },
     async backup_check() {
       const checkedAt = dependencies.clock.now();

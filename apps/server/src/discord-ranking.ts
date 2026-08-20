@@ -6,10 +6,99 @@ import {
   type UserRanking,
 } from '@jcb/database';
 import type { Clock } from '@jcb/domain';
-import type { Client } from 'discord.js';
+import { EmbedBuilder, type Client } from 'discord.js';
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 
 const MESSAGE_LIMIT = 2_000;
+export const WEALTH_RANKING_CHANNEL_ID = '1539952943690813500';
+const WEALTH_RANKING_PURPOSE = 'wealth-ranking';
+const PLACE_LABELS = ['１位', '２位', '３位', '４位', '５位'] as const;
+
+const wealthRankingLeaderSchema = z.object({
+  discordUserId: z.string().regex(/^\d{17,20}$/),
+  currentBalance: z.string().regex(/^\d+$/),
+});
+
+export type WealthRankingLeader = z.infer<typeof wealthRankingLeaderSchema>;
+
+export function captureWealthRankingLeaders(input: {
+  readonly database: SqliteDatabase;
+  readonly clock: Clock;
+}): readonly WealthRankingLeader[] {
+  const snapshot = new SqliteRankingStore(input.database, () =>
+    input.clock.now(),
+  ).calculateAndSave();
+  return [...snapshot.users]
+    .sort(
+      (left, right) =>
+        compareDecimal(right.currentBalance, left.currentBalance) ||
+        left.discordUserId.localeCompare(right.discordUserId),
+    )
+    .slice(0, 5)
+    .map(({ discordUserId, currentBalance }) => ({ discordUserId, currentBalance }));
+}
+
+export function parseWealthRankingLeaders(
+  value: unknown,
+): readonly WealthRankingLeader[] | undefined {
+  const parsed = z.array(wealthRankingLeaderSchema).max(5).safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+export async function publishWealthRankingMessage(input: {
+  readonly client: Client;
+  readonly database: SqliteDatabase;
+  readonly clock: Clock;
+  readonly leaders: readonly WealthRankingLeader[];
+}): Promise<void> {
+  const channel = await input.client.channels.fetch(WEALTH_RANKING_CHANNEL_ID);
+  if (channel === null || !channel.isSendable() || !('messages' in channel)) {
+    throw new Error('Wealth ranking channel is not a text message channel.');
+  }
+  const embed = renderWealthRankingEmbed(input.leaders);
+  const allowedMentions = {
+    parse: [] as const,
+    users: input.leaders.map((leader) => leader.discordUserId),
+  };
+  const messageStore = new SqliteDiscordMessageStore(input.database, () => input.clock.now());
+  const existing = messageStore.get(WEALTH_RANKING_PURPOSE);
+  if (existing !== undefined && existing.channelId === WEALTH_RANKING_CHANNEL_ID) {
+    try {
+      const message = await channel.messages.fetch(existing.messageId);
+      await message.edit({ embeds: [embed], allowedMentions });
+      return;
+    } catch (error) {
+      if (!isMissingDiscordMessage(error)) throw error;
+    }
+  }
+  const created = await channel.send({
+    embeds: [embed],
+    allowedMentions,
+    nonce: createHash('sha256')
+      .update(`${WEALTH_RANKING_PURPOSE}:${JSON.stringify(input.leaders)}`)
+      .digest('hex')
+      .slice(0, 25),
+    enforceNonce: true,
+  });
+  messageStore.save({
+    purpose: WEALTH_RANKING_PURPOSE,
+    channelId: WEALTH_RANKING_CHANNEL_ID,
+    messageId: created.id,
+  });
+}
+
+export function renderWealthRankingEmbed(leaders: readonly WealthRankingLeader[]): EmbedBuilder {
+  const embed = new EmbedBuilder().setTitle('長者番付').setColor(0x25d9ff);
+  const description = leaders
+    .slice(0, 5)
+    .map(
+      (leader, index) =>
+        `**${PLACE_LABELS[index]}** <@${leader.discordUserId}> ${BigInt(leader.currentBalance).toLocaleString('ja-JP')}CP`,
+    )
+    .join('\n');
+  return description.length === 0 ? embed : embed.setDescription(description);
+}
 
 export async function publishRankingMessages(input: {
   readonly client: Client;
@@ -136,4 +225,10 @@ function compareDecimal(left: string, right: string): number {
   const first = BigInt(left);
   const second = BigInt(right);
   return first === second ? 0 : first > second ? 1 : -1;
+}
+
+function isMissingDiscordMessage(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { readonly code?: unknown; readonly status?: unknown };
+  return candidate.code === 10_008 || candidate.status === 404;
 }

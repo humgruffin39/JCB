@@ -51,4 +51,22 @@ describe('proxyRequest', () => {
 
     expect(receivedInit?.body).toBeNull();
   });
+
+  it('keeps double-slash paths on the configured upstream origin', async () => {
+    let receivedTarget: RequestInfo | URL | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (target: RequestInfo | URL) => {
+        receivedTarget = target;
+        return new Response(null, { status: 204 });
+      }),
+    );
+
+    await proxyRequest(
+      { request: new Request('https://activity.example//attacker.example/collect') },
+      'https://api.example',
+    );
+
+    expect(String(receivedTarget)).toBe('https://api.example//attacker.example/collect');
+  });
 });

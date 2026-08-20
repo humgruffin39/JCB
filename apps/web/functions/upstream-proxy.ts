@@ -7,7 +7,9 @@ export async function proxyRequest(
   upstreamOrigin: string,
 ): Promise<Response> {
   const incoming = new URL(context.request.url);
-  const target = new URL(`${incoming.pathname}${incoming.search}`, upstreamOrigin);
+  const target = new URL(upstreamOrigin);
+  target.pathname = incoming.pathname;
+  target.search = incoming.search;
   const method = context.request.method;
   const headers = new Headers(context.request.headers);
 

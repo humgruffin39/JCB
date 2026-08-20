@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatHorseInfoLine,
-  horseStrength,
   preferenceMark,
   distancePreferenceMark,
   renderHorseInfoMessage,
@@ -25,7 +23,7 @@ const entry: DiscordHorseInfoEntry = {
 };
 
 describe('Discord horse information', () => {
-  it('renders all eight entries in one compact embed without raw abilities', () => {
+  it('renders each entry as a compact non-inline field without redundant labels', () => {
     const message = renderHorseInfoMessage({
       distanceM: 1200,
       surface: 'turf',
@@ -36,15 +34,19 @@ describe('Discord horse information', () => {
       })),
     });
     const embed = message.embeds[0].toJSON();
-    const description = embed.description ?? '';
-    expect(description.split('\n')).toHaveLength(10);
-    expect(description).toContain(
-      '`01` 情報馬1｜脚質 逃げ｜距離適性 △｜馬場適性 芝△｜持ち味 スピード',
-    );
-    expect(description).not.toContain('90');
-    expect(description).not.toContain('tieBreaker');
-    expect(description).not.toContain('勝率');
-    expect(description.length).toBeLessThan(4096);
+    expect(embed.title).toBe('出走馬情報');
+    expect(embed.description).toBeUndefined();
+    expect(embed.fields).toHaveLength(8);
+    expect(embed.fields?.[0]).toEqual({
+      name: '01 情報馬1',
+      value: '逃げ　距離 △　芝 △',
+      inline: false,
+    });
+    expect(embed.fields?.[7]).toEqual({
+      name: '08 情報馬8',
+      value: '逃げ　距離 △　芝 △',
+      inline: false,
+    });
   });
 
   it('uses three marks for the signed preference score', () => {
@@ -56,12 +58,20 @@ describe('Discord horse information', () => {
     expect(preferenceMark(0)).toBe('○');
   });
 
-  it('maps running styles and exposes at most one natural strength label', () => {
+  it('maps running styles and keeps preference labels concise', () => {
     expect(runningStyleLabel('front_runner')).toBe('逃げ');
     expect(runningStyleLabel('closer')).toBe('差し');
-    expect(horseStrength(entry)).toBe('スピード');
-    const line = formatHorseInfoLine(entry, 1800, 'dirt');
-    expect(line.match(/持ち味/g)).toHaveLength(1);
-    expect(line).toContain('馬場適性 ダ◎');
+    const message = renderHorseInfoMessage({
+      distanceM: 1800,
+      surface: 'dirt',
+      entries: Array.from({ length: 8 }, (_, index) => ({
+        ...entry,
+        horseNumber: index + 1,
+        runningStyle: 'closer' as const,
+      })),
+    });
+    expect(message.embeds[0].toJSON().fields?.[0]).toMatchObject({
+      value: '差し　距離 ○　ダート ◎',
+    });
   });
 });

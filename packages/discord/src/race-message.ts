@@ -11,7 +11,16 @@ const CONDITION_EMOJIS: Readonly<Record<Condition, string>> = {
   terrible: '<:terrible:1538151846844170260>',
 };
 
-const PLACE_LABELS: readonly string[] = ['1着', '2着', '3着', '4着', '5着', '6着', '7着', '8着'];
+const PLACE_LABELS: readonly string[] = [
+  '１着',
+  '２着',
+  '３着',
+  '４着',
+  '５着',
+  '６着',
+  '７着',
+  '８着',
+];
 
 export function renderRaceMessage(card: DiscordRaceCard): {
   readonly embeds: readonly [EmbedBuilder];
@@ -39,6 +48,10 @@ export function renderRaceMessage(card: DiscordRaceCard): {
       .setStyle(ButtonStyle.Primary)
       .setDisabled(!card.canBuy),
     new ButtonBuilder()
+      .setCustomId(`jcb:horse-info:${card.raceId}`)
+      .setLabel('出走馬情報')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(`jcb:bets:${card.raceId}`)
       .setLabel('購入済み馬券')
       .setStyle(ButtonStyle.Secondary),
@@ -48,10 +61,6 @@ export function renderRaceMessage(card: DiscordRaceCard): {
       .setLabel('観戦する')
       .setStyle(ButtonStyle.Success)
       .setDisabled(!card.canView),
-    new ButtonBuilder()
-      .setCustomId(`jcb:horse-info:${card.raceId}`)
-      .setLabel('出走馬情報')
-      .setStyle(ButtonStyle.Secondary),
   );
   return { embeds: [embed], components: [row] };
 }

@@ -42,17 +42,17 @@ describe('Discord contracts', () => {
     const description = message.embeds[0].data.description ?? '';
     const lines = description.split('\n').filter((line) => line.startsWith('**'));
     expect(lines).toEqual([
-      '**1着** `04` <:normal:1538151937269301348> 試験馬4  **4.2倍**',
-      '**2着** `01` <:normal:1538151937269301348> 試験馬1  **4.2倍**',
-      '**3着** `07` <:normal:1538151937269301348> 試験馬7  **4.2倍**',
-      '**4着** `02` <:normal:1538151937269301348> 試験馬2  **4.2倍**',
-      '**5着** `05` <:normal:1538151937269301348> 試験馬5  **4.2倍**',
-      '**6着** `08` <:normal:1538151937269301348> 試験馬8  **4.2倍**',
-      '**7着** `03` <:normal:1538151937269301348> 試験馬3  **4.2倍**',
-      '**8着** `06` <:normal:1538151937269301348> 試験馬6  **4.2倍**',
+      '**１着** `04` <:normal:1538151937269301348> 試験馬4  **4.2倍**',
+      '**２着** `01` <:normal:1538151937269301348> 試験馬1  **4.2倍**',
+      '**３着** `07` <:normal:1538151937269301348> 試験馬7  **4.2倍**',
+      '**４着** `02` <:normal:1538151937269301348> 試験馬2  **4.2倍**',
+      '**５着** `05` <:normal:1538151937269301348> 試験馬5  **4.2倍**',
+      '**６着** `08` <:normal:1538151937269301348> 試験馬8  **4.2倍**',
+      '**７着** `03` <:normal:1538151937269301348> 試験馬3  **4.2倍**',
+      '**８着** `06` <:normal:1538151937269301348> 試験馬6  **4.2倍**',
     ]);
     expect(message.components[0].components[0]?.toJSON()).toMatchObject({ disabled: true });
-    expect(message.components[0].components[3]?.toJSON()).toMatchObject({ disabled: false });
+    expect(message.components[0].components[4]?.toJSON()).toMatchObject({ disabled: false });
   });
 
   it('falls back to horse-number order when no finish order is provided', () => {
@@ -108,7 +108,7 @@ describe('Discord contracts', () => {
     expect(description).not.toContain('締切');
     expect(description).not.toContain('通常レース');
     expect(message.components[0].components).toHaveLength(5);
-    expect(message.components[0].components[4]?.toJSON()).toMatchObject({
+    expect(message.components[0].components[1]?.toJSON()).toMatchObject({
       custom_id: 'jcb:horse-info:01KZ21P85CEV9TV1S943C639WJ',
       label: '出走馬情報',
     });

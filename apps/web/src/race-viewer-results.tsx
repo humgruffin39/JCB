@@ -105,7 +105,7 @@ export function ResultsScreen({
                   <span className="ticket-type">{poolTypeLabel(bet.poolType)}</span>
                   <span
                     className="ticket-horses"
-                    aria-label={`${bet.selectionCode.replaceAll('-', '番、')}番`}
+                    aria-label={selectionCodeAriaLabel(bet.selectionCode)}
                   >
                     {bet.selectionCode.split('-').map((horseNumber) => (
                       <span
@@ -132,6 +132,13 @@ export function ResultsScreen({
       </button>
     </div>
   );
+}
+
+export function selectionCodeAriaLabel(selectionCode: string): string {
+  return selectionCode
+    .split('-')
+    .map((horseNumber) => `${horseNumber}番`)
+    .join('、');
 }
 
 export function getSaddleclothStyle(horseNumber: number): CSSProperties {

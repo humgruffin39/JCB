@@ -205,6 +205,49 @@ describe('game settings', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('requires positive safe-integer seed clamps and accepts ordered positive values', () => {
+    for (const kind of ['regular', 'special'] as const) {
+      for (const field of [
+        'winMinimum',
+        'winMaximum',
+        'trifectaMinimum',
+        'trifectaMaximum',
+      ] as const) {
+        const clamp = {
+          ...DEFAULT_GAME_SETTINGS.seedLiquidityClamp[kind],
+          [field]: 0,
+        };
+        const result = gameSettingsSchema.safeParse({
+          ...DEFAULT_GAME_SETTINGS,
+          seedLiquidityClamp: {
+            ...DEFAULT_GAME_SETTINGS.seedLiquidityClamp,
+            [kind]: clamp,
+          },
+        });
+        expect(result.success, `${kind}.${field}`).toBe(false);
+      }
+    }
+
+    const result = gameSettingsSchema.safeParse({
+      ...DEFAULT_GAME_SETTINGS,
+      seedLiquidityClamp: {
+        regular: {
+          winMinimum: 1,
+          winMaximum: 1,
+          trifectaMinimum: 2,
+          trifectaMaximum: 2,
+        },
+        special: {
+          winMinimum: 3,
+          winMaximum: 4,
+          trifectaMinimum: 5,
+          trifectaMaximum: 6,
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('Litestream configuration', () => {

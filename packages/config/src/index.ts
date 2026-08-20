@@ -206,18 +206,18 @@ export const gameSettingsSchema = z
       .object({
         regular: z
           .object({
-            winMinimum: z.number().int().min(0).max(1_000_000),
-            winMaximum: z.number().int().min(0).max(1_000_000),
-            trifectaMinimum: z.number().int().min(0).max(1_000_000),
-            trifectaMaximum: z.number().int().min(0).max(1_000_000),
+            winMinimum: z.number().int().min(1).max(1_000_000),
+            winMaximum: z.number().int().min(1).max(1_000_000),
+            trifectaMinimum: z.number().int().min(1).max(1_000_000),
+            trifectaMaximum: z.number().int().min(1).max(1_000_000),
           })
           .strict(),
         special: z
           .object({
-            winMinimum: z.number().int().min(0).max(1_000_000),
-            winMaximum: z.number().int().min(0).max(1_000_000),
-            trifectaMinimum: z.number().int().min(0).max(1_000_000),
-            trifectaMaximum: z.number().int().min(0).max(1_000_000),
+            winMinimum: z.number().int().min(1).max(1_000_000),
+            winMaximum: z.number().int().min(1).max(1_000_000),
+            trifectaMinimum: z.number().int().min(1).max(1_000_000),
+            trifectaMaximum: z.number().int().min(1).max(1_000_000),
           })
           .strict(),
       })

@@ -128,7 +128,12 @@ describe('Discord horse information gateway path', () => {
     expect(replyMock).toHaveBeenCalledTimes(1);
     const reply = replyMock.mock.calls[0]?.[0] as {
       readonly embeds: readonly [
-        { readonly data: { readonly description?: string; readonly title?: string } },
+        {
+          readonly data: {
+            readonly fields?: readonly { readonly name: string; readonly inline?: boolean }[];
+            readonly title?: string;
+          };
+        },
       ];
       readonly flags: number;
       readonly components: readonly unknown[];
@@ -136,7 +141,11 @@ describe('Discord horse information gateway path', () => {
     expect(reply.flags).toBe(64);
     expect(reply.components).toEqual([]);
     expect(reply.embeds[0]?.data.title).toBe('出走馬情報');
-    expect(reply.embeds[0]?.data.description?.split('\n')).toHaveLength(10);
+    expect(reply.embeds[0]?.data.fields).toHaveLength(8);
+    expect(reply.embeds[0]?.data.fields?.[0]).toMatchObject({
+      name: '<:horse_1:1539913567787159653> 経路馬1',
+      inline: false,
+    });
     database.close();
   });
 
@@ -216,7 +225,7 @@ describe('Discord race message viewer invalidation', () => {
     )?.[0]?.[0] as {
       readonly components: readonly [{ readonly components: readonly unknown[] }];
     };
-    expect(oldEditPayload.components[0]?.components[3]).toMatchObject({
+    expect(oldEditPayload.components[0]?.components[4]).toMatchObject({
       data: { disabled: true },
     });
 

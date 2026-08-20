@@ -9,7 +9,7 @@ import {
   type SqliteDatabase,
 } from '@jcb/database';
 import { handlePurchaseInteraction, renderRaceMessage } from '@jcb/discord';
-import { DomainError, money, type Clock } from '@jcb/domain';
+import { DomainError, money, timestamp, type Clock } from '@jcb/domain';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -225,6 +225,7 @@ export async function publishRaceMessage(input: {
     version: detail.version,
     name: detail.name,
     raceDate: detail.raceDate,
+    scheduledAt: timestamp(detail.scheduledAt),
     distanceM: detail.distanceM,
     surfaceLabel: detail.surface === 'turf' ? '芝' : 'ダート',
     horses: detail.entries.map((entry) => ({

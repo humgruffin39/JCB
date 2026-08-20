@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
-import { formatDateKeyForDisplay } from '@jcb/domain';
+import { formatDateKeyForDisplay, JST_OFFSET_MILLISECONDS } from '@jcb/domain';
 import type { Condition } from '@jcb/domain';
 import type { DiscordRaceCard, DiscordRaceHorse } from './types.js';
 
@@ -23,7 +23,7 @@ export function renderRaceMessage(card: DiscordRaceCard): {
     .setTitle(card.name)
     .setDescription(
       [
-        `開催日: ${formatDateKeyForDisplay(card.raceDate)} / ${String(card.distanceM)}m / ${card.surfaceLabel}`,
+        `${formatDateKeyForDisplay(card.raceDate)} ${new Date(card.scheduledAt + JST_OFFSET_MILLISECONDS).toISOString().slice(11, 16)} / ${String(card.distanceM)}m / ${card.surfaceLabel}`,
         '',
         ...lines,
         '',

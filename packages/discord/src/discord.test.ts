@@ -15,6 +15,7 @@ describe('Discord contracts', () => {
       version: 1,
       name: 'Discord試験',
       raceDate: '2026-08-03',
+      scheduledAt: timestamp(Date.parse('2026-08-03T22:00:00+09:00')),
       distanceM: 1200,
       surfaceLabel: '芝',
       horses: Array.from({ length: 8 }, (_, index) => ({
@@ -60,6 +61,7 @@ describe('Discord contracts', () => {
       version: 1,
       name: 'Discord試験',
       raceDate: '2026-08-03',
+      scheduledAt: timestamp(Date.parse('2026-08-03T22:00:00+09:00')),
       distanceM: 1200,
       surfaceLabel: '芝',
       horses: Array.from({ length: 8 }, (_, index) => ({
@@ -84,6 +86,7 @@ describe('Discord contracts', () => {
       version: 1,
       name: 'Discord試験',
       raceDate: '2026-08-03',
+      scheduledAt: timestamp(Date.parse('2026-08-03T22:00:00+09:00')),
       distanceM: 1200,
       surfaceLabel: '芝',
       horses: Array.from({ length: 8 }, (_, index) => ({
@@ -98,7 +101,8 @@ describe('Discord contracts', () => {
       canView: false,
     });
     const description = message.embeds[0].data.description ?? '';
-    expect(description).toContain('開催日: 2026/08/03 / 1200m / 芝');
+    expect(description).toContain('2026/08/03 22:00 / 1200m / 芝');
+    expect(description).not.toContain('開催日:');
     expect(description).toContain('<:normal:1538151937269301348> 試験馬1');
     expect(description).not.toContain('発走');
     expect(description).not.toContain('締切');

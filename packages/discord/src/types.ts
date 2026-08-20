@@ -17,6 +17,7 @@ export interface DiscordRaceCard {
   readonly version: number;
   readonly name: string;
   readonly raceDate: string;
+  readonly scheduledAt: Timestamp;
   readonly distanceM: number;
   readonly surfaceLabel: string;
   readonly horses: readonly DiscordRaceHorse[];

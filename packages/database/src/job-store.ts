@@ -23,8 +23,10 @@ interface JobRow {
 
 const MAX_ATTEMPTS: Readonly<Record<JobType, number>> = {
   warn_missing_race: 5,
+  grant_racing_role: 8,
   simulate_race: 3,
   publish_race: 6,
+  notify_race_start: 8,
   grant_relief: 5,
   refresh_race_message: 8,
   open_viewer: 8,

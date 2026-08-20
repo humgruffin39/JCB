@@ -29,6 +29,7 @@ export const environmentSchema = z.object({
   DISCORD_REDIRECT_URI: optionalUrl,
   DISCORD_ACTIVITY_ALLOW_UNVERIFIED_DEVELOPMENT: z.stringbool().default(false),
   DISCORD_RACE_CHANNEL_ID: optionalDiscordId,
+  DISCORD_RACING_ROLE_ID: z.preprocess(emptyAsUndefined, discordId.default('1539853436823015484')),
   DISCORD_RANKING_CHANNEL_ID: optionalDiscordId,
   DISCORD_ADMIN_CHANNEL_ID: optionalDiscordId,
   COUNT_CHANNEL_ID: optionalDiscordId,

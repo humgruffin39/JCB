@@ -101,6 +101,21 @@ export class SqliteGameUserStore {
         description: 'One-time new user grant',
         entries: transfer(centralBank, accountId, money(50_000n)),
       });
+      this.database
+        .prepare(
+          `INSERT OR IGNORE INTO scheduled_jobs
+           (id, job_type, deduplication_key, payload_json, run_at, status, attempt_count,
+            created_at, updated_at)
+           VALUES (?, 'grant_racing_role', ?, ?, ?, 'pending', 0, ?, ?)`,
+        )
+        .run(
+          `racing-role-${userId}`,
+          `grant-racing-role:${discordUserId}`,
+          JSON.stringify({ discordUserId }),
+          now,
+          now,
+          now,
+        );
       return { id: userId, accountId, wasCreated: true };
     });
     return run.immediate();

@@ -225,7 +225,7 @@ export class SqliteRaceLifecycleStore {
            WHERE status IN ('pending', 'retry_wait')
              AND job_type IN (
                'simulate_race', 'publish_race', 'refresh_race_message', 'open_viewer',
-               'close_betting', 'mark_running', 'mark_finished', 'settle_race'
+               'notify_race_start', 'close_betting', 'mark_running', 'mark_finished', 'settle_race'
              )
              AND json_extract(payload_json, '$.raceId') = ?`,
         )

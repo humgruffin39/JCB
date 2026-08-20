@@ -58,6 +58,11 @@ export function enqueueRaceFollowUpJobs(
       runAt,
     },
     {
+      jobType: 'notify_race_start' as const,
+      deduplicationKey: `notify-race-start:${race.id}:${String(race.version)}`,
+      runAt: timestamp(race.scheduledAt - 5 * 60 * 1_000),
+    },
+    {
       jobType: 'open_viewer' as const,
       deduplicationKey: `open-viewer:${race.id}:${String(race.version)}`,
       runAt: race.viewerOpensAt,

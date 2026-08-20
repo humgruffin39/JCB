@@ -66,4 +66,13 @@ export class SqliteDiscordMessageStore {
         reference.raceId ?? null,
       );
   }
+
+  public remove(purpose: string, raceId?: string): void {
+    this.database
+      .prepare(
+        `DELETE FROM discord_messages WHERE purpose = ?
+         AND ((race_id IS NULL AND ? IS NULL) OR race_id = ?)`,
+      )
+      .run(purpose, raceId ?? null, raceId ?? null);
+  }
 }

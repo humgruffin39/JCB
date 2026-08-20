@@ -316,7 +316,8 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
           `UPDATE scheduled_jobs
            SET status = 'completed', locked_at = NULL, locked_by = NULL, updated_at = ?
            WHERE job_type IN ('publish_race', 'refresh_race_message', 'open_viewer',
-                              'close_betting', 'mark_running', 'mark_finished', 'settle_race')
+                              'notify_race_start', 'close_betting', 'mark_running',
+                              'mark_finished', 'settle_race')
              AND status IN ('pending', 'retry_wait', 'dead_letter')
              AND json_extract(payload_json, '$.raceId') = ?
              AND (

@@ -50,7 +50,9 @@ function validProductionEnvironment(): NodeJS.ProcessEnv {
 
 describe('production environment', () => {
   it('accepts a complete non-local production configuration', () => {
-    expect(parseEnvironment(validProductionEnvironment()).NODE_ENV).toBe('production');
+    const environment = parseEnvironment(validProductionEnvironment());
+    expect(environment.NODE_ENV).toBe('production');
+    expect(environment.DISCORD_RACING_ROLE_ID).toBe('1539853436823015484');
   });
 
   it('rejects a missing integration secret', () => {

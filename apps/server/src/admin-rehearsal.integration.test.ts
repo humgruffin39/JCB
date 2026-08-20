@@ -166,6 +166,14 @@ describe('admin rehearsal scheduling', () => {
         )
         .get(race.id),
     ).toMatchObject({ status: 'pending', runAt: BigInt(now + 60_000) });
+    expect(
+      database
+        .prepare(
+          `SELECT COUNT(*) AS count FROM scheduled_jobs
+           WHERE job_type = 'notify_race_start' AND json_extract(payload_json, '$.raceId') = ?`,
+        )
+        .get(race.id),
+    ).toEqual({ count: 0n });
     const pendingManifest = database
       .prepare(
         `SELECT body FROM object_publications

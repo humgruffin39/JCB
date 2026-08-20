@@ -1,6 +1,7 @@
 import { prepareRace, type JobHandlers, type ScheduledJob } from '@jcb/application';
 import {
   SqliteAdminStore,
+  SqliteDiscordMessageStore,
   SqliteGameStore,
   SqliteRaceLifecycleStore,
   SqliteRacePreparationRepository,
@@ -15,6 +16,8 @@ import {
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { publishRaceMessage } from './discord-gateway.js';
+import { assignRacingRole } from './discord-racing-role.js';
+import { deleteRaceStartReminder, sendRaceStartReminder } from './discord-race-reminder.js';
 import { publishRankingMessages } from './discord-ranking.js';
 import { verifyBackupProbe } from './scheduler-backup.js';
 import { enqueueRaceFollowUpJobs, loadPreparedRaceTiming } from './scheduler-race-jobs.js';
@@ -71,7 +74,7 @@ export function createHandlers(
       return payloadVersion;
     }
     const keyVersion =
-      /^(?:simulate|publish|open-viewer|close|running|finished|settle):[^:]+:(\d+)(?::|$)/.exec(
+      /^(?:simulate|publish|notify-race-start|open-viewer|close|running|finished|settle):[^:]+:(\d+)(?::|$)/.exec(
         job.deduplicationKey,
       )?.[1];
     if (keyVersion === undefined) return undefined;
@@ -97,6 +100,25 @@ export function createHandlers(
   };
 
   return {
+    async grant_racing_role(job) {
+      const discordUserId = job.payload.discordUserId;
+      if (typeof discordUserId !== 'string' || !/^\d+$/.test(discordUserId)) {
+        throw new Error('Job discordUserId is invalid.');
+      }
+      if (
+        dependencies.discordClient === undefined ||
+        dependencies.environment.DISCORD_GUILD_ID === undefined ||
+        dependencies.environment.DISCORD_RACING_ROLE_ID === undefined
+      ) {
+        return;
+      }
+      await assignRacingRole({
+        client: dependencies.discordClient,
+        guildId: dependencies.environment.DISCORD_GUILD_ID,
+        roleId: dependencies.environment.DISCORD_RACING_ROLE_ID,
+        discordUserId,
+      });
+    },
     async simulate_race(job) {
       if (!isCurrentRaceJob(job)) return;
       const id = raceId(job);
@@ -182,6 +204,40 @@ export function createHandlers(
       );
     },
     publish_race: publish,
+    async notify_race_start(job) {
+      if (!isCurrentRaceJob(job)) return;
+      if (
+        dependencies.discordClient === undefined ||
+        dependencies.environment.DISCORD_RACE_CHANNEL_ID === undefined ||
+        dependencies.environment.DISCORD_RACING_ROLE_ID === undefined
+      ) {
+        return;
+      }
+      const id = raceId(job);
+      const race = gameStore.getRace(id);
+      if (!['locked', 'betting_open', 'betting_closed', 'ready'].includes(race.status)) {
+        return;
+      }
+      const version = raceVersion(job);
+      if (version === undefined) throw new Error('Job raceVersion is missing.');
+      const messages = new SqliteDiscordMessageStore(dependencies.database, () =>
+        dependencies.clock.now(),
+      );
+      if (messages.get('race_reminder', id) !== undefined) return;
+      const sent = await sendRaceStartReminder({
+        client: dependencies.discordClient,
+        channelId: dependencies.environment.DISCORD_RACE_CHANNEL_ID,
+        roleId: dependencies.environment.DISCORD_RACING_ROLE_ID,
+        raceId: id,
+        raceVersion: version,
+      });
+      messages.save({
+        purpose: 'race_reminder',
+        raceId: id,
+        channelId: sent.channelId,
+        messageId: sent.messageId,
+      });
+    },
     refresh_race_message: publish,
     open_viewer: publish,
     async close_betting(job) {
@@ -202,18 +258,33 @@ export function createHandlers(
     },
     async settle_race(job) {
       if (!isCurrentRaceJob(job)) return;
-      lifecycle.settleRace(raceId(job), dependencies.clock.now());
+      const id = raceId(job);
+      lifecycle.settleRace(id, dependencies.clock.now());
       await publish(job);
+      if (dependencies.discordClient !== undefined) {
+        const messages = new SqliteDiscordMessageStore(dependencies.database, () =>
+          dependencies.clock.now(),
+        );
+        const reminder = messages.get('race_reminder', id);
+        if (reminder !== undefined) {
+          await deleteRaceStartReminder({
+            client: dependencies.discordClient,
+            channelId: reminder.channelId,
+            messageId: reminder.messageId,
+          });
+          messages.remove('race_reminder', id);
+        }
+      }
       await sendAdminNotice(dependencies, {
         level: 'success',
         title: 'レースの精算が完了しました',
         description: '払戻と残高を更新しました。',
-        fields: [{ name: 'レースID', value: raceId(job) }],
+        fields: [{ name: 'レースID', value: id }],
       });
       jobStore.enqueue({
         jobType: 'refresh_rankings',
-        deduplicationKey: `rankings:${raceId(job)}:${String(dependencies.clock.now())}`,
-        payload: { raceId: raceId(job) },
+        deduplicationKey: `rankings:${id}:${String(dependencies.clock.now())}`,
+        payload: { raceId: id },
         runAt: dependencies.clock.now(),
       });
     },

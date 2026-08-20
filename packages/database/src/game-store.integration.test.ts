@@ -63,6 +63,19 @@ describe('SQLite game store', () => {
     const user = store.registerUser('123456', 'テスター', true);
     expect(user.wasCreated).toBe(true);
     expect(store.registerUser('123456', '新しい表示名', true).wasCreated).toBe(false);
+    const roleJobs = database
+      .prepare(
+        `SELECT job_type AS jobType, deduplication_key AS deduplicationKey,
+                payload_json AS payloadJson
+         FROM scheduled_jobs WHERE job_type = 'grant_racing_role'`,
+      )
+      .all() as Array<{ jobType: string; deduplicationKey: string; payloadJson: string }>;
+    expect(roleJobs).toHaveLength(1);
+    expect(roleJobs[0]).toMatchObject({
+      jobType: 'grant_racing_role',
+      deduplicationKey: 'grant-racing-role:123456',
+      payloadJson: JSON.stringify({ discordUserId: '123456' }),
+    });
     const horses = Array.from({ length: 8 }, (_, index) =>
       store.createHorse({
         ...horseBase,
@@ -199,6 +212,7 @@ describe('SQLite game store', () => {
     for (const [jobType, key] of [
       ['close_betting', 'close-before-cancel'],
       ['mark_running', 'running-before-cancel'],
+      ['notify_race_start', 'notify-before-cancel'],
       ['settle_race', 'settle-before-cancel'],
     ] as const) {
       jobs.enqueue({
@@ -214,7 +228,7 @@ describe('SQLite game store', () => {
       database
         .prepare("SELECT COUNT(*) AS count FROM scheduled_jobs WHERE status = 'completed'")
         .get() as { count: bigint },
-    ).toEqual({ count: 3n });
+    ).toEqual({ count: 4n });
     expect(store.ledgerStore().balance(user.accountId)).toBe(50_000n);
     expect(
       (

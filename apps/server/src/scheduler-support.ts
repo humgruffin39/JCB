@@ -23,6 +23,8 @@ export function formatJobType(jobType: string): string {
   const labels: Readonly<Record<string, string>> = {
     simulate_race: 'レースのシミュレーション',
     publish_race: 'レース情報の公開',
+    grant_racing_role: '競馬参加者ロールの付与',
+    notify_race_start: 'レース開始5分前の通知',
     refresh_race_message: 'レース情報の更新',
     open_viewer: '観戦ページの公開',
     close_betting: '投票受付の締切',

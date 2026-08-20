@@ -20,6 +20,7 @@ import {
   startScheduler,
   verifyBackupProbe,
 } from './scheduler.js';
+import { formatJobType } from './scheduler-support.js';
 
 const repositoryRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const migrationsDirectory = join(repositoryRoot, 'packages', 'database', 'migrations');
@@ -60,6 +61,13 @@ describe('backup health probe', () => {
       ['last_r2_access_at', new Date(checkedAt).toISOString()],
       ['last_backup_success_at', new Date(latest).toISOString()],
     ]);
+  });
+});
+
+describe('scheduler job labels', () => {
+  it('labels racing role and start reminder jobs', () => {
+    expect(formatJobType('grant_racing_role')).toBe('競馬参加者ロールの付与');
+    expect(formatJobType('notify_race_start')).toBe('レース開始5分前の通知');
   });
 });
 

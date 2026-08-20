@@ -3,8 +3,10 @@ import { z } from 'zod';
 
 export const JOB_TYPES = [
   'warn_missing_race',
+  'grant_racing_role',
   'simulate_race',
   'publish_race',
+  'notify_race_start',
   'grant_relief',
   'refresh_race_message',
   'open_viewer',

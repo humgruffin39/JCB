@@ -162,6 +162,9 @@ describe('purchase flow', () => {
     expect(store.current().step).toBe('confirm');
     expect(store.current().payload.stake).toBe('100');
     expect((rendered as { readonly content: string }).content).toContain('賭け金: 100 CP');
+    expect((rendered as { readonly content: string }).content).toContain(
+      '買い目: <:horse_1:1539913567787159653>',
+    );
   });
 
   it('returns an invalid amount to the final selection step so the user can retry', async () => {

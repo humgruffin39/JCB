@@ -14,3 +14,10 @@ export function horseNumberEmoji(horseNumber: number): string {
   if (emoji === undefined) throw new Error(`Unsupported horse number: ${String(horseNumber)}`);
   return emoji;
 }
+
+export function horseSelectionEmojis(selectionCode: string): string {
+  return selectionCode
+    .split('-')
+    .map((horseNumber) => horseNumberEmoji(Number(horseNumber)))
+    .join(' ');
+}

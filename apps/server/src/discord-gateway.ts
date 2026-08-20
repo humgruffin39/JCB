@@ -8,7 +8,12 @@ import {
   SqliteViewerStore,
   type SqliteDatabase,
 } from '@jcb/database';
-import { handlePurchaseInteraction, renderHorseInfoMessage, renderRaceMessage } from '@jcb/discord';
+import {
+  handlePurchaseInteraction,
+  horseSelectionEmojis,
+  renderHorseInfoMessage,
+  renderRaceMessage,
+} from '@jcb/discord';
 import { DomainError, money, POOL_TYPE_DEFINITIONS, timestamp, type Clock } from '@jcb/domain';
 import {
   ActionRowBuilder,
@@ -149,7 +154,7 @@ export function wireDiscordGateway(input: {
             : bets
                 .map(
                   (bet) =>
-                    `${POOL_TYPE_DEFINITIONS[bet.poolType].label} ${bet.selectionCode} / ${bet.stake} CP / 状態: ${betStatusLabel(bet.status)}`,
+                    `${POOL_TYPE_DEFINITIONS[bet.poolType].label} ${horseSelectionEmojis(bet.selectionCode)} / ${bet.stake} CP / 状態: ${betStatusLabel(bet.status)}`,
                 )
                 .join('\n'),
         );

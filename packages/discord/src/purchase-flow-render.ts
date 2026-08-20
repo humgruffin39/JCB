@@ -16,6 +16,7 @@ import type {
   PurchaseReceipt,
   PurchaseSession,
 } from './types.js';
+import { horseSelectionEmojis } from './horse-number-emoji.js';
 import { poolDefinition } from './purchase-flow-validation.js';
 
 export function poolChoice(session: PurchaseSession) {
@@ -129,7 +130,7 @@ export function purchasePreviewMessage(input: {
   return {
     content: [
       `券種: ${poolDefinition(input.poolType).label}`,
-      `買い目: ${input.selectionCode}`,
+      `買い目: ${horseSelectionEmojis(input.selectionCode)}`,
       `賭け金: ${input.stake} CP`,
       `購入後見込み払戻: ${input.preview.estimatedBasePayout.toString()} CP`,
       `キャリーオーバー見込み: ${input.preview.estimatedCarryoverBonus.toString()} CP`,

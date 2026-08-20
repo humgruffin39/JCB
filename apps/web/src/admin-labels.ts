@@ -126,10 +126,17 @@ const AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'job.retry_queued': '自動処理を再試行',
   'job.dead_lettered': '自動処理を停止',
   'object_publication.retry_queued': '公開データを再試行',
+  'object_publication.dead_lettered': '公開データの自動再試行を停止',
+  'object_publication.repaired': '公開データを修復',
+  'object_publication.repair_failed': '公開データの修復に失敗',
   'ledger.adjusted': '台帳残高を補正',
   'administrator.added': '管理者を追加',
   'administrator.removed': '管理者を削除',
   'setting.updated': '運用設定を更新',
+  'economy.central_bank_low': '中央銀行残高の低下を検知',
+  'race.missing_warning': 'レース未作成を通知',
+  'backup.check_failed': 'バックアップ確認に失敗',
+  'backup.restore_drill_succeeded': 'バックアップ復旧テストに成功',
 };
 
 const AUDIT_TARGET_LABELS: Readonly<Record<string, string>> = {
@@ -140,6 +147,10 @@ const AUDIT_TARGET_LABELS: Readonly<Record<string, string>> = {
   administrator: '管理者',
   job: '自動処理',
   object_publication: '公開データ',
+  scheduled_job: '自動処理',
+  discord_user: 'Discord利用者',
+  race_date: '開催日',
+  backup: 'バックアップ',
 };
 
 const REFERENCE_TYPE_LABELS: Readonly<Record<string, string>> = {

@@ -220,6 +220,7 @@ function formatTimestamp(value: unknown): string {
 
 function discordPurposeLabel(purpose: string): string {
   if (purpose === 'race') return 'レース告知';
+  if (purpose === 'race_reminder') return 'レース開始通知';
   if (purpose.startsWith('ranking:')) return `ランキング ${purpose.slice('ranking:'.length)}`;
   return 'その他';
 }

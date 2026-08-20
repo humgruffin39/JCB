@@ -68,6 +68,12 @@ function formatOperationValue(
 function transactionKindLabel(kind: string): string {
   const labels: Readonly<Record<string, string>> = {
     bet_purchase: '馬券購入',
+    initial_grant: '初回付与',
+    seed_liquidity: '初期流動性の投入',
+    pool_settlement: '投票プールの精算',
+    bet_refund: '馬券の返金',
+    seed_refund: '初期流動性の返金',
+    admin_adjustment: '管理者補正',
     settlement: '精算',
     relief: '救済給付',
     adjustment: '管理者補正',

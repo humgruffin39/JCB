@@ -1,5 +1,11 @@
 import { DomainError } from './errors.js';
-import { POOL_TYPES, allSelections, selectionCode, winningSelections } from './selection.js';
+import {
+  POOL_TYPES,
+  allSelections,
+  selectionCode,
+  winningSelections,
+  winningSelectionsByPool,
+} from './selection.js';
 
 describe('race selection definitions', () => {
   it('generates the expected number of selections for every pool type', () => {
@@ -32,6 +38,15 @@ describe('race selection definitions', () => {
     expect(winningSelections('wide', finishOrder)).toEqual(['1-4', '4-7', '1-7']);
     expect(winningSelections('trio', finishOrder)).toEqual(['1-4-7']);
     expect(winningSelections('trifecta', finishOrder)).toEqual(['4-1-7']);
+    expect(winningSelectionsByPool(finishOrder)).toEqual({
+      win: ['4'],
+      place: ['4', '1', '7'],
+      quinella: ['1-4'],
+      exacta: ['4-1'],
+      wide: ['1-4', '4-7', '1-7'],
+      trio: ['1-4-7'],
+      trifecta: ['4-1-7'],
+    });
   });
 
   it('rejects incomplete, duplicated, and invalid selections', () => {
@@ -42,5 +57,6 @@ describe('race selection definitions', () => {
     expect(() => selectionCode('place', [9])).toThrow(DomainError);
     expect(() => winningSelections('win', [1, 2])).toThrow(DomainError);
     expect(() => winningSelections('wide', [1, 2, 2])).toThrow(DomainError);
+    expect(() => winningSelectionsByPool([1, 2, 3, 4, 5, 6, 7, 7])).toThrow(DomainError);
   });
 });

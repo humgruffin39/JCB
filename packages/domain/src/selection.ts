@@ -77,6 +77,14 @@ export function selectionCode(poolType: PoolType, horseNumbers: readonly number[
   if (new Set(horseNumbers).size !== horseNumbers.length) {
     throw new DomainError('INVALID_SELECTION', 'Selection must contain distinct horses.');
   }
+  return selectionCodeFromValidatedHorses(poolType, horseNumbers);
+}
+
+function selectionCodeFromValidatedHorses(
+  poolType: PoolType,
+  horseNumbers: readonly number[],
+): string {
+  const definition = POOL_TYPE_DEFINITIONS[poolType];
   const normalized = definition.ordered ? horseNumbers : [...horseNumbers].sort((a, b) => a - b);
   return normalized.join('-');
 }
@@ -103,26 +111,54 @@ export function winningSelections(
   poolType: PoolType,
   finishOrder: readonly number[],
 ): readonly string[] {
+  validateFinishOrder(finishOrder);
+  return winningSelectionsFromValidatedOrder(poolType, finishOrder);
+}
+
+export function winningSelectionsByPool(
+  finishOrder: readonly number[],
+): Readonly<Record<PoolType, readonly string[]>> {
+  validateFinishOrder(finishOrder);
+  return Object.fromEntries(
+    POOL_TYPES.map((poolType) => [
+      poolType,
+      winningSelectionsFromValidatedOrder(poolType, finishOrder),
+    ]),
+  ) as Record<PoolType, readonly string[]>;
+}
+
+function validateFinishOrder(finishOrder: readonly number[]): void {
   if (finishOrder.length !== 8 || new Set(finishOrder).size !== finishOrder.length) {
     throw new DomainError('INVALID_SELECTION', 'Finish order is invalid.');
   }
   for (const horseNumber of finishOrder) validateHorseNumber(horseNumber);
+}
+
+function winningSelectionsFromValidatedOrder(
+  poolType: PoolType,
+  finishOrder: readonly number[],
+): readonly string[] {
   const [first, second, third] = finishOrder;
   if (first === undefined || second === undefined || third === undefined) {
     throw new DomainError('INVALID_SELECTION', 'Finish order is incomplete.');
   }
   if (poolType === 'place') {
-    return [first, second, third].map((horse) => selectionCode('place', [horse]));
+    return [first, second, third].map((horse) =>
+      selectionCodeFromValidatedHorses('place', [horse]),
+    );
   }
   if (poolType === 'wide') {
     return [
-      selectionCode('wide', [first, second]),
-      selectionCode('wide', [first, third]),
-      selectionCode('wide', [second, third]),
+      selectionCodeFromValidatedHorses('wide', [first, second]),
+      selectionCodeFromValidatedHorses('wide', [first, third]),
+      selectionCodeFromValidatedHorses('wide', [second, third]),
     ];
   }
   return [
-    selectionCode(poolType, finishOrder.slice(0, POOL_TYPE_DEFINITIONS[poolType].selectionSize)),
+    selectionCodeFromValidatedHorses(
+      poolType,
+      finishOrder.slice(0, POOL_TYPE_DEFINITIONS[poolType].selectionSize),
+    ),
   ];
 }
 

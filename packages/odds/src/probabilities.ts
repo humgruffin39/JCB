@@ -1,4 +1,4 @@
-import { allSelections, POOL_TYPES, winningSelections, type PoolType } from '@jcb/domain';
+import { allSelections, POOL_TYPES, winningSelectionsByPool, type PoolType } from '@jcb/domain';
 import {
   createOutcomeSimulator,
   nextTrialSeed,
@@ -50,8 +50,9 @@ export function generateProbabilities(
 
   for (let run = 0; run < simulationCount; run += 1) {
     const finishOrder = simulateOutcome(nextTrialSeed(seedGenerator));
+    const winners = winningSelectionsByPool(finishOrder);
     for (const poolType of POOL_TYPES) {
-      for (const selection of winningSelections(poolType, finishOrder)) {
+      for (const selection of winners[poolType]) {
         const poolCounts = counts[poolType];
         const current = poolCounts.get(selection);
         if (current === undefined) throw new Error(`Simulator produced an invalid ${poolType}.`);

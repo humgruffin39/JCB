@@ -31,6 +31,7 @@ export interface ServerDependencies {
 export interface AuthenticatedSession {
   readonly id: string;
   readonly discordUserId: string;
+  readonly activityInstanceId?: string;
   readonly reauthenticatedAt?: number;
   readonly authenticationMethod?: 'web' | 'activity';
 }

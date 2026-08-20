@@ -37,4 +37,20 @@ describe('Discord Activity session cookie', () => {
     expect(cookie).toContain('SameSite=None');
     expect(cookie).toContain('Partitioned');
   });
+
+  it('uses a distinct cookie name for each Activity instance', () => {
+    const first = serializeActivitySessionCookie(
+      { NODE_ENV: 'production', DISCORD_CLIENT_ID: '123456789' },
+      'opaque-token',
+      1_000,
+      'instance-1',
+    );
+    const second = serializeActivitySessionCookie(
+      { NODE_ENV: 'production', DISCORD_CLIENT_ID: '123456789' },
+      'opaque-token',
+      1_000,
+      'instance-2',
+    );
+    expect(first.split('=', 1)[0]).not.toBe(second.split('=', 1)[0]);
+  });
 });

@@ -5,6 +5,15 @@ import { ulid } from 'ulid';
 
 const LAUNCH_INTENT_LIFETIME_MILLISECONDS = 5 * 60 * 1_000;
 const ACTIVITY_SESSION_LIFETIME_MILLISECONDS = 24 * 60 * 60 * 1_000;
+const VIEWABLE_RACE_STATUSES = new Set([
+  'betting_open',
+  'betting_closed',
+  'ready',
+  'running',
+  'finished',
+  'settling',
+  'settled',
+]);
 
 export interface ActivityInstanceIdentity {
   readonly instanceId: string;
@@ -32,9 +41,22 @@ export interface ValidActivitySession {
   readonly lastGuildCheckAt: Timestamp;
 }
 
+export interface ActivityRaceViewingWindow {
+  readonly opensAt: Timestamp;
+  readonly closesAt: Timestamp;
+}
+
 interface LaunchIntentRow {
   readonly id: string;
   readonly raceId: string;
+}
+
+interface RaceViewingRow {
+  readonly id: string;
+  readonly status: string;
+  readonly viewerOpensAt: bigint;
+  readonly scheduledAt: bigint;
+  readonly timelineDurationMs: bigint | null;
 }
 
 interface InstanceRow {
@@ -70,6 +92,7 @@ export class SqliteActivityStore {
     readonly interactionId: string;
   }): Timestamp {
     const now = this.now();
+    this.assertRaceViewingAvailable(input.raceId, now);
     const expiresAt = timestamp(now + LAUNCH_INTENT_LIFETIME_MILLISECONDS);
     const issue = this.database.transaction(() => {
       // A user can only have one pending race launch at a given Discord location.
@@ -122,6 +145,7 @@ export class SqliteActivityStore {
     identity: ActivityInstanceIdentity,
   ): string {
     const claim = this.database.transaction((): string => {
+      const now = this.now();
       const existing = this.database
         .prepare(
           `SELECT application_id AS applicationId, launch_id AS launchId,
@@ -132,42 +156,63 @@ export class SqliteActivityStore {
       if (existing !== undefined) {
         if (
           existing.applicationId !== identity.applicationId ||
-          existing.launchId !== identity.launchId ||
           existing.guildId !== identity.guildId ||
           existing.channelId !== identity.channelId
         ) {
           throw new Error('Activity instance identity does not match its existing binding.');
         }
+        if (
+          existing.launchId === identity.launchId &&
+          this.isRaceViewingAvailable(existing.raceId, now)
+        ) {
+          this.database
+            .prepare('UPDATE activity_instances SET last_verified_at = ? WHERE instance_id = ?')
+            .run(BigInt(now), identity.instanceId);
+          return existing.raceId;
+        }
+        const intent = this.findPendingIntent(discordUserId, identity, now);
+        if (intent === undefined) {
+          if (existing.launchId !== identity.launchId) {
+            throw new Error('Activity instance identity does not match its existing binding.');
+          }
+          throw new Error('Activity race is no longer available.');
+        }
+        this.assertRaceViewingAvailable(intent.raceId, now);
+        this.consumeIntent(intent.id, identity.instanceId, now);
         this.database
-          .prepare('UPDATE activity_instances SET last_verified_at = ? WHERE instance_id = ?')
-          .run(BigInt(this.now()), identity.instanceId);
-        return existing.raceId;
+          .prepare(
+            `UPDATE activity_sessions SET revoked_at = ?
+             WHERE instance_id = ? AND revoked_at IS NULL`,
+          )
+          .run(BigInt(now), identity.instanceId);
+        const rebound = this.database
+          .prepare(
+            `UPDATE activity_instances
+             SET launch_id = ?, race_id = ?, bound_by_discord_user_id = ?, last_verified_at = ?
+             WHERE instance_id = ? AND application_id = ? AND guild_id = ? AND channel_id = ?`,
+          )
+          .run(
+            identity.launchId,
+            intent.raceId,
+            discordUserId,
+            BigInt(now),
+            identity.instanceId,
+            identity.applicationId,
+            identity.guildId,
+            identity.channelId,
+          );
+        if (rebound.changes !== 1) {
+          throw new Error('Activity instance binding changed concurrently.');
+        }
+        return intent.raceId;
       }
 
-      const intent = this.database
-        .prepare(
-          `SELECT id, race_id AS raceId
-           FROM activity_launch_intents
-           WHERE discord_user_id = ? AND guild_id = ? AND channel_id = ?
-             AND claimed_at IS NULL AND superseded_at IS NULL AND expires_at > ?
-           ORDER BY created_at DESC
-           LIMIT 1`,
-        )
-        .get(discordUserId, identity.guildId, identity.channelId, BigInt(this.now())) as
-        LaunchIntentRow | undefined;
+      const intent = this.findPendingIntent(discordUserId, identity, now);
       if (intent === undefined) {
         throw new Error('No pending Activity launch exists for this user and location.');
       }
-      const consumed = this.database
-        .prepare(
-          `UPDATE activity_launch_intents
-           SET claimed_at = ?, claimed_instance_id = ?
-           WHERE id = ? AND claimed_at IS NULL AND superseded_at IS NULL AND expires_at > ?`,
-        )
-        .run(BigInt(this.now()), identity.instanceId, intent.id, BigInt(this.now()));
-      if (consumed.changes !== 1) {
-        throw new Error('Activity launch intent was claimed concurrently.');
-      }
+      this.assertRaceViewingAvailable(intent.raceId, now);
+      this.consumeIntent(intent.id, identity.instanceId, now);
       this.database
         .prepare(
           `INSERT INTO activity_instances
@@ -183,8 +228,8 @@ export class SqliteActivityStore {
           identity.channelId,
           intent.raceId,
           discordUserId,
-          BigInt(this.now()),
-          BigInt(this.now()),
+          BigInt(now),
+          BigInt(now),
         );
       return intent.raceId;
     });
@@ -207,6 +252,7 @@ export class SqliteActivityStore {
       if (binding === undefined || binding.raceId !== input.raceId) {
         throw new Error('Activity session does not match its verified instance binding.');
       }
+      this.assertRaceViewingAvailable(input.raceId, now);
       this.database
         .prepare(
           `UPDATE activity_sessions SET revoked_at = ?
@@ -243,7 +289,11 @@ export class SqliteActivityStore {
     };
   }
 
-  public validateSession(sessionToken: string, csrfToken?: string): ValidActivitySession {
+  public validateSession(
+    sessionToken: string,
+    csrfToken?: string,
+    expectedInstanceId?: string,
+  ): ValidActivitySession {
     const row = this.database
       .prepare(
         `SELECT id, discord_user_id AS discordUserId, instance_id AS instanceId,
@@ -256,9 +306,13 @@ export class SqliteActivityStore {
     if (row === undefined || row.revokedAt !== null || Number(row.expiresAt) <= this.now()) {
       throw new Error('Activity session is invalid or expired.');
     }
+    if (expectedInstanceId !== undefined && row.instanceId !== expectedInstanceId) {
+      throw new Error('Activity session does not belong to this Activity instance.');
+    }
     if (csrfToken !== undefined && !matchesOpaqueTokenHash(csrfToken, row.csrfTokenHash)) {
       throw new Error('CSRF token is invalid.');
     }
+    this.assertRaceViewingAvailable(row.raceId);
     return {
       id: row.id,
       discordUserId: row.discordUserId,
@@ -275,7 +329,11 @@ export class SqliteActivityStore {
       .run(BigInt(at), sessionId);
   }
 
-  public getOrRotateCsrfToken(sessionToken: string, currentToken?: string): string {
+  public getOrRotateCsrfToken(
+    sessionToken: string,
+    currentToken?: string,
+    expectedInstanceId?: string,
+  ): string {
     if (currentToken !== undefined) {
       const row = this.database
         .prepare(
@@ -286,9 +344,13 @@ export class SqliteActivityStore {
         .get(hashOpaqueToken(sessionToken), BigInt(this.now())) as
         { readonly csrfTokenHash: string } | undefined;
       if (row !== undefined && matchesOpaqueTokenHash(currentToken, row.csrfTokenHash)) {
+        this.assertSessionInstance(sessionToken, expectedInstanceId);
+        this.assertSessionRaceAvailable(sessionToken);
         return currentToken;
       }
     }
+    this.assertSessionInstance(sessionToken, expectedInstanceId);
+    this.assertSessionRaceAvailable(sessionToken);
     const csrfToken = createOpaqueToken();
     const update = this.database
       .prepare(
@@ -300,6 +362,72 @@ export class SqliteActivityStore {
     return csrfToken;
   }
 
+  public getRaceViewingWindow(raceId: string): ActivityRaceViewingWindow {
+    const row = this.database
+      .prepare(
+        `SELECT id, status, viewer_opens_at AS viewerOpensAt,
+                scheduled_at AS scheduledAt, timeline_duration_ms AS timelineDurationMs
+         FROM races WHERE id = ?`,
+      )
+      .get(raceId) as RaceViewingRow | undefined;
+    if (row === undefined) throw new Error('Race not found.');
+    const next = this.database
+      .prepare(
+        `SELECT viewer_opens_at AS viewerOpensAt
+         FROM races
+         WHERE id <> ? AND status IN ('betting_open', 'betting_closed', 'ready', 'running',
+                                      'finished', 'settling', 'settled')
+           AND (viewer_opens_at > ?
+                OR (viewer_opens_at = ? AND scheduled_at > ?)
+                OR (viewer_opens_at = ? AND scheduled_at = ? AND id > ?))
+         ORDER BY viewer_opens_at ASC, scheduled_at ASC, id ASC LIMIT 1`,
+      )
+      .get(
+        raceId,
+        row.viewerOpensAt,
+        row.viewerOpensAt,
+        row.scheduledAt,
+        row.viewerOpensAt,
+        row.scheduledAt,
+        row.id,
+      ) as { readonly viewerOpensAt: bigint } | undefined;
+    const scheduledAt = Number(row.scheduledAt);
+    const timelineDuration = Number(row.timelineDurationMs ?? 0n);
+    const retentionClose = timestamp(
+      scheduledAt + timelineDuration + ACTIVITY_SESSION_LIFETIME_MILLISECONDS,
+    );
+    const closesAt = timestamp(
+      Math.min(
+        retentionClose,
+        next === undefined ? Number.MAX_SAFE_INTEGER : Number(next.viewerOpensAt),
+      ),
+    );
+    return { opensAt: timestamp(Number(row.viewerOpensAt)), closesAt };
+  }
+
+  public isRaceViewingAvailable(raceId: string, at = this.now()): boolean {
+    const row = this.database.prepare('SELECT status FROM races WHERE id = ?').get(raceId) as
+      { readonly status: string } | undefined;
+    if (row === undefined || !VIEWABLE_RACE_STATUSES.has(row.status)) return false;
+    const window = this.getRaceViewingWindow(raceId);
+    return at >= window.opensAt && at < window.closesAt;
+  }
+
+  public assertRaceViewingAvailable(raceId: string, at = this.now()): ActivityRaceViewingWindow {
+    const window = this.getRaceViewingWindow(raceId);
+    const row = this.database.prepare('SELECT status FROM races WHERE id = ?').get(raceId) as
+      { readonly status: string } | undefined;
+    if (
+      row === undefined ||
+      !VIEWABLE_RACE_STATUSES.has(row.status) ||
+      at < window.opensAt ||
+      at >= window.closesAt
+    ) {
+      throw new Error('Activity race is no longer available.');
+    }
+    return window;
+  }
+
   public revoke(sessionToken: string): void {
     this.database
       .prepare(
@@ -307,5 +435,54 @@ export class SqliteActivityStore {
          WHERE token_hash = ? AND revoked_at IS NULL`,
       )
       .run(BigInt(this.now()), hashOpaqueToken(sessionToken));
+  }
+
+  private assertSessionInstance(sessionToken: string, expectedInstanceId?: string): void {
+    if (expectedInstanceId === undefined) return;
+    const row = this.database
+      .prepare('SELECT instance_id AS instanceId FROM activity_sessions WHERE token_hash = ?')
+      .get(hashOpaqueToken(sessionToken)) as { readonly instanceId: string } | undefined;
+    if (row === undefined || row.instanceId !== expectedInstanceId) {
+      throw new Error('Activity session does not belong to this Activity instance.');
+    }
+  }
+
+  private assertSessionRaceAvailable(sessionToken: string): void {
+    const row = this.database
+      .prepare('SELECT race_id AS raceId FROM activity_sessions WHERE token_hash = ?')
+      .get(hashOpaqueToken(sessionToken)) as { readonly raceId: string } | undefined;
+    if (row === undefined) throw new Error('Activity session is invalid or expired.');
+    this.assertRaceViewingAvailable(row.raceId);
+  }
+
+  private findPendingIntent(
+    discordUserId: string,
+    identity: ActivityInstanceIdentity,
+    at: number,
+  ): LaunchIntentRow | undefined {
+    return this.database
+      .prepare(
+        `SELECT id, race_id AS raceId
+         FROM activity_launch_intents
+         WHERE discord_user_id = ? AND guild_id = ? AND channel_id = ?
+           AND claimed_at IS NULL AND superseded_at IS NULL AND expires_at > ?
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+      .get(discordUserId, identity.guildId, identity.channelId, BigInt(at)) as
+      LaunchIntentRow | undefined;
+  }
+
+  private consumeIntent(intentId: string, instanceId: string, at: number): void {
+    const consumed = this.database
+      .prepare(
+        `UPDATE activity_launch_intents
+         SET claimed_at = ?, claimed_instance_id = ?
+         WHERE id = ? AND claimed_at IS NULL AND superseded_at IS NULL AND expires_at > ?`,
+      )
+      .run(BigInt(at), instanceId, intentId, BigInt(at));
+    if (consumed.changes !== 1) {
+      throw new Error('Activity launch intent was claimed concurrently.');
+    }
   }
 }

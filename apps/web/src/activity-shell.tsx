@@ -27,8 +27,6 @@ export interface InitializedActivitySession {
   readonly raceId: string;
 }
 
-let defaultPlatform: ActivityPlatform | undefined;
-
 export function ActivityShell({ createPlatform = defaultPlatformFactory }: ActivityShellProps) {
   const [state, setState] = useState<ActivityState>({ status: 'connecting' });
   const [attempt, setAttempt] = useState(0);
@@ -122,8 +120,7 @@ function ActivityStatus({
 }
 
 function defaultPlatformFactory(): ActivityPlatform {
-  defaultPlatform ??= createDiscordActivityPlatform(DISCORD_CLIENT_ID);
-  return defaultPlatform;
+  return createDiscordActivityPlatform(DISCORD_CLIENT_ID);
 }
 
 export async function authorizeActivitySession(
@@ -153,7 +150,9 @@ export function activityErrorState(error: unknown): ActivityState {
     if (
       error.code === 'ACTIVITY_LAUNCH_NOT_FOUND' ||
       error.code === 'ACTIVITY_INSTANCE_INVALID' ||
-      error.code === 'RACE_NOT_FOUND'
+      error.code === 'RACE_NOT_FOUND' ||
+      error.code === 'ACTIVITY_RACE_UNAVAILABLE' ||
+      error.code === 'RACE_VIEWING_UNAVAILABLE'
     ) {
       return {
         status: 'unavailable',

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiRequest } from './api.js';
+import { apiRequest, edgeTokenStorageKey } from './api.js';
 import type { getRace } from './api.js';
 import { publicErrorMessage } from './public-error-message.js';
-import { loadTimeline, type TimelineFrame } from './race-timeline-loader.js';
+import { loadTimeline, TimelineRequestError, type TimelineFrame } from './race-timeline-loader.js';
 import { createViewerRetryPolicy, viewerRetryDelay } from './race-viewer-retry.js';
 
 type RaceDetail = Awaited<ReturnType<typeof getRace>>;
@@ -96,7 +96,7 @@ export function useRaceViewerTimeline({
         });
       }
       try {
-        const tokenKey = `jcb.edge-token:${race.id}`;
+        const tokenKey = edgeTokenStorageKey(race.id);
         let token = sessionStorage.getItem(tokenKey);
         if (token === null) {
           const refreshed = await apiRequest<{ edgeAccessToken: string }>(
@@ -106,7 +106,20 @@ export function useRaceViewerTimeline({
           token = refreshed.edgeAccessToken;
           sessionStorage.setItem(tokenKey, token);
         }
-        const timeline = await loadTimeline(race.id, race.version, token);
+        let timeline: Awaited<ReturnType<typeof loadTimeline>>;
+        try {
+          timeline = await loadTimeline(race.id, race.version, token);
+        } catch (error) {
+          if (!isRefreshableEdgeTokenError(error)) throw error;
+          sessionStorage.removeItem(tokenKey);
+          const refreshed = await apiRequest<{ edgeAccessToken: string }>(
+            `/api/v1/races/${encodeURIComponent(race.id)}/edge-token`,
+            { method: 'POST' },
+          );
+          token = refreshed.edgeAccessToken;
+          sessionStorage.setItem(tokenKey, token);
+          timeline = await loadTimeline(race.id, race.version, token);
+        }
         if (cancelled) return;
         retryPolicy.stop();
         loaded = true;
@@ -143,6 +156,15 @@ export function useRaceViewerTimeline({
   }, [race.id, race.scheduledAt, race.status, race.version, race.viewerOpensAt, serverOffset]);
 
   return resource.raceKey === raceKey ? resource.viewer : WAITING_TIMELINE;
+}
+
+export function isRefreshableEdgeTokenError(error: unknown): boolean {
+  return (
+    error instanceof TimelineRequestError &&
+    (error.status === 401 ||
+      (error.status === 403 &&
+        (error.code === 'TOKEN_INVALID' || error.code === 'TOKEN_SCOPE_MISMATCH')))
+  );
 }
 
 export function formatCountdown(milliseconds: number): string {

@@ -107,7 +107,11 @@ describe('Discord contracts', () => {
     expect(description).not.toContain('発走');
     expect(description).not.toContain('締切');
     expect(description).not.toContain('通常レース');
-    expect(message.components[0].components).toHaveLength(4);
+    expect(message.components[0].components).toHaveLength(5);
+    expect(message.components[0].components[4]?.toJSON()).toMatchObject({
+      custom_id: 'jcb:horse-info:01KZ21P85CEV9TV1S943C639WJ',
+      label: '出走馬情報',
+    });
     expect(
       message.components[0].components.some((component) => {
         const json = component.toJSON();

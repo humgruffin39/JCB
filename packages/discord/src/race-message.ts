@@ -48,6 +48,10 @@ export function renderRaceMessage(card: DiscordRaceCard): {
       .setLabel('観戦する')
       .setStyle(ButtonStyle.Success)
       .setDisabled(!card.canView),
+    new ButtonBuilder()
+      .setCustomId(`jcb:horse-info:${card.raceId}`)
+      .setLabel('出走馬情報')
+      .setStyle(ButtonStyle.Secondary),
   );
   return { embeds: [embed], components: [row] };
 }

@@ -8,7 +8,7 @@ import { applyMigrations } from './migrations.js';
 
 describe('database retention maintenance', () => {
   it('removes expired authentication records after their recovery window', () => {
-    let now = 0;
+    let now = 100;
     const database = openDatabase(':memory:');
     applyMigrations(
       database,
@@ -34,7 +34,7 @@ describe('database retention maintenance', () => {
   });
 
   it('removes expired Activity intents, sessions, and unreferenced instance bindings', () => {
-    let now = 0;
+    let now = 100;
     const database = openDatabase(':memory:');
     applyMigrations(
       database,
@@ -48,7 +48,7 @@ describe('database retention maintenance', () => {
           scheduled_at, betting_opens_at, betting_closes_at, viewer_opens_at,
           created_at, updated_at)
          VALUES ('race-activity-retention', '2026-01-01', 'Retention test', 'regular',
-                 'draft', 0, 1200, 'good', 10000, 100, 9000, 50, 1, 1)`,
+                 'betting_open', 0, 1200, 'good', 10000, 100, 9000, 50, 1, 1)`,
       )
       .run();
     const activity = new SqliteActivityStore(database, () => now);

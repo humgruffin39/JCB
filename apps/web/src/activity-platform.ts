@@ -56,19 +56,25 @@ class DiscordActivityPlatform implements ActivityPlatform {
 
   public async ready(): Promise<void> {
     this.consumers += 1;
-    this.sdkReadyPromise ??= this.sdk.ready();
-    await this.sdkReadyPromise;
-    publishActivityRuntime({ isActivity: true });
-    await this.subscribeToRuntime();
-    // Orientation is progressive enhancement: desktop and older mobile clients
-    // may reject it, but authentication and playback must still continue.
-    void this.sdk.commands
-      .setOrientationLockState({
-        lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
-        picture_in_picture_lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
-        grid_lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
-      })
-      .catch(() => undefined);
+    const readyPromise = this.sdkReadyPromise ?? this.sdk.ready();
+    this.sdkReadyPromise ??= readyPromise;
+    try {
+      await readyPromise;
+      if (this.consumers === 0) return;
+      publishActivityRuntime({ isActivity: true });
+      await this.subscribeToRuntime();
+      void this.sdk.commands
+        .setOrientationLockState({
+          lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
+          picture_in_picture_lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
+          grid_lock_state: Common.OrientationLockStateTypeObject.LANDSCAPE,
+        })
+        .catch(() => undefined);
+    } catch (error) {
+      if (this.sdkReadyPromise === readyPromise) this.sdkReadyPromise = undefined;
+      this.consumers = Math.max(0, this.consumers - 1);
+      throw error;
+    }
   }
 
   public authorize(): Promise<ActivityAuthorization> {
@@ -88,6 +94,13 @@ class DiscordActivityPlatform implements ActivityPlatform {
   public async dispose(): Promise<void> {
     this.consumers = Math.max(0, this.consumers - 1);
     if (this.consumers > 0) return;
+    if (this.sdkReadyPromise !== undefined) {
+      try {
+        await this.sdkReadyPromise;
+      } catch {
+        if (this.consumers === 0) this.sdkReadyPromise = undefined;
+      }
+    }
     if (this.subscriptionPromise !== undefined) await this.subscriptionPromise;
     if (this.consumers > 0 || !this.subscribed) return;
     this.subscribed = false;

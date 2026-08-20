@@ -9,12 +9,16 @@ import {
   type ActivityExchangeRequest,
   type ActivityExchangeResponse,
 } from '@jcb/contracts';
-import { isDiscordActivityLaunch } from './activity-launch.js';
+import { activityLaunchContext, isDiscordActivityLaunch } from './activity-launch.js';
 import { selectServerOffset } from './playback-clock.js';
 
 const browserEnvironment: unknown = import.meta.env;
 const activityProxy =
   typeof window !== 'undefined' && isDiscordActivityLaunch(window.location.search);
+const activityInstanceId =
+  typeof window !== 'undefined'
+    ? activityLaunchContext(window.location.search)?.instanceId
+    : undefined;
 // Discord's URL mappings proxy these relative paths. Calling the public origin
 // directly from the iframe would bypass that boundary and its session cookies.
 const API_ORIGIN = activityProxy
@@ -48,7 +52,8 @@ export class ApiRequestError extends Error {
 
 type AuthScope = 'race' | 'admin';
 
-const csrfRefreshPromises = new Map<AuthScope, Promise<string>>();
+const csrfRefreshPromises = new Map<string, Promise<string>>();
+const authGenerations = new Map<string, number>();
 
 const AUTH_ERROR_CODES = new Set([
   'AUTH_REQUIRED',
@@ -72,6 +77,9 @@ async function apiRequestInternal<Result>(
   const headers = new Headers(init.headers);
   headers.set('accept', 'application/json');
   if (init.body !== undefined) headers.set('content-type', 'application/json');
+  if (activityInstanceId !== undefined) {
+    headers.set('x-jcb-activity-instance', activityInstanceId);
+  }
   const csrfToken = getCsrfToken(scope);
   if (csrfToken !== null) headers.set('x-csrf-token', csrfToken);
   const response = await fetchWithTimeout(`${API_ORIGIN}${path}`, {
@@ -111,12 +119,17 @@ async function apiRequestInternal<Result>(
 }
 
 export async function refreshCsrfToken(scope: AuthScope = 'race'): Promise<string> {
-  const existingPromise = csrfRefreshPromises.get(scope);
+  const storageKey = csrfStorageKey(scope);
+  const existingPromise = csrfRefreshPromises.get(storageKey);
   if (existingPromise !== undefined) return existingPromise;
   const endpoint = scope === 'admin' ? '/api/v1/auth/admin/csrf' : '/api/v1/auth/csrf';
   const currentToken = getCsrfToken(scope);
+  const generation = currentAuthGeneration(storageKey);
   const headers = new Headers({ accept: 'application/json' });
   if (currentToken !== null) headers.set('x-csrf-token', currentToken);
+  if (activityInstanceId !== undefined) {
+    headers.set('x-jcb-activity-instance', activityInstanceId);
+  }
   const refreshPromise = fetchWithTimeout(`${API_ORIGIN}${endpoint}`, {
     credentials: 'include',
     cache: 'no-store',
@@ -145,13 +158,15 @@ export async function refreshCsrfToken(scope: AuthScope = 'race'): Promise<strin
       ) {
         throw new ApiRequestError('API response contract is invalid.', response.status);
       }
-      setCsrfToken(scope, body.result.csrfToken);
+      if (currentAuthGeneration(storageKey) === generation) {
+        setCsrfToken(scope, body.result.csrfToken);
+      }
       return body.result.csrfToken;
     })
     .finally(() => {
-      csrfRefreshPromises.delete(scope);
+      csrfRefreshPromises.delete(storageKey);
     });
-  csrfRefreshPromises.set(scope, refreshPromise);
+  csrfRefreshPromises.set(storageKey, refreshPromise);
   return refreshPromise.catch((error: unknown) => {
     if (error instanceof ApiRequestError) notifyAuthExpired(error);
     throw error;
@@ -163,6 +178,8 @@ export async function exchangeTicket(ticket: string): Promise<{
   readonly raceId?: string;
   readonly edgeAccessToken?: string;
 }> {
+  const storageKey = csrfStorageKey('race');
+  const generation = advanceAuthGeneration(storageKey);
   const result = await apiRequest<{
     csrfToken: string;
     raceId?: string;
@@ -171,9 +188,15 @@ export async function exchangeTicket(ticket: string): Promise<{
     method: 'POST',
     body: JSON.stringify({ ticket }),
   });
-  setCsrfToken('race', result.csrfToken);
-  if (result.edgeAccessToken !== undefined && result.raceId !== undefined) {
-    sessionStorage.setItem(`jcb.edge-token:${result.raceId}`, result.edgeAccessToken);
+  if (currentAuthGeneration(storageKey) === generation) {
+    setCsrfToken('race', result.csrfToken);
+  }
+  if (
+    currentAuthGeneration(storageKey) === generation &&
+    result.edgeAccessToken !== undefined &&
+    result.raceId !== undefined
+  ) {
+    sessionStorage.setItem(edgeTokenStorageKey(result.raceId), result.edgeAccessToken);
   }
   return result;
 }
@@ -184,6 +207,8 @@ export type ActivityAuthorizationExchangeResult = ActivityExchangeResponse;
 export async function exchangeActivityAuthorization(
   request: ActivityAuthorizationExchangeRequest,
 ): Promise<ActivityAuthorizationExchangeResult> {
+  const storageKey = csrfStorageKey('race');
+  const generation = advanceAuthGeneration(storageKey);
   const response = await apiRequest<unknown>('/api/v1/auth/activity/exchange', {
     method: 'POST',
     body: JSON.stringify(request),
@@ -193,23 +218,31 @@ export async function exchangeActivityAuthorization(
     throw new ApiRequestError('API response contract is invalid.', 502, 'ACTIVITY_SESSION_INVALID');
   }
   const result = parsed.data;
-  setCsrfToken('race', result.csrfToken);
-  if (result.edgeAccessToken !== undefined) {
-    sessionStorage.setItem(`jcb.edge-token:${result.raceId}`, result.edgeAccessToken);
+  if (currentAuthGeneration(storageKey) === generation) {
+    setCsrfToken('race', result.csrfToken);
+  }
+  if (currentAuthGeneration(storageKey) === generation && result.edgeAccessToken !== undefined) {
+    sessionStorage.setItem(edgeTokenStorageKey(result.raceId), result.edgeAccessToken);
   }
   return result;
 }
 
 export function getCsrfToken(scope: AuthScope): string | null {
-  return sessionStorage.getItem(`jcb.csrf:${scope}`);
+  return sessionStorage.getItem(csrfStorageKey(scope));
 }
 
 export function setCsrfToken(scope: AuthScope, token: string): void {
-  sessionStorage.setItem(`jcb.csrf:${scope}`, token);
+  sessionStorage.setItem(csrfStorageKey(scope), token);
 }
 
 export function clearCsrfToken(scope: AuthScope): void {
-  sessionStorage.removeItem(`jcb.csrf:${scope}`);
+  sessionStorage.removeItem(csrfStorageKey(scope));
+}
+
+export function edgeTokenStorageKey(raceId: string): string {
+  return activityInstanceId === undefined
+    ? `jcb.edge-token:${raceId}`
+    : `jcb.edge-token:${activityInstanceId}:${raceId}`;
 }
 
 export async function getRace(raceId: string) {
@@ -256,6 +289,23 @@ function readEnvironmentString(environment: unknown, key: string): string {
 
 function authScopeForPath(path: string): AuthScope {
   return path.startsWith('/api/v1/admin/') ? 'admin' : 'race';
+}
+
+function csrfStorageKey(scope: AuthScope): string {
+  return activityInstanceId === undefined
+    ? `jcb.csrf:${scope}`
+    : `jcb.csrf:${scope}:activity:${activityInstanceId}`;
+}
+
+function advanceAuthGeneration(key: string): number {
+  const next = currentAuthGeneration(key) + 1;
+  authGenerations.set(key, next);
+  csrfRefreshPromises.delete(key);
+  return next;
+}
+
+function currentAuthGeneration(key: string): number {
+  return authGenerations.get(key) ?? 0;
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {

@@ -18,6 +18,15 @@ describe('publicErrorMessage', () => {
     );
   });
 
+  it('directs expired race viewers to the latest Discord race', () => {
+    expect(
+      publicErrorMessage(
+        new ApiRequestError('Expired race.', 410, 'RACE_VIEWING_UNAVAILABLE'),
+        '映像を読み込めません。',
+      ),
+    ).toBe('このレースの公開は終了しました。Discordの最新レースから観戦してください。');
+  });
+
   it('keeps initialization guidance actionable', () => {
     expect(
       initializationErrorMessage(

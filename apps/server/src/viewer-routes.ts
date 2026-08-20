@@ -8,7 +8,7 @@ import { envelope, httpError } from './server-support.js';
 import type { ServerRouteContext } from './server-types.js';
 
 export function registerViewerRoutes(app: FastifyInstance, context: ServerRouteContext): void {
-  const { dependencies, now, viewerStore, adminStore, authenticate } = context;
+  const { dependencies, now, viewerStore, activityStore, adminStore, authenticate } = context;
 
   app.get('/api/v1/me', async (request) => {
     const session = await authenticate(request);
@@ -67,10 +67,19 @@ export function registerViewerRoutes(app: FastifyInstance, context: ServerRouteC
   app.post('/api/v1/races/:raceId/edge-token', async (request) => {
     const { raceId } = raceIdParamsSchema.parse(request.params);
     const session = await authenticate(request, { csrf: true, raceId });
+    const viewingWindow = assertRaceViewingAvailable(activityStore, raceId);
     const privateKey = dependencies.environment.EDGE_TOKEN_PRIVATE_KEY;
     const guildId = dependencies.environment.DISCORD_GUILD_ID;
     if (privateKey === undefined || guildId === undefined) {
       throw httpError(503, 'EDGE_TOKEN_UNAVAILABLE', 'Edge access is not configured.');
+    }
+    const nbf = Math.floor(now() / 1000);
+    const exp = Math.min(
+      Math.floor(viewerStore.getEdgeTokenExpiry(raceId) / 1000),
+      Math.floor(viewingWindow.closesAt / 1000),
+    );
+    if (exp <= nbf) {
+      throw httpError(410, 'RACE_VIEWING_UNAVAILABLE', 'This race is no longer available to view.');
     }
     return envelope({
       edgeAccessToken: createEdgeAccessToken(
@@ -78,12 +87,26 @@ export function registerViewerRoutes(app: FastifyInstance, context: ServerRouteC
           raceId,
           discordUserId: session.discordUserId,
           guildId,
-          nbf: Math.floor(now() / 1000),
-          exp: Math.floor(viewerStore.getEdgeTokenExpiry(raceId) / 1000),
+          nbf,
+          exp,
           jti: createOpaqueToken(),
         },
         privateKey,
       ),
     });
   });
+}
+
+function assertRaceViewingAvailable(
+  activityStore: ServerRouteContext['activityStore'],
+  raceId: string,
+): ReturnType<ServerRouteContext['activityStore']['assertRaceViewingAvailable']> {
+  try {
+    return activityStore.assertRaceViewingAvailable(raceId);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Activity race is no longer available.') {
+      throw httpError(410, 'RACE_VIEWING_UNAVAILABLE', 'This race is no longer available to view.');
+    }
+    throw error;
+  }
 }

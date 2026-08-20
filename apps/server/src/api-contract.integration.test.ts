@@ -11,6 +11,7 @@ import { SystemClock } from './system-clock.js';
 
 describe('server API contract', () => {
   it('registers every required v1 path and withholds results before finish', async () => {
+    const now = Date.now();
     const database = openDatabase(':memory:');
     applyMigrations(
       database,
@@ -45,13 +46,14 @@ describe('server API contract', () => {
       name: 'API契約',
       distanceM: 1200,
       surface: 'turf',
-      scheduledAt: timestamp(100_000),
-      bettingOpensAt: timestamp(10_000),
-      bettingClosesAt: timestamp(90_000),
-      viewerOpensAt: timestamp(80_000),
+      scheduledAt: timestamp(now + 20_000),
+      bettingOpensAt: timestamp(now - 20_000),
+      bettingClosesAt: timestamp(now + 10_000),
+      viewerOpensAt: timestamp(now - 10_000),
       entries: horses.map((horse, index) => ({ horseId: horse.id, horseNumber: index + 1 })),
     });
     game.lockRace(race.id, () => 0.5);
+    database.prepare("UPDATE races SET status = 'betting_open' WHERE id = ?").run(race.id);
     const environment = parseEnvironment({
       NODE_ENV: 'test',
       DATABASE_PATH: ':memory:',

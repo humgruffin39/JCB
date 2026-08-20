@@ -6,6 +6,10 @@ const API_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   LOGIN_TICKET_INVALID: 'この観戦リンクは期限切れか、すでに使用されています。',
   RACE_NOT_FOUND: 'レース情報が見つかりません。',
   RACE_NOT_STARTED: '発走時刻前です。',
+  RACE_VIEWING_UNAVAILABLE:
+    'このレースの公開は終了しました。Discordの最新レースから観戦してください。',
+  ACTIVITY_RACE_UNAVAILABLE:
+    'このレースの公開は終了しました。Discordの最新レースから観戦してください。',
 };
 
 const KNOWN_PUBLIC_MESSAGES: Readonly<Record<string, string>> = {

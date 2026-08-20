@@ -1,7 +1,7 @@
 import { createEdgeAccessToken, createOpaqueToken } from '@jcb/application';
 import { activityExchangeRequestSchema } from '@jcb/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { ACTIVITY_SESSION_COOKIE } from './server-context.js';
+import { ACTIVITY_SESSION_COOKIE, activitySessionCookieName } from './server-context.js';
 import { DiscordActivityApiError, type DiscordActivityInstance } from './discord-activity-api.js';
 import { envelope, httpError } from './server-support.js';
 import type { ServerRouteContext } from './server-types.js';
@@ -84,21 +84,35 @@ export function registerActivityRoutes(app: FastifyInstance, context: ServerRout
             'Activity instance binding is invalid.',
           );
         }
+        if (error instanceof Error && error.message === 'Activity race is no longer available.') {
+          throw httpError(
+            410,
+            'ACTIVITY_RACE_UNAVAILABLE',
+            'This Activity race is no longer available.',
+          );
+        }
         throw error;
       }
 
       let edgeAccessToken: string | undefined;
       try {
         viewerStore.getRaceDetail(raceId);
+        const viewingWindow = activityStore.assertRaceViewingAvailable(raceId, now());
         const privateKey = dependencies.environment.EDGE_TOKEN_PRIVATE_KEY;
         if (privateKey !== undefined) {
+          const nbf = Math.floor(now() / 1_000);
+          const exp = Math.min(
+            Math.floor(viewerStore.getEdgeTokenExpiry(raceId) / 1_000),
+            Math.floor(viewingWindow.closesAt / 1_000),
+          );
+          if (exp <= nbf) throw new Error('Activity race is no longer available.');
           edgeAccessToken = createEdgeAccessToken(
             {
               raceId,
               discordUserId: profile.id,
               guildId,
-              nbf: Math.floor(now() / 1_000),
-              exp: Math.floor(viewerStore.getEdgeTokenExpiry(raceId) / 1_000),
+              nbf,
+              exp,
               jti: createOpaqueToken(),
             },
             privateKey,
@@ -108,15 +122,40 @@ export function registerActivityRoutes(app: FastifyInstance, context: ServerRout
         if (error instanceof Error && /not found/i.test(error.message)) {
           throw httpError(404, 'RACE_NOT_FOUND', 'Race not found.');
         }
+        if (error instanceof Error && error.message === 'Activity race is no longer available.') {
+          throw httpError(
+            410,
+            'ACTIVITY_RACE_UNAVAILABLE',
+            'This Activity race is no longer available.',
+          );
+        }
         throw error;
       }
 
-      const session = activityStore.createSession({
-        discordUserId: profile.id,
-        instanceId: instance.instanceId,
-        raceId,
-      });
-      setActivitySessionCookie(context, reply, session.sessionToken, session.expiresAt);
+      let session;
+      try {
+        session = activityStore.createSession({
+          discordUserId: profile.id,
+          instanceId: instance.instanceId,
+          raceId,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Activity race is no longer available.') {
+          throw httpError(
+            410,
+            'ACTIVITY_RACE_UNAVAILABLE',
+            'This Activity race is no longer available.',
+          );
+        }
+        throw error;
+      }
+      setActivitySessionCookie(
+        context,
+        reply,
+        session.sessionToken,
+        session.expiresAt,
+        instance.instanceId,
+      );
       reply.header('cache-control', 'no-store');
       return envelope({
         accessToken: token.accessToken,
@@ -201,10 +240,16 @@ function setActivitySessionCookie(
   reply: FastifyReply,
   sessionToken: string,
   expiresAt: number,
+  instanceId: string,
 ): void {
   reply.header(
     'set-cookie',
-    serializeActivitySessionCookie(context.dependencies.environment, sessionToken, expiresAt),
+    serializeActivitySessionCookie(
+      context.dependencies.environment,
+      sessionToken,
+      expiresAt,
+      instanceId,
+    ),
   );
 }
 
@@ -215,9 +260,10 @@ export function serializeActivitySessionCookie(
   >,
   sessionToken: string,
   expiresAt: number,
+  instanceId?: string,
 ): string {
   const attributes = [
-    `${ACTIVITY_SESSION_COOKIE}=${encodeURIComponent(sessionToken)}`,
+    `${instanceId === undefined ? ACTIVITY_SESSION_COOKIE : activitySessionCookieName(instanceId)}=${encodeURIComponent(sessionToken)}`,
     'Path=/',
     'HttpOnly',
     `Expires=${new Date(expiresAt).toUTCString()}`,

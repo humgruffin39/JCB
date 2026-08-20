@@ -87,7 +87,10 @@ export function createHandlers(
     const race = gameStore.getRace(raceId(job));
     return race.version === expectedVersion && race.status !== 'cancelled';
   };
-  const publish = async (job: ScheduledJob): Promise<void> => {
+  const publish = async (
+    job: ScheduledJob,
+    options: { readonly disablePreviousViewers?: boolean } = {},
+  ): Promise<void> => {
     if (!isCurrentRaceJob(job)) return;
     if (dependencies.discordClient === undefined) return;
     await publishRaceMessage({
@@ -96,6 +99,9 @@ export function createHandlers(
       environment: dependencies.environment,
       clock: dependencies.clock,
       raceId: raceId(job),
+      ...(options.disablePreviousViewers === undefined
+        ? {}
+        : { disablePreviousViewers: options.disablePreviousViewers }),
     });
   };
 
@@ -239,7 +245,9 @@ export function createHandlers(
       });
     },
     refresh_race_message: publish,
-    open_viewer: publish,
+    async open_viewer(job) {
+      await publish(job, { disablePreviousViewers: true });
+    },
     async close_betting(job) {
       if (!isCurrentRaceJob(job)) return;
       const id = raceId(job);

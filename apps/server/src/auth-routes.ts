@@ -9,6 +9,8 @@ import {
   ADMIN_SESSION_COOKIE,
   LEGACY_SESSION_COOKIE,
   RACE_SESSION_COOKIE,
+  activityInstanceIdFromRequest,
+  activitySessionCookieName,
   activitySessionTokenFromRequest,
   sessionTokenFromRequest,
 } from './server-context.js';
@@ -48,6 +50,55 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
         authStore.revoke(session.sessionToken);
         throw httpError(403, 'GUILD_MEMBERSHIP_REQUIRED', 'Current guild membership is required.');
       }
+      let edgeAccessToken: string | undefined;
+      let viewingWindow:
+        ReturnType<ServerRouteContext['activityStore']['assertRaceViewingAvailable']> | undefined;
+      if (session.raceId !== undefined) {
+        try {
+          viewingWindow = activityStore.assertRaceViewingAvailable(session.raceId, now());
+        } catch (error) {
+          if (error instanceof Error && error.message === 'Activity race is no longer available.') {
+            authStore.revoke(session.sessionToken);
+            throw httpError(
+              410,
+              'RACE_VIEWING_UNAVAILABLE',
+              'This race is no longer available to view.',
+            );
+          }
+          throw error;
+        }
+      }
+      if (
+        session.raceId !== undefined &&
+        dependencies.environment.EDGE_TOKEN_PRIVATE_KEY !== undefined &&
+        dependencies.environment.DISCORD_GUILD_ID !== undefined
+      ) {
+        const race = viewerStore.getRaceDetail(session.raceId);
+        const nbf = Math.floor(now() / 1000);
+        const exp = Math.min(
+          Math.floor((race.scheduledAt + ONE_DAY_MILLISECONDS) / 1000),
+          Math.floor(viewingWindow!.closesAt / 1000),
+        );
+        if (exp <= nbf) {
+          authStore.revoke(session.sessionToken);
+          throw httpError(
+            410,
+            'RACE_VIEWING_UNAVAILABLE',
+            'This race is no longer available to view.',
+          );
+        }
+        edgeAccessToken = createEdgeAccessToken(
+          {
+            raceId: session.raceId,
+            discordUserId: session.discordUserId,
+            guildId: dependencies.environment.DISCORD_GUILD_ID,
+            nbf,
+            exp,
+            jti: createOpaqueToken(),
+          },
+          dependencies.environment.EDGE_TOKEN_PRIVATE_KEY,
+        );
+      }
       setSessionCookie(
         reply,
         dependencies,
@@ -55,25 +106,6 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
         session.sessionToken,
         session.expiresAt,
       );
-      let edgeAccessToken: string | undefined;
-      if (
-        session.raceId !== undefined &&
-        dependencies.environment.EDGE_TOKEN_PRIVATE_KEY !== undefined &&
-        dependencies.environment.DISCORD_GUILD_ID !== undefined
-      ) {
-        const race = viewerStore.getRaceDetail(session.raceId);
-        edgeAccessToken = createEdgeAccessToken(
-          {
-            raceId: session.raceId,
-            discordUserId: session.discordUserId,
-            guildId: dependencies.environment.DISCORD_GUILD_ID,
-            nbf: Math.floor(now() / 1000),
-            exp: Math.floor((race.scheduledAt + ONE_DAY_MILLISECONDS) / 1000),
-            jti: createOpaqueToken(),
-          },
-          dependencies.environment.EDGE_TOKEN_PRIVATE_KEY,
-        );
-      }
       return envelope({
         csrfToken: session.csrfToken,
         expiresAt: session.expiresAt,
@@ -217,7 +249,11 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
     if (session.authenticationMethod === 'activity') {
       const activityToken = activitySessionTokenFromRequest(request)!;
       activityStore.revoke(activityToken);
-      expireActivityCookie(reply, dependencies);
+      expireActivityCookie(
+        reply,
+        dependencies,
+        session.activityInstanceId ?? activityInstanceIdFromRequest(request),
+      );
       return envelope({ loggedOut: true });
     }
     const token = sessionTokenFromRequest(request, false)!;
@@ -233,7 +269,11 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
       const sessionToken = activitySessionTokenFromRequest(request)!;
       reply.header('cache-control', 'no-store');
       return envelope({
-        csrfToken: activityStore.getOrRotateCsrfToken(sessionToken, readCsrfHeader(request)),
+        csrfToken: activityStore.getOrRotateCsrfToken(
+          sessionToken,
+          readCsrfHeader(request),
+          activityInstanceIdFromRequest(request),
+        ),
       });
     }
     const sessionToken = sessionTokenFromRequest(request, false)!;
@@ -260,9 +300,10 @@ export function registerAuthRoutes(app: FastifyInstance, context: ServerRouteCon
 function expireActivityCookie(
   reply: FastifyReply,
   dependencies: ServerRouteContext['dependencies'],
+  instanceId?: string,
 ): void {
   const attributes = [
-    `${ACTIVITY_SESSION_COOKIE}=`,
+    `${instanceId === undefined ? ACTIVITY_SESSION_COOKIE : activitySessionCookieName(instanceId)}=`,
     'Path=/',
     'HttpOnly',
     'Expires=Thu, 01 Jan 1970 00:00:00 GMT',

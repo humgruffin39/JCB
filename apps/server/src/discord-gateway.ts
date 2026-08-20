@@ -8,7 +8,7 @@ import {
   SqliteViewerStore,
   type SqliteDatabase,
 } from '@jcb/database';
-import { handlePurchaseInteraction, renderRaceMessage } from '@jcb/discord';
+import { handlePurchaseInteraction, renderHorseInfoMessage, renderRaceMessage } from '@jcb/discord';
 import { DomainError, money, POOL_TYPE_DEFINITIONS, timestamp, type Clock } from '@jcb/domain';
 import {
   ActionRowBuilder,
@@ -20,10 +20,16 @@ import {
   MessageFlags,
   type Interaction,
 } from 'discord.js';
+import type { EmbedBuilder } from 'discord.js';
 import { createHash } from 'node:crypto';
 import { DiscordClientGuildMembership } from './guild-membership.js';
 import { SqliteDiscordPurchaseGateway } from './discord-purchase-gateway.js';
 import { resolveFinishOrder } from './discord-race-message-options.js';
+import {
+  latestViewableRaceId,
+  listDiscordRaceMessages,
+  readDiscordHorseInfo,
+} from './discord-horse-info.js';
 
 export function createDiscordClient(): Client {
   return new Client({
@@ -94,6 +100,13 @@ export function wireDiscordGateway(input: {
           return;
         }
         if (action === 'view') {
+          if (latestViewableRaceId(input.database, input.clock.now()) !== raceId) {
+            await safeEphemeralReply(
+              interaction,
+              'このレースの公開は終了しました。最新レースから観戦してください。',
+            );
+            return;
+          }
           if (interaction.channelId === null) {
             await safeEphemeralReply(interaction, 'このチャンネルから観戦を開始してください。');
             return;
@@ -120,6 +133,11 @@ export function wireDiscordGateway(input: {
         url.hash = new URLSearchParams({ ticket: issued.ticket, raceId }).toString();
         const reply = createViewerLinkReply(url.toString());
         await safeEphemeralReply(interaction, reply.content, reply.components);
+        return;
+      }
+      if (action === 'horse-info' && raceId !== undefined) {
+        const horseInfo = renderHorseInfoMessage(readDiscordHorseInfo(input.database, raceId));
+        await safeEphemeralEmbedReply(interaction, horseInfo.embeds);
         return;
       }
       if (action === 'balance') {
@@ -209,6 +227,7 @@ export async function publishRaceMessage(input: {
   readonly environment: Environment;
   readonly clock: Clock;
   readonly raceId: string;
+  readonly disablePreviousViewers?: boolean;
 }): Promise<void> {
   const channelId = requireConfigured(
     input.environment.DISCORD_RACE_CHANNEL_ID,
@@ -220,32 +239,24 @@ export async function publishRaceMessage(input: {
   }
   const viewerStore = new SqliteViewerStore(input.database);
   const detail = viewerStore.getRaceDetail(input.raceId);
-  const options = renderRaceMessage({
-    raceId: detail.id,
-    version: detail.version,
-    name: detail.name,
-    raceDate: detail.raceDate,
-    scheduledAt: timestamp(detail.scheduledAt),
-    distanceM: detail.distanceM,
-    surfaceLabel: detail.surface === 'turf' ? '芝' : 'ダート',
-    horses: detail.entries.map((entry) => ({
-      horseNumber: entry.horseNumber,
-      name: entry.name,
-      condition: entry.condition,
-      currentWinOdds: entry.currentWinOdds,
-    })),
-    trifectaPoolTotal: money(BigInt(detail.trifectaPoolTotal)),
-    carryover: money(BigInt(detail.carryover)),
-    canBuy: detail.status === 'betting_open' && input.clock.now() < detail.bettingClosesAt,
-    canView: input.clock.now() >= detail.viewerOpensAt,
-    finishOrder: resolveFinishOrder(viewerStore, input.raceId, detail.status),
-  });
+  const now = input.clock.now();
+  const canView = latestViewableRaceId(input.database, now) === input.raceId;
+  const options = renderRaceMessageForDetail(viewerStore, detail, now, canView);
   const messages = new SqliteDiscordMessageStore(input.database, () => input.clock.now());
   const existing = messages.get('race', input.raceId);
   if (existing !== undefined) {
     try {
       const message = await channel.messages.fetch(existing.messageId);
       await message.edit(options);
+      if (input.disablePreviousViewers === true && canView) {
+        await disablePreviousRaceMessages({
+          client: input.client,
+          database: input.database,
+          clock: input.clock,
+          currentRaceId: input.raceId,
+          viewerStore,
+        });
+      }
       return;
     } catch (error) {
       if (!isMissingDiscordMessage(error)) throw error;
@@ -263,6 +274,75 @@ export async function publishRaceMessage(input: {
     channelId,
     messageId: created.id,
   });
+  if (input.disablePreviousViewers === true && canView) {
+    await disablePreviousRaceMessages({
+      client: input.client,
+      database: input.database,
+      clock: input.clock,
+      currentRaceId: input.raceId,
+      viewerStore,
+    });
+  }
+}
+
+function renderRaceMessageForDetail(
+  viewerStore: SqliteViewerStore,
+  detail: ReturnType<SqliteViewerStore['getRaceDetail']>,
+  now: number,
+  canView: boolean,
+) {
+  return renderRaceMessage({
+    raceId: detail.id,
+    version: detail.version,
+    name: detail.name,
+    raceDate: detail.raceDate,
+    scheduledAt: timestamp(detail.scheduledAt),
+    distanceM: detail.distanceM,
+    surfaceLabel: detail.surface === 'turf' ? '芝' : 'ダート',
+    horses: detail.entries.map((entry) => ({
+      horseNumber: entry.horseNumber,
+      name: entry.name,
+      condition: entry.condition,
+      currentWinOdds: entry.currentWinOdds,
+    })),
+    trifectaPoolTotal: money(BigInt(detail.trifectaPoolTotal)),
+    carryover: money(BigInt(detail.carryover)),
+    canBuy: detail.status === 'betting_open' && now < detail.bettingClosesAt,
+    canView,
+    finishOrder: resolveFinishOrder(viewerStore, detail.id, detail.status),
+  });
+}
+
+async function disablePreviousRaceMessages(input: {
+  readonly client: Client;
+  readonly database: SqliteDatabase;
+  readonly clock: Clock;
+  readonly currentRaceId: string;
+  readonly viewerStore: SqliteViewerStore;
+}): Promise<void> {
+  const messages = new SqliteDiscordMessageStore(input.database, () => input.clock.now());
+  const failures: unknown[] = [];
+  for (const reference of listDiscordRaceMessages(input.database)) {
+    if (reference.raceId === input.currentRaceId) continue;
+    try {
+      const detail = input.viewerStore.getRaceDetail(reference.raceId);
+      const channel = await input.client.channels.fetch(reference.channelId);
+      if (channel === null || !channel.isTextBased() || !('messages' in channel)) continue;
+      const message = await channel.messages.fetch(reference.messageId);
+      await message.edit(
+        renderRaceMessageForDetail(input.viewerStore, detail, input.clock.now(), false),
+      );
+    } catch (error) {
+      if (isMissingDiscordMessage(error)) {
+        messages.remove('race', reference.raceId);
+        continue;
+      }
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Past Discord race messages could not be disabled.');
+  }
 }
 
 export function isMissingDiscordMessage(error: unknown): boolean {
@@ -299,6 +379,18 @@ async function safeEphemeralReply(
     await interaction.editReply({ content, components: [] });
   } else {
     await interaction.reply({ content, components, flags: MessageFlags.Ephemeral });
+  }
+}
+
+async function safeEphemeralEmbedReply(
+  interaction: Interaction,
+  embeds: readonly EmbedBuilder[],
+): Promise<void> {
+  if (!interaction.isRepliable()) return;
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply({ embeds, components: [] });
+  } else {
+    await interaction.reply({ embeds, components: [], flags: MessageFlags.Ephemeral });
   }
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getPublicSettings, getRace } from './api.js';
+import { ApiRequestError, getPublicSettings, getRace } from './api.js';
 import { publicErrorMessage } from './public-error-message.js';
 import { PublicState } from './public-state.js';
 import { RaceViewer } from './race-viewer.js';
@@ -12,6 +12,7 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
   const [pollMilliseconds, setPollMilliseconds] = useState(15_000);
   const requestInFlight = useRef(false);
   const requestGeneration = useRef(0);
+  const unavailable = useRef(false);
 
   const refresh = useCallback(async () => {
     if (requestInFlight.current) return;
@@ -20,11 +21,13 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
     try {
       const nextRace = await getRace(raceId);
       if (generation === requestGeneration.current) {
+        unavailable.current = false;
         setRace(nextRace);
         setError(undefined);
       }
     } catch (caught) {
       if (generation === requestGeneration.current) {
+        unavailable.current = isViewingUnavailable(caught);
         setError(publicErrorMessage(caught, '通信を確認しています。自動で再試行します。'));
       }
     } finally {
@@ -50,6 +53,7 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
     return () => {
       requestGeneration.current += 1;
       requestInFlight.current = false;
+      unavailable.current = false;
     };
   }, [raceId]);
 
@@ -59,7 +63,7 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
     let timer: number | undefined;
 
     const schedule = (): void => {
-      if (active && !document.hidden && timer === undefined) {
+      if (active && !unavailable.current && !document.hidden && timer === undefined) {
         timer = window.setTimeout(tick, Math.max(1_000, pollMilliseconds));
       }
     };
@@ -102,4 +106,11 @@ export function RaceTerminal({ raceId }: { readonly raceId: string }) {
   }
 
   return <RaceViewer race={race} {...(error === undefined ? {} : { connectionError: error })} />;
+}
+
+function isViewingUnavailable(error: unknown): boolean {
+  return (
+    error instanceof ApiRequestError &&
+    (error.code === 'RACE_VIEWING_UNAVAILABLE' || error.code === 'ACTIVITY_RACE_UNAVAILABLE')
+  );
 }

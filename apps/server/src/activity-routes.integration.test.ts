@@ -33,16 +33,17 @@ function createActivityApi(instance = verifiedInstance): DiscordActivityApi {
 }
 
 function insertRace(database: ReturnType<typeof openDatabase>): void {
+  const now = Date.now();
   database
     .prepare(
       `INSERT INTO races
        (id, race_date, name, kind, status, version, distance_m, going,
         scheduled_at, betting_opens_at, betting_closes_at, viewer_opens_at,
         created_at, updated_at)
-       VALUES ('race-1', '2026-01-01', 'Activity test', 'regular', 'draft', 0, 1200,
-               'good', 10000, 100, 9000, 50, 1, 1)`,
+       VALUES ('race-1', '2026-01-01', 'Activity test', 'regular', 'betting_open', 0, 1200,
+               'good', ?, ?, ?, ?, ?, ?)`,
     )
-    .run();
+    .run(now + 10_000, now - 100, now + 9_000, now - 200, now, now);
 }
 
 describe('Discord Activity API', () => {
@@ -104,7 +105,7 @@ describe('Discord Activity API', () => {
     });
     const setCookie = exchange.headers['set-cookie'];
     const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(';')[0];
-    expect(cookie).toMatch(/^jcb_activity_session=/);
+    expect(cookie).toMatch(/^jcb_activity_session_[a-f0-9]{32}=/);
     expect(exchange.headers['cache-control']).toBe('no-store');
 
     const race = await app.inject({

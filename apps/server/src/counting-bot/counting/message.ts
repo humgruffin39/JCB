@@ -3,6 +3,7 @@ export interface CountMessage {
   readonly guildId: string | null;
   readonly channelId: string;
   readonly authorId: string;
+  readonly authorDisplayName: string;
   readonly authorIsBot: boolean;
   readonly webhookId: string | null;
   readonly isSystem: boolean;

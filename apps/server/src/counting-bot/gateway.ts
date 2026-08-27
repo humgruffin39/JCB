@@ -4,6 +4,7 @@ import type { Clock } from '@jcb/domain';
 import { Events, type Client } from 'discord.js';
 import { loadCountingConfig, type Config } from './config.js';
 import type { CountMessage } from './counting/message.js';
+import { SqliteCountEconomy } from './counting/economy.js';
 import { MessageProcessor } from './counting/messageProcessor.js';
 import { ProcessingQueue } from './counting/processingQueue.js';
 import { fetchAllMessagesAfter, RecoveryBuffer } from './counting/recovery.js';
@@ -243,6 +244,7 @@ export function wireCountingGateway(input: {
     const initializedProcessor = new MessageProcessor(
       state,
       store,
+      new SqliteCountEconomy(input.database, () => input.clock.now()),
       failureExecutor,
       consecutiveWarningNotifier,
       config,

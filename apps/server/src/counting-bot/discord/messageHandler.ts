@@ -12,6 +12,8 @@ export function toCountMessage(message: Message): CountMessage {
     guildId: message.guildId,
     channelId: message.channelId,
     authorId: message.author.id,
+    authorDisplayName:
+      message.member?.displayName ?? message.author.globalName ?? message.author.username,
     authorIsBot: message.author.bot,
     webhookId: message.webhookId,
     isSystem: message.system,

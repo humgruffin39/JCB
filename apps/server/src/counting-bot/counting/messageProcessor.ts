@@ -5,12 +5,14 @@ import type { Logger } from '../logging/logger.js';
 import type { BotState } from '../persistence/stateSchema.js';
 import type { StateStore } from '../persistence/stateStore.js';
 import type { CountMessage } from './message.js';
+import type { CountEconomy } from './economy.js';
 import { applyMessage } from './stateMachine.js';
 
 export class MessageProcessor {
   public constructor(
     private state: BotState,
     private readonly store: StateStore,
+    private readonly economy: CountEconomy,
     private readonly failureExecutor: FailureExecutor,
     private readonly consecutiveWarningNotifier: ConsecutiveWarningNotifier,
     private readonly config: Pick<Config, 'guildId' | 'countChannelId' | 'timeoutSeconds'>,
@@ -39,6 +41,9 @@ export class MessageProcessor {
       return;
     }
 
+    if (transition.kind === 'accepted' || transition.kind === 'failed') {
+      this.economy.apply(message, transition.kind);
+    }
     await this.store.save(transition.state);
     this.state = transition.state;
 

@@ -11,6 +11,7 @@ export function message(overrides: Partial<CountMessage> = {}): CountMessage {
     guildId: '10',
     channelId: '20',
     authorId: '30',
+    authorDisplayName: '数取参加者',
     authorIsBot: false,
     webhookId: null,
     isSystem: false,

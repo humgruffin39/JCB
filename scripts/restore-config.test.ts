@@ -15,4 +15,15 @@ describe('container restore scripts', () => {
     expect(entrypoint).toContain('-if-replica-exists');
     expect(`${backupScript}\n${drillScript}`).not.toContain('-config /etc/litestream.yml');
   });
+
+  it('keeps production backup operations within the intended cadence', async () => {
+    const config = await readFile(new URL('../deploy/litestream.yml', import.meta.url), 'utf8');
+
+    expect(config).toContain('levels:\n  - interval: 5m\n  - interval: 1h\n  - interval: 24h');
+    expect(config).toContain('l0-retention-check-interval: 5m');
+    expect(config).toContain('snapshot:\n  interval: 24h\n  retention: 720h');
+    expect(config).toContain('checkpoint-interval: 5m');
+    expect(config).toContain('sync-interval: 5m');
+    expect(config).not.toContain('verify-compaction: true');
+  });
 });

@@ -2,8 +2,15 @@ logging:
   level: info
   type: json
 
+levels:
+  - interval: 5m
+  - interval: 1h
+  - interval: 24h
+
+l0-retention-check-interval: 5m
+
 snapshot:
-  interval: 1h
+  interval: 24h
   retention: 720h
 
 retention:
@@ -12,13 +19,12 @@ retention:
 validation:
   interval: 6h
 
-verify-compaction: true
 shutdown-sync-timeout: 30s
 
 dbs:
   - path: ${DATABASE_PATH}
     monitor-interval: 1s
-    checkpoint-interval: 1m
+    checkpoint-interval: 5m
     restore-if-db-not-exists: true
     replica:
       type: s3
@@ -28,5 +34,5 @@ dbs:
       region: auto
       access-key-id: ${R2_ACCESS_KEY_ID}
       secret-access-key: ${R2_SECRET_ACCESS_KEY}
-      sync-interval: 1m
+      sync-interval: 5m
       auto-recover: true

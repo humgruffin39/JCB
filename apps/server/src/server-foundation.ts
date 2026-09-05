@@ -129,17 +129,19 @@ export function registerFoundationRoutes(
   app.get('/health/live', async () => ({ status: 'ok' }));
   app.get('/health/ready', async (_request, reply) => {
     const health = context.adminStore.health();
+    // Readiness answers "should this machine keep serving traffic". Discord being
+    // down is reported but never fails it, because restarting on their outage
+    // takes the site down with them and brings it back no sooner.
     const infrastructureReady =
       dependencies.environment.NODE_ENV !== 'production' ||
-      (health.schedulerStatus === 'nominal' &&
-        health.r2AccessStatus === 'nominal' &&
-        (dependencies.discordStatus?.() ?? false));
+      (health.schedulerStatus === 'nominal' && health.r2AccessStatus === 'nominal');
     const ready = health.ledgerProjectionValid && health.databaseReadWrite && infrastructureReady;
     if (!ready) void reply.status(503);
     return {
       status: ready ? 'ready' : 'not_ready',
       ledgerProjectionValid: health.ledgerProjectionValid,
       databaseReadWrite: health.databaseReadWrite,
+      discordConnected: dependencies.discordStatus?.() ?? false,
     };
   });
 }

@@ -22,8 +22,8 @@ describe('container restore scripts', () => {
     expect(config).toContain('levels:\n  - interval: 5m\n  - interval: 1h\n  - interval: 24h');
     expect(config).toContain('l0-retention-check-interval: 5m');
     expect(config).toContain('snapshot:\n  interval: 24h\n  retention: 720h');
-    expect(config).toContain('checkpoint-interval: 5m');
-    expect(config).toContain('sync-interval: 5m');
+    expect(config).toContain('checkpoint-interval: 1m');
+    expect(config).toContain('sync-interval: 1m');
     expect(config).not.toContain('verify-compaction: true');
   });
 });

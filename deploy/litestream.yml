@@ -24,7 +24,7 @@ shutdown-sync-timeout: 30s
 dbs:
   - path: ${DATABASE_PATH}
     monitor-interval: 1s
-    checkpoint-interval: 5m
+    checkpoint-interval: 1m
     restore-if-db-not-exists: true
     replica:
       type: s3
@@ -34,5 +34,5 @@ dbs:
       region: auto
       access-key-id: ${R2_ACCESS_KEY_ID}
       secret-access-key: ${R2_SECRET_ACCESS_KEY}
-      sync-interval: 5m
+      sync-interval: 1m
       auto-recover: true

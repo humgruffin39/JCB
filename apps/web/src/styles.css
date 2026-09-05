@@ -374,7 +374,9 @@
   background: rgb(255 255 255 / 14%);
 }
 
-.broadcast-camera-button {
+/* Separates the camera button from the next control, but only when there is
+   one. On a live race there is no pause button to separate it from. */
+.broadcast-camera-button:not(:last-child) {
   margin-inline-end: 0.15rem;
 }
 

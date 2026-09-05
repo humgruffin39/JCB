@@ -17,6 +17,12 @@ export interface PoolTypeDefinition {
   readonly description: string;
   readonly selectionSize: 1 | 2 | 3;
   readonly ordered: boolean;
+  /**
+   * How many selections win a single race. Pools that pay out more than one
+   * selection split their balance into that many equal sub-pools, so both the
+   * displayed odds and the settlement divide by this number.
+   */
+  readonly winningSelectionCount: 1 | 3;
 }
 
 export const POOL_TYPE_DEFINITIONS: Readonly<Record<PoolType, PoolTypeDefinition>> = {
@@ -25,42 +31,49 @@ export const POOL_TYPE_DEFINITIONS: Readonly<Record<PoolType, PoolTypeDefinition
     description: '1着になる馬を、1頭当てる馬券。',
     selectionSize: 1,
     ordered: true,
+    winningSelectionCount: 1,
   },
   place: {
     label: '複勝',
     description: '3着までに入る馬を、1頭当てる馬券。',
     selectionSize: 1,
     ordered: false,
+    winningSelectionCount: 3,
   },
   quinella: {
     label: '馬連',
     description: '1着と2着になる2頭を、着順を問わずに当てる馬券。',
     selectionSize: 2,
     ordered: false,
+    winningSelectionCount: 1,
   },
   exacta: {
     label: '馬単',
     description: '1着と2着になる2頭を、着順通りに当てる馬券。',
     selectionSize: 2,
     ordered: true,
+    winningSelectionCount: 1,
   },
   wide: {
     label: 'ワイド',
     description: '3着までに入る2頭を、着順を問わずに当てる馬券。',
     selectionSize: 2,
     ordered: false,
+    winningSelectionCount: 3,
   },
   trio: {
     label: '3連複',
     description: '1着・2着・3着になる3頭を、着順を問わずに当てる馬券。',
     selectionSize: 3,
     ordered: false,
+    winningSelectionCount: 1,
   },
   trifecta: {
     label: '3連単',
     description: '1着・2着・3着になる3頭を、着順通りに当てる馬券。',
     selectionSize: 3,
     ordered: true,
+    winningSelectionCount: 1,
   },
 };
 

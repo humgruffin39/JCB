@@ -152,6 +152,75 @@ describe('economy integrity', () => {
     expect(sumLedgerEntries(result.ledgerEntries)).toBe(0n);
   });
 
+  it('pays each winning selection from its own equal share of the pool', () => {
+    // Place semantics: backing a lightly backed placegetter must pay more than
+    // backing a heavily backed one. Pooling all winners together paid both the same.
+    const result = settleParimutuelPool({
+      poolAccountId: identifier('place-pool'),
+      centralBankAccountId: identifier('bank'),
+      winningSelections: ['1', '2', '3'],
+      poolBalance: money(1_200n),
+      tickets: [
+        {
+          id: 'popular',
+          accountId: identifier('a'),
+          selectionCode: '1',
+          stake: money(100n),
+          createdAt: 1,
+        },
+        {
+          id: 'lonely',
+          accountId: identifier('b'),
+          selectionCode: '2',
+          stake: money(100n),
+          createdAt: 2,
+        },
+      ],
+      seedPositions: [
+        { selectionCode: '1', stake: money(700n) },
+        { selectionCode: '2', stake: money(100n) },
+        { selectionCode: '3', stake: money(100n) },
+        { selectionCode: '4', stake: money(100n) },
+      ],
+    });
+    const payout = (id: string): bigint =>
+      result.payouts.find((entry) => entry.recipientId === id)?.amount ?? 0n;
+    expect(payout('lonely')).toBeGreaterThan(payout('popular'));
+    expect(result.payouts.reduce((sum, entry) => sum + entry.amount, 0n)).toBe(1_200n);
+    expect(sumLedgerEntries(result.ledgerEntries)).toBe(0n);
+  });
+
+  it('returns a pool nobody backed to the central bank', () => {
+    const result = settleParimutuelPool({
+      poolAccountId: identifier('place-pool'),
+      centralBankAccountId: identifier('bank'),
+      winningSelections: ['1'],
+      poolBalance: money(300n),
+      tickets: [],
+      seedPositions: [
+        { selectionCode: '1', stake: money(0n) },
+        { selectionCode: '2', stake: money(300n) },
+      ],
+    });
+    expect(result.payouts).toEqual([
+      { recipientType: 'seed', recipientId: '1', accountId: identifier('bank'), amount: 300n },
+    ]);
+    expect(sumLedgerEntries(result.ledgerEntries)).toBe(0n);
+  });
+
+  it('rejects repeated winning selections', () => {
+    expect(() =>
+      settleParimutuelPool({
+        poolAccountId: identifier('place-pool'),
+        centralBankAccountId: identifier('bank'),
+        winningSelections: ['1', '1'],
+        poolBalance: money(100n),
+        tickets: [],
+        seedPositions: [{ selectionCode: '1', stake: money(100n) }],
+      }),
+    ).toThrow(/distinct/i);
+  });
+
   it('rejects a pool balance that does not match persisted stakes', () => {
     expect(() =>
       settleWinPool({

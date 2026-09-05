@@ -1,5 +1,5 @@
 import { DomainError, money, type AccountId, type Money } from '@jcb/domain';
-import { allocateProRata, type AllocationClaim } from './allocate-pro-rata.js';
+import { allocateProRata, type Allocation, type AllocationClaim } from './allocate-pro-rata.js';
 import { transfer, type LedgerEntryDraft } from './ledger.js';
 
 export interface OpenTicket {
@@ -65,6 +65,9 @@ export function settleParimutuelPool(input: ParimutuelSettlementInput): Settleme
     throw new DomainError('INVALID_SELECTION', 'At least one winning selection is required.');
   }
   const winningSelectionSet = new Set(input.winningSelections);
+  if (winningSelectionSet.size !== input.winningSelections.length) {
+    throw new DomainError('INVALID_SELECTION', 'Winning selections must be distinct.');
+  }
   const winningTickets = input.tickets.filter((ticket) =>
     winningSelectionSet.has(ticket.selectionCode),
   );
@@ -74,21 +77,37 @@ export function settleParimutuelPool(input: ParimutuelSettlementInput): Settleme
   if (winningSeeds.length === 0) {
     throw new DomainError('INVALID_SELECTION', 'Winning seed position is missing.');
   }
-  const claims: AllocationClaim[] = [
-    ...winningTickets.map((ticket) => ({
+
+  // Every winning selection is paid from its own equal share of the pool, the way
+  // a place or wide pool works at a real racecourse. Pooling the winners together
+  // would pay the same rate on a longshot and on the favourite, and would make the
+  // displayed per-selection odds unreachable.
+  const claimsBySelection = new Map<string, AllocationClaim[]>(
+    [...winningSelectionSet].map((selectionCode) => [selectionCode, []]),
+  );
+  for (const ticket of winningTickets) {
+    if (ticket.stake <= 0n) continue;
+    claimsBySelection.get(ticket.selectionCode)!.push({
       id: `user:${ticket.id}`,
       weight: ticket.stake,
       tieBreaker: String(ticket.createdAt).padStart(16, '0'),
-    })),
-    ...winningSeeds.map((seed) => ({
+    });
+  }
+  for (const seed of winningSeeds) {
+    if (seed.stake <= 0n) continue;
+    claimsBySelection.get(seed.selectionCode)!.push({
       id: `seed:${seed.selectionCode}`,
       weight: seed.stake,
       tieBreaker: `seed:${seed.selectionCode}`,
-    })),
-  ];
-  const allocations = allocateProRata(input.poolBalance, claims);
+    });
+  }
+  const fundedSelections = [...claimsBySelection.entries()]
+    .filter(([, claims]) => claims.length > 0)
+    .map(([selectionCode]) => selectionCode)
+    .sort((left, right) => left.localeCompare(right));
+
   const winningTicketsById = new Map(winningTickets.map((ticket) => [ticket.id, ticket]));
-  const payouts = allocations.map((allocation): SettlementPayout => {
+  const toPayout = (allocation: Allocation): SettlementPayout => {
     if (allocation.id.startsWith('user:')) {
       const ticketId = allocation.id.slice('user:'.length);
       const ticket = winningTicketsById.get(ticketId);
@@ -100,14 +119,43 @@ export function settleParimutuelPool(input: ParimutuelSettlementInput): Settleme
         amount: allocation.amount,
       };
     }
-    const selectionCode = allocation.id.slice('seed:'.length);
     return {
       recipientType: 'seed',
-      recipientId: selectionCode,
+      recipientId: allocation.id.slice('seed:'.length),
       accountId: input.centralBankAccountId,
       amount: allocation.amount,
     };
-  });
+  };
+
+  let payouts: readonly SettlementPayout[];
+  if (fundedSelections.length === 0) {
+    // Nothing was ever staked on a winning selection. The balance is seed money,
+    // so it returns to the central bank rather than staying stranded in the pool.
+    payouts =
+      input.poolBalance > 0n
+        ? [
+            {
+              recipientType: 'seed',
+              recipientId: input.winningSelections[0]!,
+              accountId: input.centralBankAccountId,
+              amount: input.poolBalance,
+            },
+          ]
+        : [];
+  } else {
+    const subPools = allocateProRata(
+      input.poolBalance,
+      fundedSelections.map((selectionCode) => ({
+        id: selectionCode,
+        weight: money(1n),
+        tieBreaker: selectionCode,
+      })),
+    );
+    payouts = subPools.flatMap((subPool) =>
+      allocateProRata(subPool.amount, claimsBySelection.get(subPool.id)!).map(toPayout),
+    );
+  }
+
   return {
     payouts,
     ledgerEntries: payouts

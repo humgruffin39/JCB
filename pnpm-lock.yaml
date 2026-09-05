@@ -282,6 +282,9 @@ importers:
         specifier: workspace:*
         version: link:../simulation
     devDependencies:
+      '@jcb/economy':
+        specifier: workspace:*
+        version: link:../economy
       '@jcb/test-support':
         specifier: workspace:*
         version: link:../test-support

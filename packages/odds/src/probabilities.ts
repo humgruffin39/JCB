@@ -1,4 +1,10 @@
-import { allSelections, POOL_TYPES, winningSelectionsByPool, type PoolType } from '@jcb/domain';
+import {
+  allSelections,
+  POOL_TYPE_DEFINITIONS,
+  POOL_TYPES,
+  winningSelectionsByPool,
+  type PoolType,
+} from '@jcb/domain';
 import {
   createOutcomeSimulator,
   nextTrialSeed,
@@ -68,7 +74,7 @@ export function generateProbabilities(
         selectionCodes[poolType],
         counts[poolType],
         simulationCount,
-        poolType === 'place' || poolType === 'wide' ? 3 : 1,
+        POOL_TYPE_DEFINITIONS[poolType].winningSelectionCount,
       ),
     ]),
   ) as Record<PoolType, readonly SelectionProbability[]>;

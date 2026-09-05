@@ -9,6 +9,7 @@
     "@jcb/simulation": "workspace:*"
   },
   "devDependencies": {
+    "@jcb/economy": "workspace:*",
     "@jcb/test-support": "workspace:*"
   }
 }

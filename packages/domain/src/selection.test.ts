@@ -1,6 +1,7 @@
 import { DomainError } from './errors.js';
 import {
   POOL_TYPES,
+  POOL_TYPE_DEFINITIONS,
   allSelections,
   selectionCode,
   winningSelections,
@@ -58,5 +59,16 @@ describe('race selection definitions', () => {
     expect(() => winningSelections('win', [1, 2])).toThrow(DomainError);
     expect(() => winningSelections('wide', [1, 2, 2])).toThrow(DomainError);
     expect(() => winningSelectionsByPool([1, 2, 3, 4, 5, 6, 7, 7])).toThrow(DomainError);
+  });
+});
+
+describe('winningSelectionCount', () => {
+  it('matches the number of selections each pool actually pays', () => {
+    const finishOrder = [4, 7, 2, 1, 8, 5, 3, 6];
+    for (const poolType of POOL_TYPES) {
+      expect(winningSelections(poolType, finishOrder)).toHaveLength(
+        POOL_TYPE_DEFINITIONS[poolType].winningSelectionCount,
+      );
+    }
   });
 });

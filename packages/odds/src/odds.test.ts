@@ -1,6 +1,7 @@
 import { identifier, money, type RaceEntry } from '@jcb/domain';
 import { horseFixture } from '@jcb/test-support';
 import type { SimulationInput } from '@jcb/simulation';
+import { settleParimutuelPool } from '@jcb/economy';
 import { currentOddsTenths } from './current-odds.js';
 import { allocateSeedLiquidity, planAdaptiveSeedLiquidity } from './liquidity.js';
 import { generateProbabilities, temperProbabilities } from './probabilities.js';
@@ -92,5 +93,46 @@ describe('odds generation', () => {
       win: money(25_000n),
       trifecta: money(40_000n),
     });
+  });
+});
+
+describe('currentOddsTenths winning selection count', () => {
+  it('divides the payable share by the number of selections the pool pays', () => {
+    const single = currentOddsTenths(money(900n), money(100n), money(100n), money(0n));
+    const triple = currentOddsTenths(money(900n), money(100n), money(100n), money(0n), 3);
+    expect(single).toBe(100n);
+    expect(triple).toBe(33n);
+  });
+
+  it('agrees with what a place pool actually pays out', () => {
+    const seeds = [
+      { selectionCode: '1', stake: money(300n) },
+      { selectionCode: '2', stake: money(300n) },
+      { selectionCode: '3', stake: money(300n) },
+      { selectionCode: '4', stake: money(300n) },
+    ];
+    const stake = money(100n);
+    const shownTenths = currentOddsTenths(money(1_200n), stake, money(300n), stake, 3);
+    const settlement = settleParimutuelPool({
+      poolAccountId: identifier('pool'),
+      centralBankAccountId: identifier('bank'),
+      winningSelections: ['1', '2', '3'],
+      poolBalance: money(1_300n),
+      tickets: [
+        {
+          id: 'ticket',
+          accountId: identifier('user'),
+          selectionCode: '1',
+          stake,
+          createdAt: 1,
+        },
+      ],
+      seedPositions: seeds,
+    });
+    const payout = settlement.payouts.find((entry) => entry.recipientId === 'ticket')!.amount;
+    const actualTenths = (payout * 10n) / stake;
+    // The displayed figure floors to a tenth, so it may sit one tenth under.
+    expect(actualTenths - shownTenths).toBeGreaterThanOrEqual(0n);
+    expect(actualTenths - shownTenths).toBeLessThanOrEqual(1n);
   });
 });

@@ -20,7 +20,7 @@ jobs:
           version: 11.3.0
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 24.18.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
@@ -58,7 +58,7 @@ jobs:
           version: 11.3.0
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 24.18.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm deploy:check-window

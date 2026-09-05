@@ -170,12 +170,15 @@ function rankingBlock(
   footer = '',
 ): string {
   const lines = users.slice(0, 20).map((user, index) => line(user, index + 1));
-  const body = lines.length === 0 ? '登録ユーザーはまだいません。' : lines.join('\n');
-  const message = `${heading}\n${body}${footer}`;
-  if (message.length > MESSAGE_LIMIT) {
-    throw new Error('Ranking message exceeds the Discord message limit.');
+  if (lines.length === 0) return `${heading}\n登録ユーザーはまだいません。${footer}`;
+  // Long display names can push twenty rows past Discord's message limit. Dropping
+  // the tail keeps the ranking publishing; throwing would retry into a dead letter
+  // and leave the pinned messages frozen until someone noticed.
+  for (let shown = lines.length; shown > 0; shown -= 1) {
+    const message = `${heading}\n${lines.slice(0, shown).join('\n')}${footer}`;
+    if (message.length <= MESSAGE_LIMIT) return message;
   }
-  return message;
+  return `${heading}\n順位を表示できませんでした。${footer}`.slice(0, MESSAGE_LIMIT);
 }
 
 function safeName(user: UserRanking): string {

@@ -14,6 +14,7 @@ import type { FastifyInstance } from 'fastify';
 import {
   envelope,
   findInternalUserId,
+  clientAddress,
   hashIp,
   secureRandomUnit,
   httpError,
@@ -416,7 +417,7 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
       targetType: 'race',
       targetId: raceId,
       reason: body.reason,
-      ipHash: hashIp(request.ip, sessionSecret),
+      ipHash: hashIp(clientAddress(request), sessionSecret),
     });
     await notifyAdmin({
       level: 'error',

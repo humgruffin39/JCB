@@ -4,8 +4,10 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import type { Environment } from '@jcb/config';
 import { DomainError } from '@jcb/domain';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import { createHash } from 'node:crypto';
 import { ZodError } from 'zod';
+import { clientAddress } from './server-support.js';
 import type { ServerDependencies, ServerRouteContext } from './server-types.js';
 
 export async function createServerApp(environment: Environment): Promise<FastifyInstance> {
@@ -27,7 +29,10 @@ export async function createServerApp(environment: Environment): Promise<Fastify
         censor: '[REDACTED]',
       },
     },
-    trustProxy: true,
+    // Every hop, the caller included, may append to `X-Forwarded-For`, so trusting
+    // it would let anyone choose their own `request.ip` and with it their own rate
+    // limit bucket. Callers are identified by `clientAddress` instead.
+    trustProxy: false,
     bodyLimit: 64 * 1024,
   });
   const origins = new Set(
@@ -62,8 +67,28 @@ export async function createServerApp(environment: Environment): Promise<Fastify
     global: true,
     max: 120,
     timeWindow: '1 minute',
+    keyGenerator: rateLimitKey,
   });
   return app;
+}
+
+const SESSION_COOKIE_PREFIX = 'jcb_';
+
+/**
+ * Buckets a caller by their session when they have one, and by the address Fly
+ * reports otherwise. Signed-in traffic reaches us through Cloudflare, so every
+ * caller would otherwise share one edge address and one another's budget.
+ */
+export function rateLimitKey(request: FastifyRequest): string {
+  const sessionToken = Object.entries(request.cookies as Record<string, string | undefined>)
+    .filter(([name, value]) => name.startsWith(SESSION_COOKIE_PREFIX) && value !== undefined)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(([, value]) => value)
+    .join('|');
+  if (sessionToken !== '') {
+    return `session:${createHash('sha256').update(sessionToken).digest('hex').slice(0, 32)}`;
+  }
+  return `address:${clientAddress(request)}`;
 }
 
 export function registerFoundationRoutes(

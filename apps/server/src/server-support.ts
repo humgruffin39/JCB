@@ -3,6 +3,7 @@ import type { Environment } from '@jcb/config';
 import { jstDateTimeToTimestamp, timestamp, toJstDateKey } from '@jcb/domain';
 import type { DomainError } from '@jcb/domain';
 import type { SqliteDatabase } from '@jcb/database';
+import type { FastifyRequest } from 'fastify';
 
 export function envelope<Result>(result: Result): {
   readonly apiVersion: 'v1';
@@ -75,6 +76,20 @@ export function findOptionalInternalUserId(
 
 export function hashIp(ip: string, secret: string): string {
   return createHash('sha256').update(`${secret}:${ip}`).digest('hex');
+}
+
+/**
+ * The caller address as observed by infrastructure we control.
+ *
+ * `X-Forwarded-For` is appended to by every hop including the client, so it can
+ * never identify a caller on its own. Fly's proxy overwrites `Fly-Client-IP` on
+ * every request, which makes it the one address a caller cannot choose.
+ */
+export function clientAddress(request: FastifyRequest): string {
+  const header = request.headers['fly-client-ip'];
+  const flyClientIp = Array.isArray(header) ? header[0] : header;
+  if (typeof flyClientIp === 'string' && flyClientIp.trim() !== '') return flyClientIp.trim();
+  return request.ip;
 }
 
 export function withoutUndefined(input: object): object {

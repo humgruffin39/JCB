@@ -12,9 +12,16 @@ import {
   type SimulationInput,
 } from '@jcb/simulation';
 
-export const ODDS_VERSION = 'outcome-20000-v5-seven-bet-types-temp18';
+export const ODDS_VERSION = 'outcome-20000-v6-seven-bet-types-untempered';
 export const DEFAULT_SIMULATION_COUNT = 20_000;
-export const ODDS_TEMPERATURE = 1.8;
+/**
+ * Seed liquidity is placed at these probabilities while the race is run from the
+ * untempered ones, so flattening them hands back a positive expectation to
+ * whoever backs the horses the flattening under-prices. At 1 the seed is priced
+ * at the model's own probability, which leaves every selection at or below break
+ * even once a stake dilutes its own payout.
+ */
+export const ODDS_TEMPERATURE = 1;
 
 export interface SelectionProbability {
   readonly selectionCode: string;

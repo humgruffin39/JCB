@@ -4,7 +4,7 @@ import type { SimulationInput } from '@jcb/simulation';
 import { settleParimutuelPool } from '@jcb/economy';
 import { currentOddsTenths } from './current-odds.js';
 import { allocateSeedLiquidity, planAdaptiveSeedLiquidity } from './liquidity.js';
-import { generateProbabilities, temperProbabilities } from './probabilities.js';
+import { generateProbabilities, temperProbabilities, ODDS_TEMPERATURE } from './probabilities.js';
 
 const entries: readonly RaceEntry[] = Array.from({ length: 8 }, (_, index) => ({
   horseNumber: index + 1,
@@ -134,5 +134,49 @@ describe('currentOddsTenths winning selection count', () => {
     // The displayed figure floors to a tenth, so it may sit one tenth under.
     expect(actualTenths - shownTenths).toBeGreaterThanOrEqual(0n);
     expect(actualTenths - shownTenths).toBeLessThanOrEqual(1n);
+  });
+});
+
+describe('seed pricing leaves no profitable selection', () => {
+  it('keeps every stake on every horse at or below break even', () => {
+    // Seed liquidity is the house position. If it is placed at a probability
+    // below a horse's real chance, backing that horse pays more than it should
+    // and the central bank funds the difference every race.
+    const trueProbabilities = [0.3, 0.2, 0.15, 0.12, 0.09, 0.07, 0.05, 0.02];
+    const simulationCount = 20_000;
+    const selections = trueProbabilities.length;
+    const modelled = temperProbabilities(
+      trueProbabilities.map((probability) => {
+        const smoothed =
+          (probability * simulationCount + 0.5) / (simulationCount + 0.5 * selections);
+        return 0.95 * smoothed + 0.05 * (1 / selections);
+      }),
+      ODDS_TEMPERATURE,
+    );
+    const seedTotal = money(10_000n);
+    const seeds = allocateSeedLiquidity(
+      seedTotal,
+      modelled.map((probability, index) => ({
+        selectionCode: String(index + 1),
+        modelProbability: probability,
+        baseOdds: 1 / probability,
+      })),
+    );
+
+    for (const [index, probability] of trueProbabilities.entries()) {
+      for (let stake = 100; stake <= 5_000; stake += 100) {
+        const odds =
+          Number(
+            currentOddsTenths(
+              seedTotal,
+              money(BigInt(stake)),
+              seeds[index]!.stake,
+              money(BigInt(stake)),
+            ),
+          ) / 10;
+        const expectedValue = probability * odds * stake - stake;
+        expect(expectedValue).toBeLessThanOrEqual(0);
+      }
+    }
   });
 });

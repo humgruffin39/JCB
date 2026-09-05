@@ -1,4 +1,4 @@
-import { edgeAccessClaimsSchema, signedManifestSchema } from '@jcb/contracts';
+import { canonicalJson, edgeAccessClaimsSchema, signedManifestSchema } from '@jcb/contracts';
 import type { z } from 'zod';
 
 export async function verifyAccessToken(
@@ -41,7 +41,7 @@ export async function verifyManifest(
     'Ed25519',
     key,
     webBuffer(base64UrlToBytes(signed.signature)),
-    new TextEncoder().encode(stableStringify(signed.manifest)),
+    new TextEncoder().encode(canonicalJson(signed.manifest)),
   );
   if (!valid) throw new Error('MANIFEST_SIGNATURE_INVALID');
   return signed.manifest;
@@ -130,17 +130,6 @@ async function importEd25519PublicKey(value: string): Promise<CryptoKey> {
     false,
     ['verify'],
   );
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
 }
 
 function base64UrlToText(value: string): string {

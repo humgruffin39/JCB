@@ -10,6 +10,7 @@ import {
   type KeyLike,
 } from 'node:crypto';
 import {
+  canonicalJson,
   edgeAccessClaimsSchema,
   releaseManifestSchema,
   signedManifestSchema,
@@ -86,7 +87,7 @@ export function signReleaseManifest(
   privateKey: KeyLike | string,
 ): SignedManifest {
   const manifest = releaseManifestSchema.parse(manifestInput);
-  const bytes = Buffer.from(stableStringify(manifest), 'utf8');
+  const bytes = Buffer.from(canonicalJson(manifest), 'utf8');
   return {
     manifest,
     signature: sign(null, bytes, privateKey).toString('base64url'),
@@ -100,7 +101,7 @@ export function verifyReleaseManifest(
   const signed = signedManifestSchema.parse(input);
   const isValid = verify(
     null,
-    Buffer.from(stableStringify(signed.manifest), 'utf8'),
+    Buffer.from(canonicalJson(signed.manifest), 'utf8'),
     publicKey,
     Buffer.from(signed.signature, 'base64url'),
   );
@@ -188,15 +189,4 @@ function deriveKey(masterSecret: string, salt: string, info: string): Buffer {
 
 function base64UrlJson(value: unknown): string {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, nested]) => `${JSON.stringify(key)}:${stableStringify(nested)}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
 }

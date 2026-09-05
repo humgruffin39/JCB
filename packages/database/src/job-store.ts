@@ -8,6 +8,7 @@ import {
   type JobType,
   type ScheduledJob,
 } from '@jcb/application';
+import { canonicalJson } from '@jcb/contracts';
 import { DomainError, timestamp, type Timestamp } from '@jcb/domain';
 import { ulid } from 'ulid';
 
@@ -192,19 +193,6 @@ export class SqliteJobStore implements JobStore {
       .run(BigInt(now), BigInt(now), BigInt(cutoff));
     return result.changes;
   }
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value as Readonly<Record<string, unknown>>).sort(
-      ([left], [right]) => left.localeCompare(right),
-    );
-    return `{${entries
-      .map(([key, nested]) => `${JSON.stringify(key)}:${canonicalJson(nested)}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value);
 }
 
 function mapJob(row: JobRow): ScheduledJob {

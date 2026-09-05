@@ -84,6 +84,10 @@
   left: 0;
   display: grid;
   width: 100%;
+  /* Without this the safe-area padding is added to a full-width box, so the row
+     is wider than the screen and its end-aligned cell rides over the neighbour
+     it should sit beside. A notch makes the overflow big enough to see. */
+  box-sizing: border-box;
   min-height: 4.75rem;
   padding: max(1rem, var(--race-safe-top)) max(clamp(1rem, 2.5vw, 2.5rem), var(--race-safe-right))
     1rem max(clamp(1rem, 2.5vw, 2.5rem), var(--race-safe-left));
@@ -832,6 +836,29 @@
   color: #fff;
   background: rgb(0 0 0 / 72%);
   font: 700 0.68rem/1 var(--font-display);
+}
+
+/*
+ * A landscape phone is wide enough to keep the desktop row but not wide enough
+ * for its reserved widths: the end-aligned status column overflowed leftwards
+ * and put the course indicator on top of the running order. Same arrangement,
+ * tighter gaps and reservations, so the three cells fit side by side.
+ */
+@media (max-width: 64rem) {
+  .broadcast-hud {
+    grid-template-columns: minmax(6rem, 1fr) auto minmax(8rem, 1fr);
+    gap: 0.75rem;
+  }
+
+  .broadcast-race-status .broadcast-clock {
+    width: 5.75rem;
+    min-width: 5.75rem;
+    flex-basis: 5.75rem;
+  }
+
+  .course-progress {
+    width: 4rem;
+  }
 }
 
 @media (max-width: 52rem) {

@@ -146,6 +146,11 @@ export class SqliteViewerStore {
         `${POOL_TYPE_DEFINITIONS[poolType].label} selection is required; the full odds list is not exposed.`,
       );
     }
+    const race = this.database
+      .prepare('SELECT final_odds_json AS finalOddsJson FROM races WHERE id = ?')
+      .get(raceId) as { finalOddsJson: string | null } | undefined;
+    if (race === undefined) throw new Error('Race not found.');
+    const finalOdds = parseFinalOdds(race.finalOddsJson);
     const rows = this.database
       .prepare(
         `SELECT op.selection_code AS selectionCode, op.base_odds AS baseOdds,
@@ -171,14 +176,17 @@ export class SqliteViewerStore {
     return rows.map((row) => ({
       selectionCode: row.selectionCode,
       baseOdds: row.baseOdds.toFixed(1),
-      currentOdds: formatOdds(
-        currentOddsTenths(
-          money(row.seedLiquidity),
-          money(row.totalUserStake),
-          money(row.seedStake),
-          money(row.userSelectionStake),
+      currentOdds:
+        finalOdds.get(`${poolType}:${row.selectionCode}`) ??
+        formatOdds(
+          currentOddsTenths(
+            money(row.seedLiquidity),
+            money(row.totalUserStake),
+            money(row.seedStake),
+            money(row.userSelectionStake),
+            POOL_TYPE_DEFINITIONS[poolType].winningSelectionCount,
+          ),
         ),
-      ),
     }));
   }
 
@@ -276,20 +284,36 @@ export class SqliteViewerStore {
   }
 }
 
-export function parseFinalWinOdds(value: string | null): ReadonlyMap<number, string> {
+/**
+ * Odds snapshotted when betting closed, keyed by `poolType:selectionCode`.
+ *
+ * Once betting is closed these are the only correct figures to show: the live
+ * calculation counts open bets, and settlement moves every bet out of `open`,
+ * which would make the recalculated odds jump the moment a race is settled.
+ */
+export function parseFinalOdds(value: string | null): ReadonlyMap<string, string> {
   if (value === null) return new Map();
   try {
     const parsed: unknown = JSON.parse(value);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return new Map();
-    const odds = new Map<number, string>();
-    for (let horseNumber = 1; horseNumber <= 8; horseNumber += 1) {
-      const candidate = (parsed as Readonly<Record<string, unknown>>)[`win:${String(horseNumber)}`];
+    const odds = new Map<string, string>();
+    for (const [key, candidate] of Object.entries(parsed as Readonly<Record<string, unknown>>)) {
       if (typeof candidate === 'string' && /^\d+(?:\.\d+)?$/.test(candidate)) {
-        odds.set(horseNumber, candidate);
+        odds.set(key, candidate);
       }
     }
     return odds;
   } catch {
     return new Map();
   }
+}
+
+export function parseFinalWinOdds(value: string | null): ReadonlyMap<number, string> {
+  const odds = parseFinalOdds(value);
+  const winOdds = new Map<number, string>();
+  for (let horseNumber = 1; horseNumber <= 8; horseNumber += 1) {
+    const candidate = odds.get(`win:${String(horseNumber)}`);
+    if (candidate !== undefined) winOdds.set(horseNumber, candidate);
+  }
+  return winOdds;
 }

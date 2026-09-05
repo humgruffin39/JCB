@@ -3,6 +3,7 @@ import { decryptAesGcmWithKeys, deriveResultKey, type EncryptedPayload } from '@
 import {
   identifier,
   money,
+  POOL_TYPE_DEFINITIONS,
   POOL_TYPES,
   transitionRace,
   winningSelections,
@@ -346,6 +347,7 @@ export class SqliteRaceLifecycleStore {
             money(row.totalUserStake),
             money(row.seedSelectionStake),
             money(row.userSelectionStake),
+            POOL_TYPE_DEFINITIONS[row.poolType].winningSelectionCount,
           ),
         ),
       ]),

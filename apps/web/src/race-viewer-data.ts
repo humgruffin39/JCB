@@ -11,6 +11,16 @@ type RaceStatus = Awaited<ReturnType<typeof getRace>>['status'];
 
 const RESULT_STATUSES: ReadonlySet<RaceStatus> = new Set(['finished', 'settling', 'settled']);
 
+// Settlement runs on the scheduler a few seconds after the timeline ends, so the
+// results screen is on show before payouts exist. Tickets fetched before then are
+// still `open` with a zero payout, which would read as a losing ticket.
+const SETTLEMENT_POLL_INTERVAL_MS = 4_000;
+const SETTLEMENT_POLL_MAX_ATTEMPTS = 60;
+
+export function hasUnsettledBet(bets: readonly RaceViewerBet[]): boolean {
+  return bets.some((bet) => bet.status === 'open');
+}
+
 export function shouldFetchRaceResult(status: RaceStatus, resultRequested: boolean): boolean {
   return resultRequested || RESULT_STATUSES.has(status);
 }
@@ -34,32 +44,53 @@ export function useRaceViewerData({
   const [result, setResult] = useState<RaceViewerResult>();
   const [resultError, setResultError] = useState<string>();
 
+  const awaitingSettlement = shouldFetchRaceResult(raceStatus, resultRequested);
+
   useEffect(() => {
     let cancelled = false;
-    setBets([]);
-    setBetsLoading(true);
-    setBetsError(undefined);
-    void apiRequest<unknown>(`/api/v1/races/${encodeURIComponent(raceId)}/my-bets`)
-      .then((value) => betResponseSchema.array().parse(value))
-      .then((value) => {
+    let timer: number | undefined;
+    let attempts = 0;
+
+    const scheduleRetry = (shouldRetry: boolean): void => {
+      if (!shouldRetry || cancelled || !awaitingSettlement) return;
+      if (attempts >= SETTLEMENT_POLL_MAX_ATTEMPTS) return;
+      timer = window.setTimeout(() => void load(), SETTLEMENT_POLL_INTERVAL_MS);
+    };
+
+    const load = async (): Promise<void> => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const value = betResponseSchema
+          .array()
+          .parse(await apiRequest<unknown>(`/api/v1/races/${encodeURIComponent(raceId)}/my-bets`));
         if (cancelled) return;
         setBets(value);
         setBetsLoading(false);
-      })
-      .catch((error: unknown) => {
+        setBetsError(undefined);
+        scheduleRetry(hasUnsettledBet(value));
+      } catch (error) {
         if (cancelled) return;
         setBetsLoading(false);
-        setBetsError(
-          publicErrorMessage(
-            error,
-            '購入情報を取得できません。Discordの#競馬から観戦リンクを開き直してください。',
-          ),
-        );
-      });
+        // A failed refresh leaves the tickets already on screen alone.
+        if (attempts === 1) {
+          setBetsError(
+            publicErrorMessage(
+              error,
+              '購入情報を取得できません。Discordの#競馬から観戦リンクを開き直してください。',
+            ),
+          );
+        }
+        scheduleRetry(true);
+      }
+    };
+
+    void load();
     return () => {
       cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [raceId]);
+  }, [raceId, awaitingSettlement]);
 
   useEffect(() => {
     setResult(undefined);

@@ -120,7 +120,7 @@ export function ResultsScreen({
                   </span>
                 </div>
                 <div className="ticket-payout">
-                  <strong>{BigInt(bet.payout) > 0n ? formatRupees(bet.payout) : 'はずれ'}</strong>
+                  <strong>{ticketOutcomeLabel(bet)}</strong>
                 </div>
               </li>
             ))}
@@ -132,6 +132,17 @@ export function ResultsScreen({
       </button>
     </div>
   );
+}
+
+/**
+ * A ticket is only a losing ticket once it has actually been settled. Until then
+ * it still reads `open` with a zero payout, and calling that a loss shows every
+ * winner "はずれ" for as long as settlement takes.
+ */
+export function ticketOutcomeLabel(bet: Pick<Bet, 'status' | 'payout'>): string {
+  if (bet.status === 'open') return '精算中';
+  if (bet.status === 'refunded') return '返還';
+  return BigInt(bet.payout) > 0n ? formatRupees(bet.payout) : 'はずれ';
 }
 
 export function selectionCodeAriaLabel(selectionCode: string): string {

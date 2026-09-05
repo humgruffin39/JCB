@@ -244,7 +244,7 @@
 
 .course-progress {
   display: block;
-  width: clamp(4.4rem, 6.2vw, 5.6rem);
+  width: clamp(2.85rem, 4vw, 3.65rem);
   height: 2.75rem;
   overflow: visible;
   fill: none;
@@ -852,14 +852,16 @@
     gap: 0.75rem;
   }
 
+  /* Six tabular characters is the longest reading a race produces, so the box
+     reserves exactly that and stops stranding the indicator to its left. */
   .broadcast-race-status .broadcast-clock {
-    width: 5.75rem;
-    min-width: 5.75rem;
-    flex-basis: 5.75rem;
+    width: 6ch;
+    min-width: 6ch;
+    flex-basis: 6ch;
   }
 
   .course-progress {
-    width: 4rem;
+    width: 2.6rem;
   }
 }
 
@@ -908,13 +910,13 @@
   }
 
   .course-progress {
-    width: 4rem;
+    width: 2.6rem;
   }
 
   .broadcast-race-status .broadcast-clock {
-    width: 5.75rem;
-    min-width: 5.75rem;
-    flex-basis: 5.75rem;
+    width: 6ch;
+    min-width: 6ch;
+    flex-basis: 6ch;
   }
 
   .running-order {

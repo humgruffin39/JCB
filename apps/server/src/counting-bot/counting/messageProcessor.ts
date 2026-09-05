@@ -42,9 +42,13 @@ export class MessageProcessor {
     }
 
     if (transition.kind === 'accepted' || transition.kind === 'failed') {
-      this.economy.apply(message, transition.kind);
+      const outcome = transition.kind;
+      this.store.saveWith(transition.state, () => {
+        this.economy.apply(message, outcome);
+      });
+    } else {
+      await this.store.save(transition.state);
     }
-    await this.store.save(transition.state);
     this.state = transition.state;
 
     if (transition.kind === 'accepted') {

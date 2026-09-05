@@ -80,8 +80,18 @@ export class StateStore {
   }
 
   public async save(state: BotState): Promise<void> {
+    this.saveWith(state, () => undefined);
+  }
+
+  /**
+   * Persists the state together with the balance movement the same message
+   * caused. Writing them separately can credit or debit a count and then lose
+   * the state that says the count was processed, or the reverse.
+   */
+  public saveWith(state: BotState, work: () => void): void {
     const validated = parseState(state);
     const write = this.database.transaction(() => {
+      work();
       this.writeStatement.run(
         validated.guildId,
         validated.channelId,

@@ -49,11 +49,22 @@ export function useRaceViewerTimeline({
   }>(() => ({ raceKey, viewer: WAITING_TIMELINE }));
   const onLoadedPastEndRef = useRef(onLoadedPastEnd);
   onLoadedPastEndRef.current = onLoadedPastEnd;
+  // The clock offset is measured over several round trips, so it lands well
+  // after playback has begun. Reading it through a ref keeps that arrival from
+  // restarting the effect, which would abort the timeline mid-race, show the
+  // loading screen again and download the whole thing a second time.
+  const serverOffsetRef = useRef(serverOffset);
+  serverOffsetRef.current = serverOffset;
+  const resourceRef = useRef(resource);
+  resourceRef.current = resource;
 
   useEffect(() => {
     let cancelled = false;
     let opening = false;
-    let loaded = false;
+    // A timeline already loaded for this race stays loaded. Only a different
+    // race, which remounts this hook, needs fetching again.
+    let loaded =
+      resourceRef.current.raceKey === raceKey && resourceRef.current.viewer.state === 'ready';
     let permanentlyUnavailable = false;
     const retryPolicy = createViewerRetryPolicy();
     let retryAt = 0;
@@ -76,7 +87,7 @@ export function useRaceViewerTimeline({
         });
         return;
       }
-      const authoritativeNow = Date.now() + serverOffset;
+      const authoritativeNow = Date.now() + serverOffsetRef.current;
       if (authoritativeNow < race.viewerOpensAt && !ACTIVE_STATUSES.has(race.status)) {
         if (!cancelled) {
           setResource({
@@ -129,7 +140,7 @@ export function useRaceViewerTimeline({
           raceKey,
           viewer: { state: 'ready', frames: timeline.frames, duration: timeline.duration },
         });
-        if (Date.now() + serverOffset >= race.scheduledAt + timeline.duration) {
+        if (Date.now() + serverOffsetRef.current >= race.scheduledAt + timeline.duration) {
           onLoadedPastEndRef.current();
         }
       } catch (error) {
@@ -161,7 +172,7 @@ export function useRaceViewerTimeline({
       controller.abort();
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [race.id, race.scheduledAt, race.status, race.version, race.viewerOpensAt, serverOffset]);
+  }, [raceKey, race.id, race.scheduledAt, race.status, race.version, race.viewerOpensAt]);
 
   return resource.raceKey === raceKey ? resource.viewer : WAITING_TIMELINE;
 }

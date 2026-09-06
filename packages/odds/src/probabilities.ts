@@ -12,7 +12,7 @@ import {
   type SimulationInput,
 } from '@jcb/simulation';
 
-export const ODDS_VERSION = 'outcome-20000-v6-seven-bet-types-untempered';
+export const ODDS_VERSION = 'outcome-20000-v7-seven-bet-types-condition-free';
 export const DEFAULT_SIMULATION_COUNT = 20_000;
 /**
  * Seed liquidity is placed at these probabilities while the race is run from the

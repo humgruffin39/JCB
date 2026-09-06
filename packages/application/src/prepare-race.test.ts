@@ -1,7 +1,9 @@
 import { identifier, timestamp } from '@jcb/domain';
+import type { SimulationInput } from '@jcb/simulation';
 import { describe, expect, it, vi } from 'vitest';
 import {
   prepareRace,
+  withPricedConditions,
   type PrepareRaceDependencies,
   type RacePreparationStart,
 } from './prepare-race.js';
@@ -81,5 +83,69 @@ describe('prepareRace', () => {
       'RACE_PREPARATION_FAILED',
       'odds failed',
     );
+  });
+});
+
+describe('withPricedConditions', () => {
+  it('prices every horse at normal so the card stays worth reading', () => {
+    const varied: typeof start.input = {
+      ...start.input,
+      entries: start.input.entries.map((entry, index) => ({
+        ...entry,
+        condition: (['terrible', 'poor', 'normal', 'good', 'excellent'] as const)[index % 5]!,
+      })),
+    };
+    expect(withPricedConditions(varied).entries.map((entry) => entry.condition)).toEqual(
+      Array.from({ length: 8 }, () => 'normal'),
+    );
+  });
+
+  it('leaves the original input untouched for the official run', () => {
+    const varied: typeof start.input = {
+      ...start.input,
+      entries: start.input.entries.map((entry) => ({ ...entry, condition: 'excellent' as const })),
+    };
+    withPricedConditions(varied);
+    expect(varied.entries.every((entry) => entry.condition === 'excellent')).toBe(true);
+  });
+
+  it('keeps everything except condition', () => {
+    const priced = withPricedConditions(start.input);
+    expect(priced.distanceM).toBe(start.input.distanceM);
+    expect(priced.surface).toBe(start.input.surface);
+    expect(priced.entries.map((entry) => entry.horse)).toEqual(
+      start.input.entries.map((entry) => entry.horse),
+    );
+  });
+});
+
+describe('prepareRace pricing input', () => {
+  it('quotes odds without condition while the race keeps it', async () => {
+    const varied: RacePreparationStart = {
+      ...start,
+      input: {
+        ...start.input,
+        entries: start.input.entries.map((entry) => ({
+          ...entry,
+          condition: 'excellent' as const,
+        })),
+      },
+    };
+    let pricedInput: SimulationInput | undefined;
+    const generate = vi.fn(async (input: SimulationInput) => {
+      pricedInput = input;
+      throw new Error('stop after the generator was called');
+    });
+    const repository = { begin: () => varied, fail: vi.fn() };
+    const dependency = {
+      ...dependencies(repository),
+      probabilityGenerator: { generate },
+    } as PrepareRaceDependencies;
+
+    await expect(prepareRace('race-1', dependency)).rejects.toThrow(/stop after/);
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(pricedInput?.entries.every((entry) => entry.condition === 'normal')).toBe(true);
+    // The locked lineup the official race runs on still carries its conditions.
+    expect(varied.input.entries.every((entry) => entry.condition === 'excellent')).toBe(true);
   });
 });

@@ -77,6 +77,23 @@ export interface PrepareRaceDependencies {
   readonly seedLiquidity?: SeedLiquidity;
 }
 
+/**
+ * The input the odds are priced from.
+ *
+ * Condition is rolled when the race is locked and published with the card, so
+ * pricing it into the odds would leave the reader nothing to do with it: the
+ * price would already say what the emoji says. Quoting from ability alone and
+ * running the race on the real conditions is what makes reading the card worth
+ * something. Every horse is priced at `normal`, whose condition factor is
+ * exactly one.
+ */
+export function withPricedConditions(input: SimulationInput): SimulationInput {
+  return {
+    ...input,
+    entries: input.entries.map((entry) => ({ ...entry, condition: 'normal' as const })),
+  };
+}
+
 export async function prepareRace(
   raceId: string,
   dependencies: PrepareRaceDependencies,
@@ -86,7 +103,7 @@ export async function prepareRace(
     start = dependencies.repository.begin(raceId);
     const [official, probabilities] = await Promise.all([
       Promise.resolve(simulateOfficialRace(start.input, start.officialSeed)),
-      dependencies.probabilityGenerator.generate(start.input, start.oddsSeed),
+      dependencies.probabilityGenerator.generate(withPricedConditions(start.input), start.oddsSeed),
     ]);
     const resultKey = deriveResultKey(
       dependencies.resultMasterSecret,

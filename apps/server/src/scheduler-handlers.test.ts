@@ -123,10 +123,13 @@ describe('scheduler cancellation cleanup', () => {
       await handlers.refresh_race_message!(job);
       expect(raceMessage.edit).toHaveBeenCalledTimes(1);
       const edit = raceMessage.edit.mock.calls[0]?.[0] as unknown as {
-        readonly components: readonly [{ readonly components: readonly unknown[] }];
+        readonly components: readonly [
+          { readonly components: readonly unknown[] },
+          { readonly components: readonly unknown[] },
+        ];
       };
       expect(edit.components[0]?.components[0]).toMatchObject({ data: { disabled: true } });
-      expect(edit.components[0]?.components[4]).toMatchObject({ data: { disabled: true } });
+      expect(edit.components[1]?.components[0]).toMatchObject({ data: { disabled: true } });
       expect(channel.messages.delete).toHaveBeenCalledWith('reminder-message');
       expect(
         database

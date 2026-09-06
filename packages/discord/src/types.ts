@@ -5,6 +5,7 @@ export interface DiscordRaceHorse {
   readonly name: string;
   readonly condition: Condition;
   readonly currentWinOdds: string;
+  readonly baseWinOdds: string;
 }
 
 export interface DiscordFinishOrder {

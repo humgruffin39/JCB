@@ -228,9 +228,12 @@ describe('Discord race message viewer invalidation', () => {
     const oldEditPayload = (
       oldMessage.edit.mock.calls as unknown as readonly [unknown][]
     )?.[0]?.[0] as {
-      readonly components: readonly [{ readonly components: readonly unknown[] }];
+      readonly components: readonly [
+        { readonly components: readonly unknown[] },
+        { readonly components: readonly unknown[] },
+      ];
     };
-    expect(oldEditPayload.components[0]?.components[4]).toMatchObject({
+    expect(oldEditPayload.components[1]?.components[0]).toMatchObject({
       data: { disabled: true },
     });
 

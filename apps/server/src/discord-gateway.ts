@@ -12,6 +12,7 @@ import {
   handlePurchaseInteraction,
   horseSelectionEmojis,
   renderHorseInfoMessage,
+  renderInitialOddsMessage,
   renderRaceMessage,
 } from '@jcb/discord';
 import { DomainError, money, POOL_TYPE_DEFINITIONS, timestamp, type Clock } from '@jcb/domain';
@@ -145,6 +146,14 @@ export function wireDiscordGateway(input: {
         url.hash = new URLSearchParams({ ticket: issued.ticket, raceId }).toString();
         const reply = createViewerLinkReply(url.toString());
         await safeEphemeralReply(interaction, reply.content, reply.components);
+        return;
+      }
+      if (action === 'initial-odds' && raceId !== undefined) {
+        const detail = viewerStore.getRaceDetail(raceId);
+        await safeEphemeralEmbedReply(
+          interaction,
+          renderInitialOddsMessage({ horses: detail.entries.map(toDiscordRaceHorse) }).embeds,
+        );
         return;
       }
       if (action === 'horse-info' && raceId !== undefined) {
@@ -297,6 +306,18 @@ export async function publishRaceMessage(input: {
   }
 }
 
+function toDiscordRaceHorse(
+  entry: ReturnType<SqliteViewerStore['getRaceDetail']>['entries'][number],
+) {
+  return {
+    horseNumber: entry.horseNumber,
+    name: entry.name,
+    condition: entry.condition,
+    currentWinOdds: entry.currentWinOdds,
+    baseWinOdds: entry.baseWinOdds,
+  };
+}
+
 function renderRaceMessageForDetail(
   viewerStore: SqliteViewerStore,
   detail: ReturnType<SqliteViewerStore['getRaceDetail']>,
@@ -311,12 +332,7 @@ function renderRaceMessageForDetail(
     scheduledAt: timestamp(detail.scheduledAt),
     distanceM: detail.distanceM,
     surfaceLabel: detail.surface === 'turf' ? '芝' : 'ダート',
-    horses: detail.entries.map((entry) => ({
-      horseNumber: entry.horseNumber,
-      name: entry.name,
-      condition: entry.condition,
-      currentWinOdds: entry.currentWinOdds,
-    })),
+    horses: detail.entries.map(toDiscordRaceHorse),
     raceBetLimit: money(BigInt(detail.raceBetLimit)),
     carryover: money(BigInt(detail.carryover)),
     canBuy: detail.status === 'betting_open' && now < detail.bettingClosesAt,

@@ -25,7 +25,7 @@ const PLACE_LABELS: readonly string[] = [
 
 export function renderRaceMessage(card: DiscordRaceCard): {
   readonly embeds: readonly [EmbedBuilder];
-  readonly components: readonly [ActionRowBuilder<ButtonBuilder>];
+  readonly components: readonly [ActionRowBuilder<ButtonBuilder>, ActionRowBuilder<ButtonBuilder>];
 } {
   if (card.horses.length !== 8) throw new Error('Race message requires exactly eight horses.');
   const lines = renderHorseLines(card.horses, card.finishOrder);
@@ -42,6 +42,7 @@ export function renderRaceMessage(card: DiscordRaceCard): {
       ].join('\n'),
     )
     .setColor(0x25d9ff);
+  // Discord caps an action row at five buttons, so watching moves to its own row.
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`jcb:buy:${card.raceId}`)
@@ -53,17 +54,40 @@ export function renderRaceMessage(card: DiscordRaceCard): {
       .setLabel('出走馬情報')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
+      .setCustomId(`jcb:initial-odds:${card.raceId}`)
+      .setLabel('初期オッズ')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(`jcb:bets:${card.raceId}`)
       .setLabel('購入済み馬券')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('jcb:balance').setLabel('残高').setStyle(ButtonStyle.Secondary),
+  );
+  const viewRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`jcb:view:${card.raceId}`)
       .setLabel('観戦する')
       .setStyle(ButtonStyle.Success)
       .setDisabled(!card.canView),
   );
-  return { embeds: [embed], components: [row] };
+  return { embeds: [embed], components: [row, viewRow] };
+}
+
+/**
+ * The odds the model published before a single ticket was sold: ability and
+ * aptitude only, with neither the day's condition nor anyone's money in them.
+ * Reading it against the condition on the card is the whole point, so it is kept
+ * one tap away rather than crowding the card itself.
+ */
+export function renderInitialOddsMessage(card: Pick<DiscordRaceCard, 'horses'>): {
+  readonly embeds: readonly [EmbedBuilder];
+} {
+  const lines = card.horses.map((horse) => formatOddsLine(horse, horse.baseWinOdds));
+  return {
+    embeds: [
+      new EmbedBuilder().setDescription(['初期オッズ', '', ...lines].join('\n')).setColor(0x25d9ff),
+    ],
+  };
 }
 
 function renderHorseLines(
@@ -89,6 +113,10 @@ function renderHorseLines(
 function formatHorseLine(horse: DiscordRaceHorse, position: number | undefined): string {
   const prefix =
     position === undefined ? '' : `**${PLACE_LABELS[position - 1] ?? String(position)}** `;
+  return `${prefix}${formatOddsLine(horse, horse.currentWinOdds)}`;
+}
+
+function formatOddsLine(horse: DiscordRaceHorse, odds: string): string {
   const horseNumber = horseNumberEmoji(horse.horseNumber);
-  return `${prefix}${horseNumber} ${CONDITION_EMOJIS[horse.condition]} ${horse.name}  **${horse.currentWinOdds}倍**`;
+  return `${horseNumber} ${CONDITION_EMOJIS[horse.condition]} ${horse.name}  **${odds}倍**`;
 }

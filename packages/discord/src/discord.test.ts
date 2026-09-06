@@ -1,6 +1,6 @@
 import { money, timestamp } from '@jcb/domain';
 import type { Interaction } from 'discord.js';
-import { renderRaceMessage } from './race-message.js';
+import { renderInitialOddsMessage, renderRaceMessage } from './race-message.js';
 import {
   handlePurchaseInteraction,
   isPurchaseSessionValid,
@@ -23,6 +23,7 @@ describe('Discord contracts', () => {
         name: `試験馬${index + 1}`,
         condition: 'normal' as const,
         currentWinOdds: '4.2',
+        baseWinOdds: '4.2',
       })),
       raceBetLimit: money(5_000n),
       carryover: money(0n),
@@ -52,7 +53,7 @@ describe('Discord contracts', () => {
       '**８着** <:horse_6:1539913574695051274> <:normal:1538151937269301348> 試験馬6  **4.2倍**',
     ]);
     expect(message.components[0].components[0]?.toJSON()).toMatchObject({ disabled: true });
-    expect(message.components[0].components[4]?.toJSON()).toMatchObject({ disabled: false });
+    expect(message.components[1].components[0]?.toJSON()).toMatchObject({ disabled: false });
   });
 
   it('falls back to horse-number order when no finish order is provided', () => {
@@ -69,6 +70,7 @@ describe('Discord contracts', () => {
         name: `試験馬${index + 1}`,
         condition: 'normal' as const,
         currentWinOdds: '4.2',
+        baseWinOdds: '4.2',
       })),
       raceBetLimit: money(5_000n),
       carryover: money(0n),
@@ -96,6 +98,7 @@ describe('Discord contracts', () => {
         name: `試験馬${index + 1}`,
         condition: 'normal' as const,
         currentWinOdds: '4.2',
+        baseWinOdds: '4.2',
       })),
       raceBetLimit: money(5_000n),
       carryover: money(0n),
@@ -109,7 +112,13 @@ describe('Discord contracts', () => {
     expect(description).not.toContain('発走');
     expect(description).not.toContain('締切');
     expect(description).not.toContain('通常レース');
+    // Five is Discord's hard limit for one action row.
     expect(message.components[0].components).toHaveLength(5);
+    expect(message.components[1].components).toHaveLength(1);
+    expect(message.components[0].components[2]?.toJSON()).toMatchObject({
+      custom_id: 'jcb:initial-odds:01KZ21P85CEV9TV1S943C639WJ',
+      label: '初期オッズ',
+    });
     expect(message.components[0].components[1]?.toJSON()).toMatchObject({
       custom_id: 'jcb:horse-info:01KZ21P85CEV9TV1S943C639WJ',
       label: '出走馬情報',
@@ -120,7 +129,10 @@ describe('Discord contracts', () => {
         return 'custom_id' in json && json.custom_id.startsWith('jcb:detail:');
       }),
     ).toBe(false);
-    for (const component of message.components[0].components) {
+    for (const component of [
+      ...message.components[0].components,
+      ...message.components[1].components,
+    ]) {
       const json = component.toJSON();
       if ('custom_id' in json && json.custom_id !== undefined) {
         expect(json.custom_id.length).toBeLessThanOrEqual(100);
@@ -241,5 +253,66 @@ describe('Discord contracts', () => {
     } as unknown as PurchaseFlowDependencies;
 
     expect(await handlePurchaseInteraction(interaction, dependencies)).toBe(false);
+  });
+});
+
+describe('renderInitialOddsMessage', () => {
+  const horses = [
+    {
+      horseNumber: 1,
+      name: 'アットヴァロラント',
+      condition: 'poor' as const,
+      currentWinOdds: '31.9',
+      baseWinOdds: '24.5',
+    },
+    {
+      horseNumber: 2,
+      name: 'キングオー',
+      condition: 'excellent' as const,
+      currentWinOdds: '6.3',
+      baseWinOdds: '7.1',
+    },
+  ];
+
+  it('quotes the pre-sale odds instead of the live ones', () => {
+    const description = renderInitialOddsMessage({ horses }).embeds[0].data.description ?? '';
+    expect(description).toContain('**24.5倍**');
+    expect(description).toContain('**7.1倍**');
+    expect(description).not.toContain('31.9');
+    expect(description).not.toContain('6.3');
+  });
+
+  it('leads with a plain heading and drops the card footer', () => {
+    const embed = renderInitialOddsMessage({ horses }).embeds[0];
+    const description = embed.data.description ?? '';
+    expect(description.startsWith('初期オッズ\n\n')).toBe(true);
+    expect(embed.data.title).toBeUndefined();
+    expect(description).not.toContain('最大賭け金');
+    expect(description).not.toContain('キャリーオーバー');
+  });
+
+  it('keeps the card horse line style', () => {
+    const description = renderInitialOddsMessage({ horses }).embeds[0].data.description ?? '';
+    const card =
+      renderRaceMessage({
+        raceId: 'race-1',
+        version: 1,
+        name: 'テスト',
+        raceDate: '2026-09-05',
+        scheduledAt: timestamp(0),
+        distanceM: 2_000,
+        surfaceLabel: '芝',
+        horses: Array.from({ length: 8 }, (_, index) => ({
+          ...horses[index % 2]!,
+          horseNumber: index + 1,
+        })),
+        raceBetLimit: money(20_000n),
+        carryover: money(0n),
+        canBuy: true,
+        canView: false,
+      }).embeds[0].data.description ?? '';
+    // Both surfaces render a horse the same way apart from the odds figure.
+    expect(description).toContain('アットヴァロラント');
+    expect(card).toContain('アットヴァロラント');
   });
 });

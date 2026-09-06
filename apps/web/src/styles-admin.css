@@ -201,11 +201,36 @@
   border-bottom: 0;
 }
 
+/*
+ * Padding and borders belong inside an element's declared size. Without this the
+ * admin screens repeatedly grew wider than their container - dialogs past the
+ * viewport, fieldsets past their grid cell - which on a phone reads as the
+ * layout drifting sideways under the finger.
+ */
+.app-shell--admin,
+.app-shell--admin *,
+.app-shell--admin *::before,
+.app-shell--admin *::after,
+.admin-dialog,
+.admin-dialog *,
+.confirmation-dialog,
+.confirmation-dialog * {
+  box-sizing: border-box;
+}
+
 .admin-dialog {
   width: min(48rem, calc(100vw - 2rem));
-  max-height: calc(100dvh - 2rem);
+  /* Without border-box the padding is added to the width and the dialog ends up
+     wider than the screen, which lets a touch drag it sideways. `svh` keeps the
+     height from being recomputed while the browser chrome slides in and out,
+     and containing the overscroll stops a scroll from running on into the page
+     behind once the dialog reaches its end. */
+  box-sizing: border-box;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100svh - 2rem);
   padding: var(--space-4);
   overflow: auto;
+  overscroll-behavior: contain;
   color: var(--text);
   background: var(--surface-1);
   border: 0.0625rem solid var(--line-contrast);
@@ -342,6 +367,11 @@
 
 .confirmation-dialog {
   width: min(36rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100svh - 2rem);
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: var(--space-6);
   color: var(--text);
   background: var(--surface-1);
@@ -829,7 +859,8 @@
 
   .admin-dialog {
     width: calc(100vw - 1rem);
-    max-height: calc(100dvh - 1rem);
+    max-height: calc(100vh - 1rem);
+    max-height: calc(100svh - 1rem);
     padding: var(--space-3);
   }
 

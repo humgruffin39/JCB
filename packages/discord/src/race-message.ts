@@ -85,7 +85,9 @@ export function renderInitialOddsMessage(card: Pick<DiscordRaceCard, 'horses'>):
   const lines = card.horses.map((horse) => formatOddsLine(horse, horse.baseWinOdds));
   return {
     embeds: [
-      new EmbedBuilder().setDescription(['初期オッズ', '', ...lines].join('\n')).setColor(0x25d9ff),
+      new EmbedBuilder()
+        .setDescription(['**初期オッズ**', '', ...lines].join('\n'))
+        .setColor(0x25d9ff),
     ],
   };
 }

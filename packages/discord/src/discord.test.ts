@@ -285,7 +285,7 @@ describe('renderInitialOddsMessage', () => {
   it('leads with a plain heading and drops the card footer', () => {
     const embed = renderInitialOddsMessage({ horses }).embeds[0];
     const description = embed.data.description ?? '';
-    expect(description.startsWith('初期オッズ\n\n')).toBe(true);
+    expect(description.startsWith('**初期オッズ**\n\n')).toBe(true);
     expect(embed.data.title).toBeUndefined();
     expect(description).not.toContain('最大賭け金');
     expect(description).not.toContain('キャリーオーバー');

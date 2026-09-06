@@ -96,6 +96,30 @@ describe('economy integrity', () => {
     expect(estimatedGrossPayout(money(1_000n), money(10_000n), money(2_000n))).toBe(3_666n);
   });
 
+  it('quotes a place estimate that settlement can actually pay', () => {
+    const stake = money(100n);
+    const seeds = [
+      { selectionCode: '1', stake: money(300n) },
+      { selectionCode: '2', stake: money(300n) },
+      { selectionCode: '3', stake: money(300n) },
+      { selectionCode: '4', stake: money(300n) },
+    ];
+    const quoted = estimatedGrossPayout(stake, money(1_200n), money(300n), 3);
+    const settled = settleParimutuelPool({
+      poolAccountId: identifier('place-pool'),
+      centralBankAccountId: identifier('bank'),
+      winningSelections: ['1', '2', '3'],
+      poolBalance: money(1_300n),
+      tickets: [
+        { id: 'ticket', accountId: identifier('user'), selectionCode: '1', stake, createdAt: 1 },
+      ],
+      seedPositions: seeds,
+    }).payouts.find((payout) => payout.recipientId === 'ticket')!.amount;
+    // Rounding aside, the quote must not promise more than the pool pays.
+    expect(quoted).toBeLessThanOrEqual(settled + 1n);
+    expect(quoted).toBeGreaterThanOrEqual(settled - 1n);
+  });
+
   it('allocates the entire win pool between user and seed winners', () => {
     const result = settleWinPool({
       poolAccountId: identifier('win-pool'),

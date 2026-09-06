@@ -58,13 +58,26 @@ export function validatePurchase(input: PurchaseValidation): void {
   }
 }
 
+/**
+ * `winningSelectionCount` is how many selections the pool pays out. Place and
+ * wide split their balance into that many sub-pools, so quoting the whole pool
+ * against one selection would promise three times what settlement pays.
+ */
 export function estimatedGrossPayout(
   betAmount: Money,
   poolTotal: Money,
   selectionTotal: Money,
+  winningSelectionCount = 1,
 ): Money {
   if (betAmount <= 0n || poolTotal < 0n || selectionTotal < 0n) {
     throw new DomainError('INVALID_MONEY', 'Payout estimate inputs are invalid.');
   }
-  return nonNegativeMoney((betAmount * (poolTotal + betAmount)) / (selectionTotal + betAmount));
+  if (!Number.isInteger(winningSelectionCount) || winningSelectionCount < 1) {
+    throw new DomainError(
+      'INVALID_SELECTION',
+      'Winning selection count must be a positive integer.',
+    );
+  }
+  const payableShare = (poolTotal + betAmount) / BigInt(winningSelectionCount);
+  return nonNegativeMoney((betAmount * payableShare) / (selectionTotal + betAmount));
 }

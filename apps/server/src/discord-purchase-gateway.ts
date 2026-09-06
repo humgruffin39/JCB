@@ -4,7 +4,14 @@ import type { SqliteDatabase } from '@jcb/database';
 import { SqliteGameStore, SqliteJobStore } from '@jcb/database';
 import type { DiscordPurchaseGateway, PurchasePreview, PurchaseReceipt } from '@jcb/discord';
 import { estimatedGrossPayout } from '@jcb/economy';
-import { money, timestamp, type Clock, type Money, type PoolType } from '@jcb/domain';
+import {
+  money,
+  POOL_TYPE_DEFINITIONS,
+  timestamp,
+  type Clock,
+  type Money,
+  type PoolType,
+} from '@jcb/domain';
 
 export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
   private readonly gameStore: SqliteGameStore;
@@ -81,7 +88,12 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
         ? money((carryover * input.stake) / (row.userSelectionStake + input.stake))
         : money(0n);
     return {
-      estimatedBasePayout: estimatedGrossPayout(input.stake, poolTotal, selectionTotal),
+      estimatedBasePayout: estimatedGrossPayout(
+        input.stake,
+        poolTotal,
+        selectionTotal,
+        POOL_TYPE_DEFINITIONS[input.poolType].winningSelectionCount,
+      ),
       estimatedCarryoverBonus: carryoverBonus,
       balanceAfter: money(row.balance - input.stake),
     };

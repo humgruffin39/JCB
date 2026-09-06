@@ -6,6 +6,7 @@ import {
   clearCsrfToken,
   exchangeTicket,
   getRace,
+  readPublicEnvironment,
   refreshCsrfToken,
   setCsrfToken,
 } from './api.js';
@@ -13,7 +14,10 @@ import { initializationErrorMessage as getInitializationErrorMessage } from './p
 import { PublicState } from './public-state.js';
 import { isDiscordActivityLaunch } from './activity-launch.js';
 
-const ACCESS_REDIRECT_URL = 'https://youtu.be/dQw4w9WgXcQ';
+// Where a visitor without a race link is sent. Kept configurable so a deployment
+// can pick its own joke, or a real landing page.
+const ACCESS_REDIRECT_URL =
+  readPublicEnvironment('VITE_ACCESS_REDIRECT_URL') || 'https://youtu.be/dQw4w9WgXcQ';
 
 const AdminTerminal = lazy(async () => {
   const module = await import('./admin-terminal.js');

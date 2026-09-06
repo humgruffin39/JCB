@@ -10,6 +10,7 @@ import {
 import {
   formatDateKeyForDisplay,
   jstDateTimeToTimestamp,
+  money,
   timestamp,
   toJstDateKey,
 } from '@jcb/domain';
@@ -356,17 +357,21 @@ export function createHandlers(
         typeof job.payload.jstDate === 'string'
           ? job.payload.jstDate
           : toJstDateKey(dependencies.clock.now());
-      gameStore.grantDailyRelief(date);
+      gameStore.grantDailyRelief(date, {
+        threshold: money(dependencies.environment.RELIEF_BALANCE_THRESHOLD),
+        dailyMaximum: money(dependencies.environment.RELIEF_DAILY_MAXIMUM),
+      });
     },
     async economic_integrity_check() {
       gameStore.ledgerStore().assertProjectionIntegrity();
       const health = adminStore.health();
-      if (BigInt(health.centralBankBalance) < 2_000_000n) {
+      const lowBalance = dependencies.environment.CENTRAL_BANK_LOW_BALANCE;
+      if (BigInt(health.centralBankBalance) < lowBalance) {
         adminStore.recordAudit({
           action: 'economy.central_bank_low',
           targetType: 'account',
           targetId: 'central-bank',
-          reason: 'Central bank balance is below 2,000,000 CP.',
+          reason: `Central bank balance is below ${lowBalance.toLocaleString('ja-JP')} CP.`,
           after: { balance: health.centralBankBalance },
         });
         await sendAdminNotice(dependencies, {
@@ -378,7 +383,7 @@ export function createHandlers(
               name: '現在の残高',
               value: `${BigInt(health.centralBankBalance).toLocaleString('ja-JP')} CP`,
             },
-            { name: '警告水準', value: '2,000,000 CP', inline: true },
+            { name: '警告水準', value: `${lowBalance.toLocaleString('ja-JP')} CP`, inline: true },
           ],
         });
       }
@@ -409,6 +414,7 @@ export function createHandlers(
           database: dependencies.database,
           clock: dependencies.clock,
           channelId: dependencies.environment.DISCORD_RANKING_CHANNEL_ID,
+          bankName: dependencies.environment.BANK_DISPLAY_NAME,
         });
       }
     },

@@ -9,17 +9,22 @@ export interface CountEconomy {
   readonly apply: (message: CountMessage, outcome: CountOutcome) => void;
 }
 
-const acceptedReward = 10n;
-const failurePenalty = 5_000n;
+export const DEFAULT_COUNT_ACCEPTED_REWARD = 10n;
+export const DEFAULT_COUNT_FAILURE_PENALTY = 5_000n;
 
 export class SqliteCountEconomy implements CountEconomy {
   private readonly game: SqliteGameStore;
   private readonly bankAccountId: AccountId;
+  private readonly acceptedReward: bigint;
+  private readonly failurePenalty: bigint;
 
   public constructor(
     private readonly database: SqliteDatabase,
     private readonly now: () => number,
+    rewards: { readonly acceptedReward?: bigint; readonly failurePenalty?: bigint } = {},
   ) {
+    this.acceptedReward = rewards.acceptedReward ?? DEFAULT_COUNT_ACCEPTED_REWARD;
+    this.failurePenalty = rewards.failurePenalty ?? DEFAULT_COUNT_FAILURE_PENALTY;
     this.game = new SqliteGameStore(database, now);
     const bank = database
       .prepare(
@@ -38,8 +43,8 @@ export class SqliteCountEconomy implements CountEconomy {
 
     const amount =
       outcome === 'accepted'
-        ? acceptedReward
-        : bigintMinimum(this.game.ledgerStore().balance(accountId), failurePenalty);
+        ? this.acceptedReward
+        : bigintMinimum(this.game.ledgerStore().balance(accountId), this.failurePenalty);
     if (amount === 0n) {
       this.database
         .prepare(

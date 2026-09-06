@@ -279,6 +279,11 @@ export async function estimateServerOffset(): Promise<number> {
   );
 }
 
+/** Reads a build-time `VITE_*` value, returning an empty string when unset. */
+export function readPublicEnvironment(key: string): string {
+  return readEnvironmentString(browserEnvironment, key);
+}
+
 function readEnvironmentString(environment: unknown, key: string): string {
   if (typeof environment !== 'object' || environment === null || !(key in environment)) {
     return '';

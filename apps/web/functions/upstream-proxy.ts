@@ -1,5 +1,20 @@
 interface PagesRequestContext {
   readonly request: Request;
+  readonly env?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Reads the upstream origin a deployment was configured with. Self-hosted
+ * deployments set these in the Pages project; the fallback keeps an existing
+ * deployment working without a configuration change.
+ */
+export function upstreamOrigin(
+  context: PagesRequestContext,
+  name: string,
+  fallback: string,
+): string {
+  const configured = context.env?.[name];
+  return typeof configured === 'string' && configured.trim() !== '' ? configured.trim() : fallback;
 }
 
 export async function proxyRequest(

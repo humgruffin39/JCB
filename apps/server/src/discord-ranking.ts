@@ -85,6 +85,7 @@ export async function publishRankingMessages(input: {
   readonly database: SqliteDatabase;
   readonly clock: Clock;
   readonly channelId: string;
+  readonly bankName?: string;
 }): Promise<void> {
   const channel = await input.client.channels.fetch(input.channelId);
   if (channel === null || !channel.isSendable() || !('messages' in channel)) {
@@ -94,7 +95,7 @@ export async function publishRankingMessages(input: {
     input.clock.now(),
   ).calculateAndSave();
   const messageStore = new SqliteDiscordMessageStore(input.database, () => input.clock.now());
-  const contents = renderRankingMessages(snapshot);
+  const contents = renderRankingMessages(snapshot, input.bankName);
 
   for (const [index, content] of contents.entries()) {
     const purpose = `ranking:${String(index + 1)}`;
@@ -122,7 +123,10 @@ export async function publishRankingMessages(input: {
   }
 }
 
-export function renderRankingMessages(snapshot: RankingSnapshot): readonly string[] {
+export function renderRankingMessages(
+  snapshot: RankingSnapshot,
+  bankName = 'ジョサン中央銀行',
+): readonly string[] {
   const timestamp = `<t:${String(Math.floor(snapshot.calculatedAt / 1_000))}:R>`;
   const byBalance = [...snapshot.users].sort(
     (left, right) =>
@@ -142,19 +146,19 @@ export function renderRankingMessages(snapshot: RankingSnapshot): readonly strin
 
   return [
     rankingBlock(
-      `## ジョサン中央銀行 固定ランキング 1/3\n現在残高 / 通算収支 • 更新 ${timestamp}`,
+      `## ${bankName} 固定ランキング 1/3\n現在残高 / 通算収支 • 更新 ${timestamp}`,
       byBalance,
       (user, place) =>
         `${place}. ${safeName(user)}  残高 ${rup(user.currentBalance)} / 収支 ${signedRup(user.lifetimeProfit)}`,
     ),
     rankingBlock(
-      `## ジョサン中央銀行 固定ランキング 2/3\n通算払戻 / 単勝的中率 / 三連単的中 • 更新 ${timestamp}`,
+      `## ${bankName} 固定ランキング 2/3\n通算払戻 / 単勝的中率 / 三連単的中 • 更新 ${timestamp}`,
       byPayout,
       (user, place) =>
         `${place}. ${safeName(user)}  払戻 ${rup(user.totalPayout)} / 単勝 ${formatRate(user.winHitRateBasisPoints)} / 三連単 ${String(user.trifectaWins)}回`,
     ),
     rankingBlock(
-      `## ジョサン中央銀行 固定ランキング 3/3\n最高払戻 / 現在連敗 / 歴代最長連敗 • 更新 ${timestamp}`,
+      `## ${bankName} 固定ランキング 3/3\n最高払戻 / 現在連敗 / 歴代最長連敗 • 更新 ${timestamp}`,
       byMaximum,
       (user, place) =>
         `${place}. ${safeName(user)}  最高 ${rup(user.maximumPayout)} / 連敗 ${String(user.currentLosingStreak)} / 最長 ${String(user.longestLosingStreak)}`,

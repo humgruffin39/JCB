@@ -244,7 +244,10 @@ export function wireCountingGateway(input: {
     const initializedProcessor = new MessageProcessor(
       state,
       store,
-      new SqliteCountEconomy(input.database, () => input.clock.now()),
+      new SqliteCountEconomy(input.database, () => input.clock.now(), {
+        acceptedReward: input.environment.COUNT_ACCEPTED_REWARD,
+        failurePenalty: input.environment.COUNT_FAILURE_PENALTY,
+      }),
       failureExecutor,
       consecutiveWarningNotifier,
       config,

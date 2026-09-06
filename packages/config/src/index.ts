@@ -40,6 +40,14 @@ export const environmentSchema = z.object({
   COUNT_INITIAL_COUNT: z.preprocess(emptyAsUndefined, nonNegativeDecimal.default('0')),
   COUNTING_STATE_IMPORT_PATH: z.preprocess(emptyAsUndefined, z.string().min(1).optional()),
   INITIAL_ADMIN_DISCORD_IDS: z.string().default(''),
+  // Operator-facing naming and economy dials. The defaults reproduce the
+  // original Josan Central Bank setup so an existing deployment is unchanged.
+  BANK_DISPLAY_NAME: z.string().min(1).default('ジョサン中央銀行'),
+  COUNT_ACCEPTED_REWARD: z.coerce.bigint().min(0n).default(10n),
+  COUNT_FAILURE_PENALTY: z.coerce.bigint().min(0n).default(5_000n),
+  RELIEF_BALANCE_THRESHOLD: z.coerce.bigint().min(0n).default(5_000n),
+  RELIEF_DAILY_MAXIMUM: z.coerce.bigint().min(0n).default(1_000n),
+  CENTRAL_BANK_LOW_BALANCE: z.coerce.bigint().min(0n).default(2_000_000n),
   SESSION_SECRET: optionalSecret,
   TIMELINE_MASTER_SECRET: optionalSecret,
   TIMELINE_MASTER_SECRET_PREVIOUS: optionalSecret,

@@ -1,7 +1,10 @@
-import { proxyRequest } from '../upstream-proxy.js';
+import { proxyRequest, upstreamOrigin } from '../upstream-proxy.js';
 
-const API_ORIGIN = 'https://jcb-racing-api.fly.dev';
+const DEFAULT_API_ORIGIN = 'https://jcb-racing-api.fly.dev';
 
-export async function onRequest(context: { readonly request: Request }): Promise<Response> {
-  return proxyRequest(context, API_ORIGIN);
+export async function onRequest(context: {
+  readonly request: Request;
+  readonly env?: Readonly<Record<string, unknown>>;
+}): Promise<Response> {
+  return proxyRequest(context, upstreamOrigin(context, 'API_ORIGIN', DEFAULT_API_ORIGIN));
 }

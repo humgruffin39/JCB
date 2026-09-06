@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import {
   SqliteGameFinanceStore,
+  type ReliefOptions,
   type OpenBettingPoolsInput,
   type PurchaseBetInput,
   type PurchasedBet,
@@ -115,8 +116,8 @@ export class SqliteGameStore {
     return this.finance.purchaseBet(input);
   }
 
-  public grantDailyRelief(jstDate: string): number {
-    return this.finance.grantDailyRelief(jstDate);
+  public grantDailyRelief(jstDate: string, options: ReliefOptions = {}): number {
+    return this.finance.grantDailyRelief(jstDate, options);
   }
 
   public planSeedLiquidity(raceId: string) {

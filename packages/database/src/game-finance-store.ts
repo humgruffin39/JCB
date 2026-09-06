@@ -13,7 +13,14 @@ import {
   type Timestamp,
 } from '@jcb/domain';
 import type { RacePoolPreparation } from '@jcb/application';
-import { calculateRelief, reliefIdempotencyKey, transfer, validatePurchase } from '@jcb/economy';
+import {
+  calculateRelief,
+  DEFAULT_RELIEF_BALANCE_THRESHOLD,
+  DEFAULT_RELIEF_DAILY_MAXIMUM,
+  reliefIdempotencyKey,
+  transfer,
+  validatePurchase,
+} from '@jcb/economy';
 import {
   planAdaptiveSeedLiquidity,
   type SeedLiquidity,
@@ -44,6 +51,11 @@ export interface PurchasedBet {
   readonly id: string;
   readonly wasDuplicate: boolean;
   readonly balanceAfter: Money;
+}
+
+export interface ReliefOptions {
+  readonly threshold?: Money;
+  readonly dailyMaximum?: Money;
 }
 
 export interface OpenBettingPoolsInput {
@@ -237,7 +249,9 @@ export class SqliteGameFinanceStore {
     return run.immediate();
   }
 
-  public grantDailyRelief(jstDate: string): number {
+  public grantDailyRelief(jstDate: string, options: ReliefOptions = {}): number {
+    const threshold = options.threshold ?? DEFAULT_RELIEF_BALANCE_THRESHOLD;
+    const dailyMaximum = options.dailyMaximum ?? DEFAULT_RELIEF_DAILY_MAXIMUM;
     const run = this.database.transaction(() => {
       const centralBank = this.findSystemAccount('central_bank');
       const users = this.database
@@ -246,13 +260,13 @@ export class SqliteGameFinanceStore {
            FROM users u
            JOIN accounts a ON a.owner_key = u.id AND a.account_type = 'user'
            JOIN account_balances ab ON ab.account_id = a.id
-           WHERE u.status = 'active' AND ab.amount < 5000
+           WHERE u.status = 'active' AND ab.amount < ?
            ORDER BY u.id`,
         )
-        .all() as Array<{ userId: string; accountId: string; amount: bigint }>;
+        .all(threshold) as Array<{ userId: string; accountId: string; amount: bigint }>;
       let grants = 0;
       for (const user of users) {
-        const relief = calculateRelief(money(user.amount));
+        const relief = calculateRelief(money(user.amount), threshold, dailyMaximum);
         if (relief <= 0n) continue;
         const result = this.ledger.post({
           kind: 'relief',

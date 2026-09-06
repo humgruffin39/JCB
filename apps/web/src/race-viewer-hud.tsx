@@ -78,18 +78,13 @@ export function BroadcastHud({
 
 export const RaceViewerHud = BroadcastHud;
 
-/**
- * The viewBox is trimmed to the drawn track. A wider box would pad the element
- * with empty space that still takes part in layout, which pushes the indicator
- * away from the clock it belongs with and towards the running order.
- */
 export function CourseProgressIndicator({ progress }: { readonly progress: number }) {
   const clampedProgress = Math.max(0, Math.min(1, progress));
   const percentage = Math.round(clampedProgress * 100);
   return (
     <svg
       className="course-progress"
-      viewBox="14 0 52 42"
+      viewBox="0 0 80 42"
       role="img"
       aria-label={`先頭はコースの${String(percentage)}パーセント地点`}
     >

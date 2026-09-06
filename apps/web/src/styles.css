@@ -244,7 +244,7 @@
 
 .course-progress {
   display: block;
-  width: clamp(2.85rem, 4vw, 3.65rem);
+  width: clamp(4.4rem, 6.2vw, 5.6rem);
   height: 2.75rem;
   overflow: visible;
   fill: none;
@@ -840,28 +840,11 @@
   font: 700 0.68rem/1 var(--font-display);
 }
 
-/*
- * A landscape phone is wide enough to keep the desktop row but not wide enough
- * for its reserved widths: the end-aligned status column overflowed leftwards
- * and put the course indicator on top of the running order. Same arrangement,
- * tighter gaps and reservations, so the three cells fit side by side.
- */
+/* There is no room beside the running order on a phone, and the horses already
+   show how far the race has run. */
 @media (max-width: 64rem) {
-  .broadcast-hud {
-    grid-template-columns: minmax(6rem, 1fr) auto minmax(8rem, 1fr);
-    gap: 0.75rem;
-  }
-
-  /* Six tabular characters is the longest reading a race produces, so the box
-     reserves exactly that and stops stranding the indicator to its left. */
-  .broadcast-race-status .broadcast-clock {
-    width: 6ch;
-    min-width: 6ch;
-    flex-basis: 6ch;
-  }
-
   .course-progress {
-    width: 2.6rem;
+    display: none;
   }
 }
 
@@ -909,14 +892,10 @@
     display: none;
   }
 
-  .course-progress {
-    width: 2.6rem;
-  }
-
   .broadcast-race-status .broadcast-clock {
-    width: 6ch;
-    min-width: 6ch;
-    flex-basis: 6ch;
+    width: 5.75rem;
+    min-width: 5.75rem;
+    flex-basis: 5.75rem;
   }
 
   .running-order {

@@ -1,7 +1,7 @@
 import type { GuildMembership } from '@jcb/application';
 import { DEFAULT_GAME_SETTINGS, gameSettingsSchema } from '@jcb/config';
 import type { SqliteDatabase } from '@jcb/database';
-import { SqliteGameStore, SqliteJobStore } from '@jcb/database';
+import { raceBetLimitFor, SqliteGameStore, SqliteJobStore } from '@jcb/database';
 import type { DiscordPurchaseGateway, PurchasePreview, PurchaseReceipt } from '@jcb/discord';
 import { estimatedGrossPayout } from '@jcb/economy';
 import {
@@ -11,6 +11,7 @@ import {
   type Clock,
   type Money,
   type PoolType,
+  type RaceKind,
 } from '@jcb/domain';
 
 export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
@@ -26,6 +27,16 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
 
   public async currentRaceVersion(raceId: string): Promise<number> {
     return this.gameStore.getRace(raceId).version;
+  }
+
+  public async raceBetLimit(raceId: string): Promise<Money> {
+    const race = this.database
+      .prepare(
+        `SELECT kind, simulation_config_json AS simulationConfigJson FROM races WHERE id = ?`,
+      )
+      .get(raceId) as { kind: RaceKind; simulationConfigJson: string } | undefined;
+    if (race === undefined) throw new Error('Race not found.');
+    return money(BigInt(raceBetLimitFor(race.simulationConfigJson, race.kind)));
   }
 
   public async preview(input: {

@@ -211,6 +211,21 @@ export const DEFAULT_RACE_BET_LIMITS: Readonly<Record<RaceKind, number>> = {
   saturday_night: 20_000,
 };
 
+/** The per-race stake cap an operator configured, falling back to the built-in default. */
+export function raceBetLimitFor(simulationConfigJson: string, raceKind: RaceKind): number {
+  try {
+    const parsed = JSON.parse(simulationConfigJson) as {
+      readonly raceBetLimits?: Partial<Record<RaceKind, unknown>>;
+    };
+    const configured = parsed.raceBetLimits?.[raceKind];
+    return typeof configured === 'number' && Number.isSafeInteger(configured) && configured >= 0
+      ? configured
+      : DEFAULT_RACE_BET_LIMITS[raceKind];
+  } catch {
+    return DEFAULT_RACE_BET_LIMITS[raceKind];
+  }
+}
+
 export function selectCondition(
   randomUnit: number,
   probabilities: Readonly<Record<Condition, number>>,

@@ -16,3 +16,4 @@ export * from './race-preparation-repository.js';
 export * from './ranking-store.js';
 export * from './race-lifecycle-store.js';
 export * from './viewer-store.js';
+export { raceBetLimitFor } from './game-store-types.js';

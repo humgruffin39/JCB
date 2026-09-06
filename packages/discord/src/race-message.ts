@@ -37,7 +37,7 @@ export function renderRaceMessage(card: DiscordRaceCard): {
         '',
         ...lines,
         '',
-        `三連単プール: ${card.trifectaPoolTotal.toString()} CP`,
+        `最大賭け金: ${card.raceBetLimit.toLocaleString('ja-JP')} CP`,
         `キャリーオーバー: ${card.carryover.toString()} CP`,
       ].join('\n'),
     )

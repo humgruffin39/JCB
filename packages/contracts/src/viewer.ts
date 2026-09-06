@@ -64,6 +64,7 @@ export const raceDetailSchema = z.object({
   bettingClosesAt: timestampSchema,
   viewerOpensAt: timestampSchema,
   entries: z.array(publicRaceEntrySchema).length(8),
+  raceBetLimit: moneyStringSchema,
   trifectaPoolTotal: moneyStringSchema,
   carryover: moneyStringSchema,
 });

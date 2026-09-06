@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { POOL_TYPE_DEFINITIONS, money, type PoolType, type RaceStatus } from '@jcb/domain';
+import { raceBetLimitFor } from './game-store-types.js';
 import { currentOddsTenths, formatOdds } from '@jcb/odds';
 
 const HIGH_CARDINALITY_POOL_TYPES = new Set<PoolType>(['exacta', 'trio', 'trifecta']);
@@ -17,6 +18,7 @@ interface RaceDetailRow {
   readonly bettingClosesAt: bigint;
   readonly viewerOpensAt: bigint;
   readonly finalOddsJson: string | null;
+  readonly simulationConfigJson: string;
 }
 
 export class SqliteViewerStore {
@@ -48,7 +50,8 @@ export class SqliteViewerStore {
         `SELECT id, race_date AS raceDate, name, kind, status, version,
                 distance_m AS distanceM, surface, scheduled_at AS scheduledAt,
                 betting_closes_at AS bettingClosesAt, viewer_opens_at AS viewerOpensAt,
-                final_odds_json AS finalOddsJson
+                final_odds_json AS finalOddsJson,
+                simulation_config_json AS simulationConfigJson
          FROM races WHERE id = ?`,
       )
       .get(raceId) as RaceDetailRow | undefined;
@@ -127,6 +130,7 @@ export class SqliteViewerStore {
                 ),
               )),
       })),
+      raceBetLimit: String(raceBetLimitFor(race.simulationConfigJson, race.kind)),
       trifectaPoolTotal: (trifectaPool?.amount ?? 0n).toString(),
       carryover: (carryover?.amount ?? 0n).toString(),
     };

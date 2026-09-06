@@ -81,6 +81,7 @@ function raceFixture() {
       baseWinOdds: '8.0',
       currentWinOdds: '8.0',
     })),
+    raceBetLimit: '5000',
     trifectaPoolTotal: '15000',
     carryover: '0',
   };

@@ -22,6 +22,7 @@ const race = {
     baseWinOdds: `${String(index + 2)}.0`,
     currentWinOdds: `${String(index + 2)}.4`,
   })),
+  raceBetLimit: '5000',
   trifectaPoolTotal: '15000',
   carryover: '2500',
 };

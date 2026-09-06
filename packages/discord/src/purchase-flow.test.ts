@@ -313,6 +313,7 @@ function dependenciesFor(
     sessions,
     gateway: {
       currentRaceVersion: async () => 1,
+      raceBetLimit: async () => money(5_000n),
       raceHorses: async () =>
         Array.from({ length: 8 }, (_, index) => ({
           number: index + 1,

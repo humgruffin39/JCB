@@ -134,9 +134,10 @@ export async function chooseHorse(
       throw error;
     }
   } else {
+    const raceBetLimit = await dependencies.gateway.raceBetLimit(session.raceId);
     const updated = dependencies.sessions.update(session.id, session.step, 'amount', payload);
     try {
-      await showAmountModal(interaction, updated);
+      await showAmountModal(interaction, updated, raceBetLimit);
     } catch (error) {
       rollbackSession(dependencies, updated, session.step, session.payload);
       throw error;

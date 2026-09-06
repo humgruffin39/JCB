@@ -21,7 +21,7 @@ export interface DiscordRaceCard {
   readonly distanceM: number;
   readonly surfaceLabel: string;
   readonly horses: readonly DiscordRaceHorse[];
-  readonly trifectaPoolTotal: Money;
+  readonly raceBetLimit: Money;
   readonly carryover: Money;
   readonly canBuy: boolean;
   readonly canView: boolean;
@@ -63,6 +63,7 @@ export interface PurchaseReceipt {
 
 export interface DiscordPurchaseGateway {
   currentRaceVersion(raceId: string): Promise<number>;
+  raceBetLimit(raceId: string): Promise<Money>;
   preview(input: {
     readonly discordUserId: string;
     readonly raceId: string;

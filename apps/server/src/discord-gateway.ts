@@ -317,7 +317,7 @@ function renderRaceMessageForDetail(
       condition: entry.condition,
       currentWinOdds: entry.currentWinOdds,
     })),
-    trifectaPoolTotal: money(BigInt(detail.trifectaPoolTotal)),
+    raceBetLimit: money(BigInt(detail.raceBetLimit)),
     carryover: money(BigInt(detail.carryover)),
     canBuy: detail.status === 'betting_open' && now < detail.bettingClosesAt,
     canView,

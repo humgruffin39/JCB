@@ -21,8 +21,8 @@ import {
 } from '@jcb/odds';
 import { ulid } from 'ulid';
 import {
-  DEFAULT_RACE_BET_LIMITS,
   DEFAULT_SEED_LIQUIDITY_CLAMP,
+  raceBetLimitFor,
   type SeedClamp,
 } from './game-store-types.js';
 import type { SqliteLedgerStore } from './ledger-store.js';
@@ -451,7 +451,7 @@ function parseRaceFinancialSettings(
   const numeric = (value: unknown, fallback: number): number =>
     typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : fallback;
   return {
-    raceBetLimit: numeric(parsed.raceBetLimits?.[raceKind], DEFAULT_RACE_BET_LIMITS[raceKind]),
+    raceBetLimit: raceBetLimitFor(valueJson, raceKind),
     seedLiquidityClamp: {
       winMinimum: numeric(configuredClamp?.winMinimum, defaultClamp.winMinimum),
       winMaximum: numeric(configuredClamp?.winMaximum, defaultClamp.winMaximum),

@@ -9,7 +9,13 @@ import {
   TextInputStyle,
   type StringSelectMenuInteraction,
 } from 'discord.js';
-import { isPoolType, POOL_TYPE_DEFINITIONS, POOL_TYPES, type PoolType } from '@jcb/domain';
+import {
+  isPoolType,
+  POOL_TYPE_DEFINITIONS,
+  POOL_TYPES,
+  type Money,
+  type PoolType,
+} from '@jcb/domain';
 import type {
   DiscordPurchaseGateway,
   PurchasePreview,
@@ -92,14 +98,18 @@ export async function horseChoice(session: PurchaseSession, gateway: DiscordPurc
 export async function showAmountModal(
   interaction: StringSelectMenuInteraction,
   session: PurchaseSession,
+  raceBetLimit: Money,
 ): Promise<void> {
+  // The cap lives in the placeholder rather than on its own line: it is only
+  // needed at the moment of typing a number, and the flow is already several
+  // screens long.
   const input = new TextInputBuilder()
     .setCustomId('stake')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setMinLength(3)
     .setMaxLength(12)
-    .setPlaceholder('100以上の整数');
+    .setPlaceholder(`100〜${raceBetLimit.toLocaleString('ja-JP')} の整数`);
   const label = new LabelBuilder()
     .setLabel('賭け金（チャレンジャーポイント）')
     .setTextInputComponent(input);

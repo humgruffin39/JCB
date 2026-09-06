@@ -9,6 +9,7 @@ import { SqliteGameStore, type HorseWrite } from './game-store.js';
 import { applyMigrations } from './migrations.js';
 import { publishPendingObjects, SqliteObjectPublicationStore } from './object-publication-store.js';
 import { SqliteRacePreparationRepository } from './race-preparation-repository.js';
+import { SqliteViewerStore } from './viewer-store.js';
 
 class TestObjectStore implements PrivateObjectStore {
   public readonly objects = new Map<string, Uint8Array>();
@@ -192,6 +193,11 @@ describe('race preparation workflow', () => {
          FROM race_simulations WHERE race_id = ? AND kind = 'official'`,
       )
       .get(race.id) as { seedCiphertext: string; encryptedResult: string };
+    // Nobody has bet yet, so the initial odds shown on the card must be the odds
+    // a first buyer is actually quoted.
+    const entries = new SqliteViewerStore(database).getRaceDetail(race.id).entries;
+    expect(entries).toHaveLength(8);
+    for (const entry of entries) expect(entry.baseWinOdds).toBe(entry.currentWinOdds);
     expect(simulation.seedCiphertext).not.toContain('finishOrder');
     expect(simulation.encryptedResult).not.toContain('finishOrder');
     database.close();

@@ -61,7 +61,7 @@ export class SqliteViewerStore {
         `SELECT re.horse_number AS horseNumber, re.horse_id AS horseId,
                 re.snapshot_name AS name, re.snapshot_running_style AS runningStyle,
                 h.coat_color AS coatColor,
-                re.condition, op.base_odds AS baseOdds, op.seed_stake AS seedStake,
+                re.condition, op.seed_stake AS seedStake,
                 bp.seed_liquidity AS seedLiquidity, bp.user_stake_total AS totalUserStake,
                 COALESCE(SUM(b.stake), 0) AS userSelectionStake
          FROM race_entries re
@@ -81,7 +81,6 @@ export class SqliteViewerStore {
       runningStyle: 'front_runner' | 'closer';
       coatColor: 'black' | 'chestnut' | 'gray' | 'cream';
       condition: 'terrible' | 'poor' | 'normal' | 'good' | 'excellent';
-      baseOdds: number | null;
       seedStake: bigint | null;
       seedLiquidity: bigint | null;
       totalUserStake: bigint | null;
@@ -116,7 +115,19 @@ export class SqliteViewerStore {
         runningStyle: entry.runningStyle,
         coatColor: entry.coatColor,
         condition: entry.condition,
-        baseWinOdds: entry.baseOdds === null ? '—' : entry.baseOdds.toFixed(1),
+        // Quoted from the same formula as the live odds with no user stake, so a
+        // card nobody has bet on shows exactly these numbers.
+        baseWinOdds:
+          entry.seedStake === null || entry.seedLiquidity === null
+            ? '—'
+            : formatOdds(
+                currentOddsTenths(
+                  money(entry.seedLiquidity),
+                  money(0n),
+                  money(entry.seedStake),
+                  money(0n),
+                ),
+              ),
         currentWinOdds:
           finalWinOdds.get(Number(entry.horseNumber)) ??
           (entry.seedStake === null || entry.seedLiquidity === null || entry.totalUserStake === null

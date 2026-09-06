@@ -3,7 +3,9 @@ import {
   accountTypeLabel,
   auditActionLabel,
   auditTargetLabel,
+  distancePreferenceLabel,
   poolTypeLabel,
+  surfacePreferenceLabel,
 } from './admin-labels.js';
 
 describe('pool type labels', () => {
@@ -55,5 +57,23 @@ describe('pool type labels', () => {
     expect(auditTargetLabel('discord_user')).toBe('Discord利用者');
     expect(auditTargetLabel('race_date')).toBe('開催日');
     expect(auditTargetLabel('backup')).toBe('バックアップ');
+  });
+});
+
+describe('preference labels', () => {
+  it('reads the distance axis with long races on the positive side', () => {
+    expect(distancePreferenceLabel(-100)).toBe('短距離');
+    expect(distancePreferenceLabel(-34)).toBe('短距離');
+    expect(distancePreferenceLabel(-33)).toBe('中距離');
+    expect(distancePreferenceLabel(0)).toBe('中距離');
+    expect(distancePreferenceLabel(33)).toBe('中距離');
+    expect(distancePreferenceLabel(34)).toBe('長距離');
+    expect(distancePreferenceLabel(100)).toBe('長距離');
+  });
+
+  it('reads the surface axis with dirt on the positive side', () => {
+    expect(surfacePreferenceLabel(-100)).toBe('芝');
+    expect(surfacePreferenceLabel(0)).toBe('万能');
+    expect(surfacePreferenceLabel(100)).toBe('ダート');
   });
 });

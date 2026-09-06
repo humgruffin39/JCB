@@ -76,7 +76,6 @@ export function CurrencyOverview({
             <label>
               補正額
               <input name="amount" type="number" step={1} required />
-              <span className="field-hint">正の値は加算、負の値は減算です。</span>
             </label>
             <label>
               理由

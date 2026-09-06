@@ -1,6 +1,10 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { horseStatusLabel } from './admin-labels.js';
+import {
+  distancePreferenceLabel,
+  horseStatusLabel,
+  surfacePreferenceLabel,
+} from './admin-labels.js';
 import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { HorseAdminForm } from './horse-admin-form.js';
@@ -158,7 +162,8 @@ function HorseTable({
             <th scope="col">状態</th>
             <th scope="col">脚質</th>
             <th scope="col">毛色</th>
-            <th scope="col">速度</th>
+            <th scope="col">距離</th>
+            <th scope="col">馬場</th>
             <th scope="col">
               <span className="visually-hidden">操作</span>
             </th>
@@ -177,7 +182,8 @@ function HorseTable({
               </td>
               <td>{horse.runningStyle === 'front_runner' ? '逃げ' : '差し'}</td>
               <td>{horseCoatLabel(horse.coatColor)}</td>
-              <td>{String(horse.speed)}</td>
+              <td>{distancePreferenceLabel(horse.distancePreference)}</td>
+              <td>{surfacePreferenceLabel(horse.surfacePreference)}</td>
               <td>
                 <div className="inline-actions">
                   <button

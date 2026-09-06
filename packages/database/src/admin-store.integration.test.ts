@@ -63,7 +63,11 @@ describe('admin operational store', () => {
 
     expect(admin.horsePerformance(horses[0]!.id).starts).toBe(1);
     expect(admin.listRaceOperations()[0]?.entriesJson).toContain(horses[0]!.id);
-    expect(admin.economyOperations().accounts).toHaveLength(3);
+    // Only the central bank and player accounts are listed; issuance, carryover
+    // and the per-race pools are machinery an operator never adjusts by hand.
+    expect(
+      new Set(admin.economyOperations().accounts.map((account) => account.accountType)),
+    ).toEqual(new Set(['central_bank']));
     expect(admin.systemObjects()).toEqual({
       discordMessages: [],
       objectPublications: [],

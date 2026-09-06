@@ -219,3 +219,18 @@ export function referenceTypeLabel(referenceType: string): string {
 export function booleanLabel(value: unknown): string {
   return value === true ? '正常' : value === false ? '異常' : String(value);
 }
+
+/**
+ * Preference axes run from -100 to 100. Positive distance favours longer races
+ * and positive surface favours dirt, matching `legacyAptitudes` in the database
+ * package and the scoring in `@jcb/domain`.
+ */
+export function distancePreferenceLabel(preference: number): string {
+  if (preference <= -34) return '短距離';
+  return preference >= 34 ? '長距離' : '中距離';
+}
+
+export function surfacePreferenceLabel(preference: number): string {
+  if (preference <= -34) return '芝';
+  return preference >= 34 ? 'ダート' : '万能';
+}

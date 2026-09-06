@@ -137,6 +137,10 @@ export class SqliteAdminReadStore {
                 u.display_name AS displayName, a.created_at AS createdAt
          FROM accounts a JOIN account_balances ab ON ab.account_id = a.id
          LEFT JOIN users u ON a.account_type = 'user' AND u.id = a.owner_key
+         -- Pool, carryover and issuance accounts are machinery: they are never
+         -- read here, and adjusting one by hand would break the projections
+         -- settlement checks against.
+         WHERE a.account_type IN ('central_bank', 'user')
          ORDER BY a.account_type, COALESCE(u.display_name, a.owner_key) LIMIT ?`,
         boundedLimit,
       ),

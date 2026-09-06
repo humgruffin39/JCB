@@ -7,7 +7,12 @@ import {
   type HorseOption,
   type ScheduleSettings,
 } from './race-admin-model.js';
-import { entriesFor, moveTimestampToJstDate, raceKindForDate } from './race-admin-utils.js';
+import {
+  entriesFor,
+  moveTimestampToJstDate,
+  raceKindForDate,
+  selectBalancedField,
+} from './race-admin-utils.js';
 import { useSubmitLock } from './use-submit-lock.js';
 
 function shuffled<T>(items: readonly T[]): T[] {
@@ -128,9 +133,11 @@ export function RaceForm({
 
   const activeHorseCount = horses.filter((horse) => horse.status !== 'retired').length;
   function autoAssignHorses(): void {
-    const availableHorseIds = shuffled(horses.filter((horse) => horse.status !== 'retired'))
-      .slice(0, 8)
-      .map((horse) => horse.id);
+    const availableHorseIds = selectBalancedField(
+      horses.filter((horse) => horse.status !== 'retired'),
+      8,
+      shuffled,
+    ).map((horse) => horse.id);
     if (availableHorseIds.length < 8) {
       setError('レース作成には、引退していない馬が8頭必要です。');
       return;

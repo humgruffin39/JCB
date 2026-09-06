@@ -14,6 +14,7 @@ const horses = Array.from({ length: 8 }, (_, index) => ({
   id: `horse-${String(index + 1)}`,
   name: `テスト馬${String(index + 1)}`,
   status: 'active',
+  runningStyle: index % 2 === 0 ? 'front_runner' : 'closer',
 }));
 
 const race = {

@@ -1,5 +1,5 @@
 import { conditionLabel } from './admin-labels.js';
-import type { AdminRace, RaceEntrySelection } from './race-admin-model.js';
+import type { AdminRace, HorseOption, RaceEntrySelection } from './race-admin-model.js';
 
 export function surfaceLabel(surface: AdminRace['surface']): string {
   return surface === 'turf' ? '芝' : 'ダート';
@@ -76,4 +76,34 @@ export function formatConditionReadout(race: AdminRace): string {
   return entriesFor(race)
     .map((entry) => `${String(entry.horseNumber)}番 ${conditionLabel(entry.condition)}`)
     .join(' / ');
+}
+
+/**
+ * Picks a field with both running styles represented.
+ *
+ * A field of only front runners settles into a procession and one of only
+ * closers bunches up early, so an even split gives the race a shape worth
+ * watching. When one style cannot fill its half the rest comes from the other,
+ * and the result is shuffled again so the styles are not grouped by gate.
+ */
+export function selectBalancedField(
+  horses: readonly HorseOption[],
+  size: number,
+  shuffle: <T>(items: readonly T[]) => T[],
+): readonly HorseOption[] {
+  // Partitioning on one side keeps the two groups exhaustive, so an unexpected
+  // running style still gets a gate instead of silently emptying the field.
+  const frontRunners = shuffle(horses.filter((horse) => horse.runningStyle === 'front_runner'));
+  const closers = shuffle(horses.filter((horse) => horse.runningStyle !== 'front_runner'));
+  const fromFront = frontRunners.slice(0, Math.floor(size / 2));
+  const fromClosers = closers.slice(0, size - fromFront.length);
+  const picked = [...fromFront, ...fromClosers];
+  if (picked.length < size) {
+    const leftovers = shuffle([
+      ...frontRunners.slice(fromFront.length),
+      ...closers.slice(fromClosers.length),
+    ]);
+    picked.push(...leftovers.slice(0, size - picked.length));
+  }
+  return shuffle(picked);
 }

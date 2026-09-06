@@ -2,6 +2,7 @@ export interface HorseOption {
   readonly id: string;
   readonly name: string;
   readonly status: string;
+  readonly runningStyle: 'front_runner' | 'closer';
 }
 
 export interface AdminRace {

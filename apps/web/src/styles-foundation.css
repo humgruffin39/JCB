@@ -4,8 +4,15 @@ html {
 }
 
 body {
+  /* `vh` is the viewport with the browser chrome hidden, so on a phone the page
+     is always taller than what is on screen. That leaves it permanently
+     scrollable by the height of the chrome, and every scroll slides the chrome
+     in and out and resizes the layout under the finger. `svh` is the height with
+     the chrome showing, which stays put. */
   min-height: 100vh;
+  min-height: 100svh;
   margin: 0;
+  overscroll-behavior-y: contain;
   color: var(--text);
   background: #050505;
   font-family: var(--font-body);
@@ -14,6 +21,7 @@ body {
 
 #root {
   min-height: 100vh;
+  min-height: 100svh;
   background: #050505;
 }
 
@@ -99,6 +107,7 @@ textarea {
 .app-shell {
   display: grid;
   min-height: 100vh;
+  min-height: 100svh;
   grid-template-rows: auto 1fr auto;
 }
 
@@ -219,7 +228,8 @@ main {
 }
 
 .app-shell--state {
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: 100svh;
   color-scheme: dark;
   color: #f5f5f2;
   background: #050505;
@@ -234,7 +244,8 @@ main {
   display: grid;
   width: 100%;
   max-width: none;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: 100svh;
   margin: 0;
   padding: clamp(1rem, 4vw, 2.5rem);
   place-items: center;

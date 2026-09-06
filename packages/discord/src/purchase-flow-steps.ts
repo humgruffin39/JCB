@@ -21,7 +21,6 @@ import {
   parseStake,
   parsePosition,
   POSITION_KEYS,
-  positionsFromSession,
   requireStep,
   selectionsFromSession,
 } from './purchase-flow-validation.js';
@@ -118,30 +117,6 @@ export async function choosePosition(
   if (chosen.length === 0) throw new Error('Horse selection is missing.');
   await interaction.deferUpdate();
   const payload = { ...session.payload, [key]: formatPosition(chosen) };
-  const updated = dependencies.sessions.update(session.id, 'picks', 'picks', payload);
-  try {
-    await interaction.editReply(await formationChoice(updated, dependencies.gateway));
-  } catch (error) {
-    rollbackSession(dependencies, updated, 'picks', session.payload);
-    throw error;
-  }
-}
-
-/** Copies the first position over the rest, which is what a box is. */
-export async function applyBox(
-  interaction: ButtonInteraction,
-  session: PurchaseSession,
-  dependencies: PurchaseFlowDependencies,
-): Promise<void> {
-  requireStep(session, 'picks');
-  const poolType = parsePoolType(session.payload.poolType);
-  const first = positionsFromSession(session, poolType)[0] ?? [];
-  if (first.length === 0) throw new Error('Horse selection is missing.');
-  await interaction.deferUpdate();
-  const payload = { ...session.payload };
-  for (const key of POSITION_KEYS.slice(0, poolDefinition(poolType).selectionSize)) {
-    payload[key] = formatPosition(first);
-  }
   const updated = dependencies.sessions.update(session.id, 'picks', 'picks', payload);
   try {
     await interaction.editReply(await formationChoice(updated, dependencies.gateway));

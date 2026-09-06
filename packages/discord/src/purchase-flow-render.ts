@@ -86,15 +86,6 @@ export async function formationChoice(session: PurchaseSession, gateway: Discord
   );
   const points = countPoints(session, poolType);
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    ...(definition.selectionSize > 1
-      ? [
-          new ButtonBuilder()
-            .setCustomId(`jcb:box:${session.id}`)
-            .setLabel('ボックス')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled((positions[0]?.length ?? 0) === 0),
-        ]
-      : []),
     new ButtonBuilder()
       .setCustomId(`jcb:picks:${session.id}`)
       .setLabel(points === 0 ? '賭け金を入力' : `賭け金を入力（${String(points)}点）`)

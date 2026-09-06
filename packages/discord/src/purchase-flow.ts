@@ -1,7 +1,6 @@
 import type { Interaction } from 'discord.js';
 import type { PurchaseFlowDependencies } from './purchase-flow-context.js';
 import {
-  applyBox,
   beginPurchase,
   choosePosition,
   chooseLegacyPool,
@@ -60,12 +59,6 @@ export async function handlePurchaseInteraction(
     await choosePosition(interaction, session, route.position, dependencies);
     return true;
   }
-  if (route.action === 'box') {
-    if (!interaction.isButton()) return false;
-    const session = requireSession(interaction, route.sessionId, dependencies);
-    await applyBox(interaction, session, dependencies);
-    return true;
-  }
   if (route.action === 'picks') {
     if (!interaction.isButton()) return false;
     const session = requireSession(interaction, route.sessionId, dependencies);
@@ -100,7 +93,7 @@ type PurchaseRoute =
   | { readonly action: 'pool-legacy'; readonly sessionId: string; readonly poolType: string }
   | { readonly action: 'pick'; readonly sessionId: string; readonly position: number }
   | {
-      readonly action: 'box' | 'picks' | 'amount' | 'confirm' | 'back';
+      readonly action: 'picks' | 'amount' | 'confirm' | 'back';
       readonly sessionId: string;
     };
 
@@ -128,8 +121,7 @@ function purchaseRoute(customId: string): PurchaseRoute | undefined {
     return { action: 'pick', sessionId: parts[2], position: Number(parts[3]) };
   }
   if (
-    (parts[1] === 'box' ||
-      parts[1] === 'picks' ||
+    (parts[1] === 'picks' ||
       parts[1] === 'amount' ||
       parts[1] === 'confirm' ||
       parts[1] === 'back') &&

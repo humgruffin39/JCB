@@ -583,6 +583,28 @@
   z-index: 1;
 }
 
+/*
+ * Grid and flex children keep `min-width: auto`, which refuses to shrink below a
+ * control's intrinsic width. Safari's date picker is far wider than a text box,
+ * so one `開催日` field was enough to push a whole dialog into horizontal
+ * scrolling. Letting these shrink makes the `width: 100%` above authoritative.
+ */
+.app-shell--admin :is(input, select, textarea),
+.terminal-form > *,
+.form-row > *,
+.ability-grid > *,
+.preference-grid > *,
+.entry-selects > * {
+  min-width: 0;
+}
+
+/* Safari sizes the date picker from its own content and ignores `width: 100%`
+   once the column has already grown to fit it. Capping the rendered width holds
+   it to the column no matter how wide the control wants to be. */
+.app-shell--admin :is(input, select, textarea) {
+  max-width: 100%;
+}
+
 .terminal-form label {
   display: grid;
   gap: var(--space-1);

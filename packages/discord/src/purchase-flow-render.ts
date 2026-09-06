@@ -7,7 +7,7 @@ import {
   StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
-  type StringSelectMenuInteraction,
+  type ButtonInteraction,
 } from 'discord.js';
 import {
   isPoolType,
@@ -22,8 +22,12 @@ import type {
   PurchaseReceipt,
   PurchaseSession,
 } from './types.js';
-import { horseSelectionEmojis } from './horse-number-emoji.js';
-import { poolDefinition } from './purchase-flow-validation.js';
+import { horseNumberEmoji } from './horse-number-emoji.js';
+import {
+  poolDefinition,
+  positionsFromSession,
+  selectionsFromSession,
+} from './purchase-flow-validation.js';
 
 export function poolChoice(session: PurchaseSession) {
   const selectedPoolType = session.payload.poolType;
@@ -55,63 +59,110 @@ export function poolChoice(session: PurchaseSession) {
   };
 }
 
-export async function horseChoice(session: PurchaseSession, gateway: DiscordPurchaseGateway) {
+export async function formationChoice(session: PurchaseSession, gateway: DiscordPurchaseGateway) {
   const horses = await gateway.raceHorses(session.raceId);
   assertEightDistinctHorses(horses);
-  const position = Number(session.step.slice('pick-'.length));
   const poolType = session.payload.poolType;
   if (poolType === undefined || !isPoolType(poolType)) throw new Error('Pool type is missing.');
   const definition = poolDefinition(poolType);
-  const selected = new Set(
-    [session.payload.first, session.payload.second, session.payload.third].filter(
-      (value): value is string => value !== undefined,
+  const positions = positionsFromSession(session, poolType);
+  // Every position is a multi-select, so one screen covers both a single ticket
+  // and a formation. The point count is what turns the two into different money.
+  const menus = positions.map((position, index) =>
+    new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`jcb:pick:${session.id}:${String(index + 1)}`)
+        .setPlaceholder(positionPrompt(definition, index + 1))
+        .setMinValues(1)
+        .setMaxValues(horses.length)
+        .addOptions(
+          horses.map((horse) => ({
+            label: `${String(horse.number)}番 ${horse.name}`,
+            value: String(horse.number),
+            default: position.includes(horse.number),
+          })),
+        ),
     ),
   );
-  const orderedPrompt = definition.ordered
-    ? `${String(position)}着候補`
-    : `${String(position)}頭目`;
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`jcb:pick:${session.id}`)
-    .setPlaceholder(
-      definition.selectionSize === 1
-        ? `${definition.label}の馬を選択`
-        : `${definition.label} ${orderedPrompt}を選択`,
-    )
-    .addOptions(
-      horses
-        .filter((horse) => !selected.has(String(horse.number)))
-        .map((horse) => ({
-          label: `${String(horse.number)}番 ${horse.name}`,
-          value: String(horse.number),
-        })),
-    );
+  const points = countPoints(session, poolType);
+  const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    ...(definition.selectionSize > 1
+      ? [
+          new ButtonBuilder()
+            .setCustomId(`jcb:box:${session.id}`)
+            .setLabel('ボックス')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled((positions[0]?.length ?? 0) === 0),
+        ]
+      : []),
+    new ButtonBuilder()
+      .setCustomId(`jcb:picks:${session.id}`)
+      .setLabel(points === 0 ? '賭け金を入力' : `賭け金を入力（${String(points)}点）`)
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(points === 0),
+  );
   return {
-    content:
-      definition.selectionSize === 1
-        ? `${definition.label}の馬を選んでください。`
-        : `${definition.label} ${orderedPrompt}を選んでください。`,
+    content: formationSummary(session, poolType),
     embeds: [],
-    components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
+    components: [...menus, buttons],
   };
 }
 
+/**
+ * The lines describing what is currently selected. They are reused by the
+ * confirmation screen so the buyer checks the same shape twice.
+ */
+export function formationSummary(session: PurchaseSession, poolType: PoolType): string {
+  const definition = poolDefinition(poolType);
+  const positions = positionsFromSession(session, poolType);
+  const points = countPoints(session, poolType);
+  return [
+    definition.selectionSize === 1 || points <= 1
+      ? definition.label
+      : `${definition.label} フォーメーション`,
+    ...positions.map(
+      (position, index) =>
+        `${positionPrompt(definition, index + 1)}: ${
+          position.length === 0 ? '未選択' : position.map(horseNumberEmoji).join(' ')
+        }`,
+    ),
+    points === 0 ? '点数: —' : `点数: ${String(points)}点`,
+  ].join('\n');
+}
+
+function countPoints(session: PurchaseSession, poolType: PoolType): number {
+  try {
+    return selectionsFromSession(session, poolType).length;
+  } catch {
+    return 0;
+  }
+}
+
+function positionPrompt(definition: ReturnType<typeof poolDefinition>, position: number): string {
+  if (definition.selectionSize === 1) return `${definition.label}の馬`;
+  return definition.ordered ? `${String(position)}着` : `${String(position)}頭目`;
+}
+
 export async function showAmountModal(
-  interaction: StringSelectMenuInteraction,
+  interaction: ButtonInteraction,
   session: PurchaseSession,
   raceBetLimit: Money,
+  points: number,
 ): Promise<void> {
   // The cap lives in the placeholder rather than on its own line: it is only
   // needed at the moment of typing a number, and the flow is already several
-  // screens long.
+  // screens long. A formation spends the same cap across every point, so the
+  // number being typed is per point and the placeholder says so.
+  const perPointLimit = raceBetLimit / BigInt(points);
   const input = new TextInputBuilder()
     .setCustomId('stake')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setMinLength(3)
     .setMaxLength(12)
-    .setPlaceholder(`100〜${raceBetLimit.toLocaleString('ja-JP')} の整数`);
+    .setPlaceholder(`100〜${perPointLimit.toLocaleString('ja-JP')} の整数`);
   const label = new LabelBuilder()
-    .setLabel('賭け金（チャレンジャーポイント）')
+    .setLabel(points === 1 ? '賭け金（CP）' : `1点あたりの賭け金（CP） 全${String(points)}点`)
     .setTextInputComponent(input);
   const modal = new ModalBuilder()
     .setCustomId(`jcb:amount:${session.id}`)
@@ -122,8 +173,8 @@ export async function showAmountModal(
 
 export function purchasePreviewMessage(input: {
   readonly sessionId: string;
+  readonly summary: string;
   readonly poolType: PoolType;
-  readonly selectionCode: string;
   readonly stake: string;
   readonly preview: PurchasePreview;
 }) {
@@ -137,14 +188,15 @@ export function purchasePreviewMessage(input: {
       .setLabel('選び直す')
       .setStyle(ButtonStyle.Secondary),
   );
+  const points = input.preview.points;
   return {
     content: [
-      `券種: ${poolDefinition(input.poolType).label}`,
-      `買い目: ${horseSelectionEmojis(input.selectionCode)}`,
-      `賭け金: ${input.stake} CP`,
-      `購入後見込み払戻: ${input.preview.estimatedBasePayout.toString()} CP`,
-      `キャリーオーバー見込み: ${input.preview.estimatedCarryoverBonus.toString()} CP`,
-      `購入後残高: ${input.preview.balanceAfter.toString()} CP`,
+      input.summary,
+      points === 1
+        ? `賭け金: ${cp(input.preview.totalStake)}`
+        : `賭け金: 1点 ${input.stake} CP / 合計 ${cp(input.preview.totalStake)}`,
+      `的中時の見込み払戻: ${payoutRange(input.preview)}`,
+      `購入後残高: ${cp(input.preview.balanceAfter)}`,
       '締切までの他ユーザーの投票で払戻見込みは変動します。',
     ].join('\n'),
     components: [rows],
@@ -154,13 +206,28 @@ export function purchasePreviewMessage(input: {
 export function purchaseReceiptMessage(receipt: PurchaseReceipt) {
   return {
     content: [
-      receipt.wasDuplicate ? 'この購入はすでに処理済みです。' : '馬券を購入しました。',
-      `購入ID: ${receipt.betId}`,
-      `購入後残高: ${receipt.balanceAfter.toString()} CP`,
+      receipt.wasDuplicate
+        ? 'この購入はすでに処理済みです。'
+        : receipt.points === 1
+          ? '馬券を購入しました。'
+          : `${String(receipt.points)}点の馬券を購入しました。`,
+      receipt.points === 1 ? `購入ID: ${receipt.betId}` : `合計: ${cp(receipt.totalStake)}`,
+      `購入後残高: ${cp(receipt.balanceAfter)}`,
       '購入確定後の取消はできません。',
     ].join('\n'),
     components: [],
   };
+}
+
+function payoutRange(preview: PurchasePreview): string {
+  const suffix = preview.includesCarryover ? '（キャリーオーバー込み）' : '';
+  return preview.minimumPayout === preview.maximumPayout
+    ? `${cp(preview.minimumPayout)}${suffix}`
+    : `${preview.minimumPayout.toLocaleString('ja-JP')}〜${cp(preview.maximumPayout)}${suffix}`;
+}
+
+function cp(amount: Money): string {
+  return `${amount.toLocaleString('ja-JP')} CP`;
 }
 
 function assertEightDistinctHorses(

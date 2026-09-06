@@ -3,7 +3,7 @@ import type { Interaction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import { handlePurchaseInteraction, isPurchaseSessionValid } from './purchase-flow.js';
 import type { PurchaseFlowDependencies } from './purchase-flow-context.js';
-import { selectionFromSession } from './purchase-flow-validation.js';
+import { selectionsFromSession } from './purchase-flow-validation.js';
 import type { PurchaseSession, PurchaseSessionStore } from './types.js';
 
 describe('purchase flow', () => {
@@ -101,30 +101,141 @@ describe('purchase flow', () => {
     });
 
     expect(await handlePurchaseInteraction(interaction, dependenciesFor(store))).toBe(true);
-    expect(store.current().step).toBe('pick-1');
+    expect(store.current().step).toBe('picks');
     expect(store.current().payload).toEqual({ poolType: 'quinella' });
-    expect((rendered as { readonly content: string }).content).toBe('馬連 1頭目を選んでください。');
+    expect((rendered as { readonly content: string }).content).toBe(
+      ['馬連', '1頭目: 未選択', '2頭目: 未選択', '点数: —'].join('\n'),
+    );
     expect((rendered as { readonly embeds: readonly unknown[] }).embeds).toEqual([]);
   });
 
   it('normalizes unordered selections while preserving ordered selections', () => {
     const session = poolSession({ poolType: 'wide', first: '8', second: '2' });
-    expect(selectionFromSession(session, 'wide')).toBe('2-8');
+    expect(selectionsFromSession(session, 'wide')).toEqual(['2-8']);
     expect(
-      selectionFromSession(
+      selectionsFromSession(
         { ...session, payload: { ...session.payload, poolType: 'exacta' } },
         'exacta',
       ),
-    ).toBe('8-2');
+    ).toEqual(['8-2']);
+  });
+
+  it('expands a formation into every combination and drops the impossible ones', () => {
+    const session = poolSession({ poolType: 'trifecta', first: '6', second: '1,2', third: '1,2' });
+    expect(selectionsFromSession(session, 'trifecta')).toEqual(['6-1-2', '6-2-1']);
+  });
+
+  it('collapses a box of the same horses to the combinations an unordered ticket has', () => {
+    const session = poolSession({
+      poolType: 'trio',
+      first: '1,2,3',
+      second: '1,2,3',
+      third: '1,2,3',
+    });
+    expect(selectionsFromSession(session, 'trio')).toEqual(['1-2-3']);
+  });
+
+  it('keeps every position on one screen and counts the points while they are chosen', async () => {
+    const store = memoryStore(picksSession({ poolType: 'trifecta', first: '6' }));
+    let rendered: unknown;
+
+    expect(
+      await handlePurchaseInteraction(
+        pickInteraction(2, ['3', '1', '2'], (message) => {
+          rendered = message;
+        }),
+        dependenciesFor(store),
+      ),
+    ).toBe(true);
+
+    expect(store.current().step).toBe('picks');
+    expect(store.current().payload).toEqual({ poolType: 'trifecta', first: '6', second: '1,2,3' });
+    const message = rendered as {
+      readonly content: string;
+      readonly components: readonly {
+        toJSON(): {
+          readonly components: readonly {
+            readonly label?: string;
+            readonly disabled?: boolean;
+            readonly max_values?: number;
+            readonly options?: readonly { readonly value: string; readonly default?: boolean }[];
+          }[];
+        };
+      }[];
+    };
+    expect(message.content).toContain('3着: 未選択');
+    expect(message.content).toContain('点数: —');
+    const second = message.components[1]!.toJSON().components[0]!;
+    expect(second.max_values).toBe(8);
+    expect(
+      second.options?.filter((option) => option.default).map((option) => option.value),
+    ).toEqual(['1', '2', '3']);
+    // Nothing to price until every position is filled.
+    expect(message.components[3]!.toJSON().components[1]!.disabled).toBe(true);
+  });
+
+  it('boxes a formation by copying the first position over the rest', async () => {
+    const store = memoryStore(picksSession({ poolType: 'trifecta', first: '1,2,3' }));
+    let rendered: unknown;
+
+    expect(
+      await handlePurchaseInteraction(
+        buttonInteraction('jcb:box:session', (message) => {
+          rendered = message;
+        }),
+        dependenciesFor(store),
+      ),
+    ).toBe(true);
+
+    expect(store.current().payload).toEqual({
+      poolType: 'trifecta',
+      first: '1,2,3',
+      second: '1,2,3',
+      third: '1,2,3',
+    });
+    const message = rendered as {
+      readonly content: string;
+      readonly components: readonly {
+        toJSON(): { readonly components: readonly { readonly label?: string }[] };
+      }[];
+    };
+    expect(message.content).toContain('点数: 6点');
+    expect(message.components[3]!.toJSON().components[1]!.label).toBe('賭け金を入力（6点）');
+  });
+
+  it('rejects a formation that would spend more than the race allows', async () => {
+    const store = memoryStore(
+      amountSession({
+        poolType: 'trifecta',
+        first: '1,2,3,4',
+        second: '1,2,3,4',
+        third: '1,2,3,4',
+      }),
+    );
+    let rendered: unknown;
+
+    expect(
+      await handlePurchaseInteraction(
+        amountInteraction('amount-interaction', '500', (message) => {
+          rendered = message;
+        }),
+        dependenciesFor(store, {
+          preview: async () => {
+            throw new Error('the cap must be checked before pricing');
+          },
+        }),
+      ),
+    ).toBe(true);
+
+    expect(rendered).toBe(
+      '24点 × 500 CP = 12,000 CP で、このレースの上限 5,000 CP を超えています。',
+    );
+    expect(store.current().step).toBe('picks');
   });
 
   it('locks the amount step during preview and stores a canonical stake', async () => {
     const store = memoryStore(amountSession({ poolType: 'win', first: '1' }));
-    const previewResult = deferred<{
-      estimatedBasePayout: ReturnType<typeof money>;
-      estimatedCarryoverBonus: ReturnType<typeof money>;
-      balanceAfter: ReturnType<typeof money>;
-    }>();
+    const previewResult = deferred<ReturnType<typeof previewFixture>>();
     const previewStarted = deferred<boolean>();
     let previewCalls = 0;
     let rendered: unknown;
@@ -152,18 +263,14 @@ describe('purchase flow', () => {
     ).rejects.toThrow('Purchase session step is stale.');
     expect(previewCalls).toBe(1);
 
-    previewResult.resolve({
-      estimatedBasePayout: money(200n),
-      estimatedCarryoverBonus: money(0n),
-      balanceAfter: money(900n),
-    });
+    previewResult.resolve(previewFixture());
     await first;
 
     expect(store.current().step).toBe('confirm');
     expect(store.current().payload.stake).toBe('100');
     expect((rendered as { readonly content: string }).content).toContain('賭け金: 100 CP');
     expect((rendered as { readonly content: string }).content).toContain(
-      '買い目: <:horse_1:1539913567787159653>',
+      '単勝の馬: <:horse_1:1539913567787159653>',
     );
   });
 
@@ -183,8 +290,13 @@ describe('purchase flow', () => {
     ).toBe(true);
 
     expect(rendered).toBe('賭け金は100CP以上の整数で入力してください。');
-    expect(store.current().step).toBe('pick-3');
-    expect(store.current().payload).toEqual({ poolType: 'trifecta', first: '1', second: '2' });
+    expect(store.current().step).toBe('picks');
+    expect(store.current().payload).toEqual({
+      poolType: 'trifecta',
+      first: '1',
+      second: '2',
+      third: '3',
+    });
   });
 
   it('uses the session transition as a purchase mutex', async () => {
@@ -197,11 +309,7 @@ describe('purchase flow', () => {
       }),
       step: 'confirm',
     });
-    const purchaseResult = deferred<{
-      betId: string;
-      balanceAfter: ReturnType<typeof money>;
-      wasDuplicate: boolean;
-    }>();
+    const purchaseResult = deferred<ReturnType<typeof receiptFixture>>();
     const purchaseStarted = deferred<boolean>();
     let purchaseCalls = 0;
     const dependencies = dependenciesFor(store, {
@@ -220,7 +328,7 @@ describe('purchase flow', () => {
     ).rejects.toThrow('Purchase session step is stale.');
     expect(purchaseCalls).toBe(1);
 
-    purchaseResult.resolve({ betId: 'bet-1', balanceAfter: money(900n), wasDuplicate: false });
+    purchaseResult.resolve(receiptFixture());
     await first;
     expect(store.current().step).toBe('completed');
   });
@@ -259,6 +367,27 @@ describe('purchase flow', () => {
   });
 });
 
+function previewFixture() {
+  return {
+    points: 1,
+    totalStake: money(100n),
+    minimumPayout: money(200n),
+    maximumPayout: money(200n),
+    includesCarryover: false,
+    balanceAfter: money(900n),
+  };
+}
+
+function receiptFixture() {
+  return {
+    betId: 'bet-1',
+    points: 1,
+    totalStake: money(100n),
+    balanceAfter: money(900n),
+    wasDuplicate: false,
+  };
+}
+
 function amountSession(payload: Readonly<Record<string, string>>): PurchaseSession {
   return {
     id: 'session',
@@ -269,6 +398,10 @@ function amountSession(payload: Readonly<Record<string, string>>): PurchaseSessi
     payload,
     expiresAt: timestamp(10_000),
   };
+}
+
+function picksSession(payload: Readonly<Record<string, string>>): PurchaseSession {
+  return { ...poolSession(payload), step: 'picks' };
 }
 
 function poolSession(payload: Readonly<Record<string, string>> = {}): PurchaseSession {
@@ -319,12 +452,8 @@ function dependenciesFor(
           number: index + 1,
           name: `試験馬${String(index + 1)}`,
         })),
-      preview: async () => ({
-        estimatedBasePayout: money(200n),
-        estimatedCarryoverBonus: money(0n),
-        balanceAfter: money(900n),
-      }),
-      purchase: async () => ({ betId: 'bet-1', balanceAfter: money(900n), wasDuplicate: false }),
+      preview: async () => previewFixture(),
+      purchase: async () => receiptFixture(),
       ...overrides,
     },
   };
@@ -382,6 +511,24 @@ function poolSelectInteraction(
     readonly deferUpdate: ReturnType<typeof vi.fn>;
     readonly editReply: ReturnType<typeof vi.fn>;
   };
+}
+
+function pickInteraction(
+  position: number,
+  values: readonly string[],
+  editReply: (message: unknown) => void,
+): Interaction {
+  return {
+    id: 'pick-interaction',
+    customId: `jcb:pick:session:${String(position)}`,
+    user: { id: 'user-1' },
+    values,
+    isButton: () => false,
+    isStringSelectMenu: () => true,
+    isModalSubmit: () => false,
+    deferUpdate: vi.fn(async () => undefined),
+    editReply: vi.fn(async (message: unknown) => editReply(message)),
+  } as unknown as Interaction;
 }
 
 function buttonInteraction(customId: string, editReply: (message: unknown) => void): Interaction {

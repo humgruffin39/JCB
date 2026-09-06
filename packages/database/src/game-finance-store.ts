@@ -34,6 +34,12 @@ import {
 } from './game-store-types.js';
 import type { SqliteLedgerStore } from './ledger-store.js';
 
+export interface PurchasedBetGroup {
+  readonly bets: readonly PurchasedBet[];
+  readonly balanceAfter: Money;
+  readonly wasDuplicate: boolean;
+}
+
 export interface PurchaseBetInput {
   readonly userId: string;
   readonly poolId: string;
@@ -114,6 +120,27 @@ export class SqliteGameFinanceStore {
       if (update.changes !== 1) throw new Error('Race changed while opening betting pools.');
     });
     run.immediate();
+  }
+
+  /**
+   * Buys every point of a formation inside one transaction. A formation that
+   * only half exists would leave the buyer with tickets they did not choose, and
+   * the per-race stake cap has to reject the whole set rather than the tail of
+   * it. Each point keeps its own idempotency key, so a retried confirmation
+   * replays the same tickets instead of doubling them.
+   */
+  public purchaseBets(inputs: readonly PurchaseBetInput[]): PurchasedBetGroup {
+    if (inputs.length === 0) throw new DomainError('INVALID_SELECTION', 'Selection is missing.');
+    const run = this.database.transaction((): PurchasedBetGroup => {
+      const bets = inputs.map((input) => this.purchaseBet(input));
+      const last = bets.at(-1)!;
+      return {
+        bets,
+        balanceAfter: last.balanceAfter,
+        wasDuplicate: bets.every((bet) => bet.wasDuplicate),
+      };
+    });
+    return run.immediate();
   }
 
   public purchaseBet(input: PurchaseBetInput): PurchasedBet {

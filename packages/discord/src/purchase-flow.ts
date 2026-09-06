@@ -1,12 +1,14 @@
 import type { Interaction } from 'discord.js';
 import type { PurchaseFlowDependencies } from './purchase-flow-context.js';
 import {
+  applyBox,
   beginPurchase,
-  chooseHorse,
+  choosePosition,
   chooseLegacyPool,
   choosePoolType,
   confirmPool,
   confirmPurchase,
+  confirmSelection,
   renderCurrentStep,
   submitAmount,
 } from './purchase-flow-steps.js';
@@ -55,7 +57,19 @@ export async function handlePurchaseInteraction(
   if (route.action === 'pick') {
     if (!interaction.isStringSelectMenu()) return false;
     const session = requireSession(interaction, route.sessionId, dependencies);
-    await chooseHorse(interaction, session, dependencies);
+    await choosePosition(interaction, session, route.position, dependencies);
+    return true;
+  }
+  if (route.action === 'box') {
+    if (!interaction.isButton()) return false;
+    const session = requireSession(interaction, route.sessionId, dependencies);
+    await applyBox(interaction, session, dependencies);
+    return true;
+  }
+  if (route.action === 'picks') {
+    if (!interaction.isButton()) return false;
+    const session = requireSession(interaction, route.sessionId, dependencies);
+    await confirmSelection(interaction, session, dependencies);
     return true;
   }
   if (route.action === 'amount') {
@@ -84,8 +98,9 @@ type PurchaseRoute =
   | { readonly action: 'pool-select'; readonly sessionId: string }
   | { readonly action: 'pool-confirm'; readonly sessionId: string }
   | { readonly action: 'pool-legacy'; readonly sessionId: string; readonly poolType: string }
+  | { readonly action: 'pick'; readonly sessionId: string; readonly position: number }
   | {
-      readonly action: 'pick' | 'amount' | 'confirm' | 'back';
+      readonly action: 'box' | 'picks' | 'amount' | 'confirm' | 'back';
       readonly sessionId: string;
     };
 
@@ -105,7 +120,16 @@ function purchaseRoute(customId: string): PurchaseRoute | undefined {
     return { action: 'pool-legacy', sessionId: parts[2], poolType: parts[3] };
   }
   if (
-    (parts[1] === 'pick' ||
+    parts[1] === 'pick' &&
+    parts.length === 4 &&
+    hasValue(parts[2]) &&
+    /^[1-3]$/.test(parts[3] ?? '')
+  ) {
+    return { action: 'pick', sessionId: parts[2], position: Number(parts[3]) };
+  }
+  if (
+    (parts[1] === 'box' ||
+      parts[1] === 'picks' ||
       parts[1] === 'amount' ||
       parts[1] === 'confirm' ||
       parts[1] === 'back') &&

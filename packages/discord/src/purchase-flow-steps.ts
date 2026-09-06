@@ -4,23 +4,26 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from 'discord.js';
-import { money, type PoolType } from '@jcb/domain';
+import { money } from '@jcb/domain';
 import type { PurchaseFlowDependencies } from './purchase-flow-context.js';
 import {
-  horseChoice,
+  formationChoice,
+  formationSummary,
   poolChoice,
   purchasePreviewMessage,
   purchaseReceiptMessage,
   showAmountModal,
 } from './purchase-flow-render.js';
 import {
-  finalPickStep,
+  formatPosition,
   parsePoolType,
-  parseStake,
   poolDefinition,
-  requireHorseNumber,
+  parseStake,
+  parsePosition,
+  POSITION_KEYS,
+  positionsFromSession,
   requireStep,
-  selectionFromSession,
+  selectionsFromSession,
 } from './purchase-flow-validation.js';
 import type { PurchaseReceipt, PurchaseSession } from './types.js';
 
@@ -72,9 +75,9 @@ export async function confirmPool(
   requireStep(session, 'pool');
   const poolType = parsePoolType(session.payload.poolType);
   await interaction.deferUpdate();
-  const updated = dependencies.sessions.update(session.id, 'pool', 'pick-1', { poolType });
+  const updated = dependencies.sessions.update(session.id, 'pool', 'picks', { poolType });
   try {
-    await interaction.editReply(await horseChoice(updated, dependencies.gateway));
+    await interaction.editReply(await formationChoice(updated, dependencies.gateway));
   } catch (error) {
     rollbackSession(dependencies, updated, 'pool', session.payload);
     throw error;
@@ -90,58 +93,79 @@ export async function chooseLegacyPool(
   requireStep(session, 'pool');
   const poolType = parsePoolType(poolTypeValue);
   await interaction.deferUpdate();
-  const updated = dependencies.sessions.update(session.id, 'pool', 'pick-1', { poolType });
+  const updated = dependencies.sessions.update(session.id, 'pool', 'picks', { poolType });
   try {
-    await interaction.editReply(await horseChoice(updated, dependencies.gateway));
+    await interaction.editReply(await formationChoice(updated, dependencies.gateway));
   } catch (error) {
     rollbackSession(dependencies, updated, 'pool', session.payload);
     throw error;
   }
 }
 
-export async function chooseHorse(
+export async function choosePosition(
   interaction: StringSelectMenuInteraction,
+  session: PurchaseSession,
+  position: number,
+  dependencies: PurchaseFlowDependencies,
+): Promise<void> {
+  requireStep(session, 'picks');
+  const poolType = parsePoolType(session.payload.poolType);
+  const key = POSITION_KEYS[position - 1];
+  if (key === undefined || position > poolDefinition(poolType).selectionSize) {
+    throw new Error('Horse position is invalid.');
+  }
+  const chosen = parsePosition(interaction.values.join(','));
+  if (chosen.length === 0) throw new Error('Horse selection is missing.');
+  await interaction.deferUpdate();
+  const payload = { ...session.payload, [key]: formatPosition(chosen) };
+  const updated = dependencies.sessions.update(session.id, 'picks', 'picks', payload);
+  try {
+    await interaction.editReply(await formationChoice(updated, dependencies.gateway));
+  } catch (error) {
+    rollbackSession(dependencies, updated, 'picks', session.payload);
+    throw error;
+  }
+}
+
+/** Copies the first position over the rest, which is what a box is. */
+export async function applyBox(
+  interaction: ButtonInteraction,
   session: PurchaseSession,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
-  if (!/^pick-[1-3]$/.test(session.step)) throw new Error('Purchase session step is stale.');
-  const selected = requireHorseNumber(interaction.values[0]);
+  requireStep(session, 'picks');
   const poolType = parsePoolType(session.payload.poolType);
-  const definition = poolDefinition(poolType);
-  const position = Number(session.step.slice('pick-'.length));
-  const selectedAlready = [
-    session.payload.first,
-    session.payload.second,
-    session.payload.third,
-  ].filter((value): value is string => value !== undefined);
-  if (selectedAlready.includes(selected)) {
-    throw new Error('The same horse cannot fill two positions.');
+  const first = positionsFromSession(session, poolType)[0] ?? [];
+  if (first.length === 0) throw new Error('Horse selection is missing.');
+  await interaction.deferUpdate();
+  const payload = { ...session.payload };
+  for (const key of POSITION_KEYS.slice(0, poolDefinition(poolType).selectionSize)) {
+    payload[key] = formatPosition(first);
   }
-  const key = position === 1 ? 'first' : position === 2 ? 'second' : 'third';
-  const payload = { ...session.payload, [key]: selected };
-  if (position < definition.selectionSize) {
-    await interaction.deferUpdate();
-    const updated = dependencies.sessions.update(
-      session.id,
-      session.step,
-      `pick-${String(position + 1)}`,
-      payload,
-    );
-    try {
-      await interaction.editReply(await horseChoice(updated, dependencies.gateway));
-    } catch (error) {
-      rollbackSession(dependencies, updated, session.step, session.payload);
-      throw error;
-    }
-  } else {
-    const raceBetLimit = await dependencies.gateway.raceBetLimit(session.raceId);
-    const updated = dependencies.sessions.update(session.id, session.step, 'amount', payload);
-    try {
-      await showAmountModal(interaction, updated, raceBetLimit);
-    } catch (error) {
-      rollbackSession(dependencies, updated, session.step, session.payload);
-      throw error;
-    }
+  const updated = dependencies.sessions.update(session.id, 'picks', 'picks', payload);
+  try {
+    await interaction.editReply(await formationChoice(updated, dependencies.gateway));
+  } catch (error) {
+    rollbackSession(dependencies, updated, 'picks', session.payload);
+    throw error;
+  }
+}
+
+export async function confirmSelection(
+  interaction: ButtonInteraction,
+  session: PurchaseSession,
+  dependencies: PurchaseFlowDependencies,
+): Promise<void> {
+  requireStep(session, 'picks');
+  const poolType = parsePoolType(session.payload.poolType);
+  const points = selectionsFromSession(session, poolType).length;
+  const raceBetLimit = await dependencies.gateway.raceBetLimit(session.raceId);
+  const updated = dependencies.sessions.update(session.id, 'picks', 'amount', session.payload);
+  try {
+    await showAmountModal(interaction, updated, raceBetLimit, points);
+  } catch (error) {
+    rollbackSession(dependencies, updated, 'picks', session.payload);
+    throw error;
   }
 }
 
@@ -155,14 +179,27 @@ export async function submitAmount(
   const rawStake = interaction.fields.getTextInputValue('stake').trim();
   const parsedStake = parseStake(rawStake);
   const poolType = parsePoolType(session.payload.poolType);
-  const pickStep = finalPickStep(poolType);
   if (parsedStake === undefined) {
-    rollbackSession(dependencies, session, pickStep, payloadBeforeFinalPick(session, poolType));
+    rollbackSession(dependencies, session, 'picks', session.payload);
     await interaction.editReply('賭け金は100CP以上の整数で入力してください。');
     return;
   }
+  const selectionCodes = selectionsFromSession(session, poolType);
+  const raceBetLimit = await dependencies.gateway.raceBetLimit(session.raceId);
+  const totalStake = parsedStake * BigInt(selectionCodes.length);
+  if (totalStake > raceBetLimit) {
+    // Caught here so the buyer sees the arithmetic rather than a rejection after
+    // the confirmation button. The cumulative per-race cap is still enforced by
+    // the ledger when the purchase runs.
+    rollbackSession(dependencies, session, 'picks', session.payload);
+    await interaction.editReply(
+      `${String(selectionCodes.length)}点 × ${parsedStake.toLocaleString('ja-JP')} CP = ` +
+        `${totalStake.toLocaleString('ja-JP')} CP で、このレースの上限 ` +
+        `${raceBetLimit.toLocaleString('ja-JP')} CP を超えています。`,
+    );
+    return;
+  }
 
-  const selectionCode = selectionFromSession(session, poolType);
   const previewing = dependencies.sessions.update(
     session.id,
     'amount',
@@ -176,35 +213,29 @@ export async function submitAmount(
       discordUserId: interaction.user.id,
       raceId: session.raceId,
       poolType,
-      selectionCode,
-      stake: parsedStake,
+      selectionCodes,
+      stakePerPoint: parsedStake,
     });
     confirming = dependencies.sessions.update(session.id, 'previewing', 'confirm', {
       ...session.payload,
       stake,
-      selectionCode,
     });
     try {
       await interaction.editReply(
         purchasePreviewMessage({
           sessionId: confirming.id,
+          summary: formationSummary(confirming, poolType),
           poolType,
-          selectionCode,
           stake,
           preview,
         }),
       );
     } catch (error) {
-      rollbackSession(
-        dependencies,
-        confirming,
-        pickStep,
-        payloadBeforeFinalPick(session, poolType),
-      );
+      rollbackSession(dependencies, confirming, 'picks', session.payload);
       throw error;
     }
   } catch (error) {
-    rollbackSession(dependencies, previewing, pickStep, payloadBeforeFinalPick(session, poolType));
+    rollbackSession(dependencies, previewing, 'picks', session.payload);
     throw error;
   }
 }
@@ -224,10 +255,8 @@ export async function confirmPurchase(
   }
   const poolType = parsePoolType(session.payload.poolType);
   const stake = session.payload.stake;
-  const selectionCode = session.payload.selectionCode;
-  if (stake === undefined || selectionCode === undefined) {
-    throw new Error('Purchase is incomplete.');
-  }
+  if (stake === undefined) throw new Error('Purchase is incomplete.');
+  const selectionCodes = selectionsFromSession(session, poolType);
   const needsProcessingTransition = session.step === 'confirm';
   if (needsProcessingTransition) {
     dependencies.sessions.update(session.id, 'confirm', 'processing', session.payload);
@@ -239,8 +268,8 @@ export async function confirmPurchase(
       raceId: session.raceId,
       raceVersion: session.raceVersion,
       poolType,
-      selectionCode,
-      stake: money(BigInt(stake)),
+      selectionCodes,
+      stakePerPoint: money(BigInt(stake)),
       interactionId: interaction.id,
       operationId: session.id,
     });
@@ -281,17 +310,4 @@ function rollbackSession(
   } catch {
     // Preserve the user-facing operation error if the session changed concurrently.
   }
-}
-
-function payloadBeforeFinalPick(
-  session: PurchaseSession,
-  poolType: PoolType,
-): Readonly<Record<string, string>> {
-  const { first, second } = session.payload;
-  const definition = poolDefinition(poolType);
-  return {
-    poolType,
-    ...(definition.selectionSize >= 2 && first !== undefined ? { first } : {}),
-    ...(definition.selectionSize >= 3 && second !== undefined ? { second } : {}),
-  };
 }

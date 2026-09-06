@@ -1,8 +1,8 @@
+import { betStatusLabel } from '@jcb/discord';
 import { DomainError } from '@jcb/domain';
 import { describe, expect, it } from 'vitest';
 import {
   createViewerLinkReply,
-  betStatusLabel,
   discordErrorMessage,
   isMissingDiscordMessage,
 } from './discord-gateway.js';

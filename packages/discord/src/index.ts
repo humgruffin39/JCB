@@ -1,5 +1,6 @@
 export * from './purchase-flow.js';
 export * from './horse-number-emoji.js';
 export * from './horse-info.js';
+export * from './my-bets.js';
 export * from './race-message.js';
 export * from './types.js';

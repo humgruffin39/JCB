@@ -102,6 +102,51 @@ function selectionCodeFromValidatedHorses(
   return normalized.join('-');
 }
 
+/**
+ * Every distinct selection a formation covers.
+ *
+ * `positions` holds the horses chosen for each place of the ticket. Combinations
+ * that would put one horse in two places are dropped rather than rejected, which
+ * is what lets a box — the same horses in every position — expand to exactly the
+ * permutations that can actually happen.
+ */
+export function formationSelections(
+  poolType: PoolType,
+  positions: readonly (readonly number[])[],
+): readonly string[] {
+  const definition = POOL_TYPE_DEFINITIONS[poolType];
+  if (positions.length !== definition.selectionSize) {
+    throw new DomainError('INVALID_SELECTION', 'Formation has the wrong number of positions.');
+  }
+  const normalized = positions.map((position) => {
+    if (position.length === 0) {
+      throw new DomainError('INVALID_SELECTION', 'Every position needs at least one horse.');
+    }
+    for (const horseNumber of position) validateHorseNumber(horseNumber);
+    return [...new Set(position)];
+  });
+  const codes: string[] = [];
+  const seen = new Set<string>();
+  const build = (chosen: readonly number[]): void => {
+    if (chosen.length === normalized.length) {
+      const code = selectionCodeFromValidatedHorses(poolType, chosen);
+      if (seen.has(code)) return;
+      seen.add(code);
+      codes.push(code);
+      return;
+    }
+    for (const horseNumber of normalized[chosen.length]!) {
+      if (chosen.includes(horseNumber)) continue;
+      build([...chosen, horseNumber]);
+    }
+  };
+  build([]);
+  if (codes.length === 0) {
+    throw new DomainError('INVALID_SELECTION', 'The formation covers no valid combination.');
+  }
+  return codes;
+}
+
 export function allSelections(poolType: PoolType): readonly string[] {
   const definition = POOL_TYPE_DEFINITIONS[poolType];
   const selections: string[] = [];

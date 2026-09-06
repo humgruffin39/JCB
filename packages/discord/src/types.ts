@@ -51,13 +51,19 @@ export interface PurchaseSessionStore {
 }
 
 export interface PurchasePreview {
-  readonly estimatedBasePayout: Money;
-  readonly estimatedCarryoverBonus: Money;
+  readonly points: number;
+  readonly totalStake: Money;
+  /** The smallest and largest payout across the points, for the same stake each. */
+  readonly minimumPayout: Money;
+  readonly maximumPayout: Money;
+  readonly includesCarryover: boolean;
   readonly balanceAfter: Money;
 }
 
 export interface PurchaseReceipt {
   readonly betId: string;
+  readonly points: number;
+  readonly totalStake: Money;
   readonly balanceAfter: Money;
   readonly wasDuplicate: boolean;
 }
@@ -69,16 +75,16 @@ export interface DiscordPurchaseGateway {
     readonly discordUserId: string;
     readonly raceId: string;
     readonly poolType: PoolType;
-    readonly selectionCode: string;
-    readonly stake: Money;
+    readonly selectionCodes: readonly string[];
+    readonly stakePerPoint: Money;
   }): Promise<PurchasePreview>;
   purchase(input: {
     readonly discordUserId: string;
     readonly raceId: string;
     readonly raceVersion: number;
     readonly poolType: PoolType;
-    readonly selectionCode: string;
-    readonly stake: Money;
+    readonly selectionCodes: readonly string[];
+    readonly stakePerPoint: Money;
     readonly interactionId: string;
     readonly operationId: string;
   }): Promise<PurchaseReceipt>;

@@ -10,12 +10,12 @@ import {
 } from '@jcb/database';
 import {
   handlePurchaseInteraction,
-  horseSelectionEmojis,
   renderHorseInfoMessage,
+  renderMyBets,
   renderInitialOddsMessage,
   renderRaceMessage,
 } from '@jcb/discord';
-import { DomainError, money, POOL_TYPE_DEFINITIONS, timestamp, type Clock } from '@jcb/domain';
+import { DomainError, money, timestamp, type Clock } from '@jcb/domain';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -167,17 +167,9 @@ export function wireDiscordGateway(input: {
         return;
       }
       if (action === 'bets' && raceId !== undefined) {
-        const bets = viewerStore.getMyBets(raceId, interaction.user.id);
         await safeEphemeralReply(
           interaction,
-          bets.length === 0
-            ? 'このレースで購入済みの馬券はありません。'
-            : bets
-                .map(
-                  (bet) =>
-                    `${POOL_TYPE_DEFINITIONS[bet.poolType].label} ${horseSelectionEmojis(bet.selectionCode)} / ${bet.stake} CP / 状態: ${betStatusLabel(bet.status)}`,
-                )
-                .join('\n'),
+          renderMyBets(viewerStore.getMyBets(raceId, interaction.user.id)),
         );
       }
     } catch (error) {
@@ -189,17 +181,6 @@ export function wireDiscordGateway(input: {
       }
     }
   }
-}
-
-const BET_STATUS_LABELS: Readonly<Record<string, string>> = {
-  open: '受付中',
-  won: '的中',
-  lost: '外れ',
-  refunded: '返金済み',
-};
-
-export function betStatusLabel(status: string): string {
-  return BET_STATUS_LABELS[status] ?? '状態不明';
 }
 
 export function discordErrorMessage(error: unknown): string {

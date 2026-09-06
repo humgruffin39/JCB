@@ -1,8 +1,8 @@
 import {
+  formationSelections,
   isPoolType,
   money,
   POOL_TYPE_DEFINITIONS,
-  selectionCode,
   type PoolType,
 } from '@jcb/domain';
 import type {
@@ -15,9 +15,7 @@ import type { PurchaseSession } from './types.js';
 
 const PURCHASE_SESSION_STEPS = new Set([
   'pool',
-  'pick-1',
-  'pick-2',
-  'pick-3',
+  'picks',
   'amount',
   'previewing',
   'confirm',
@@ -68,33 +66,56 @@ export function poolDefinition(poolType: PoolType) {
   return POOL_TYPE_DEFINITIONS[poolType];
 }
 
-export function selectionFromSession(session: PurchaseSession, poolType: PoolType): string {
-  const definition = poolDefinition(poolType);
-  const selections = [session.payload.first, session.payload.second, session.payload.third].slice(
-    0,
-    definition.selectionSize,
+export const POSITION_KEYS = ['first', 'second', 'third'] as const;
+
+/**
+ * The horses picked for each place, in menu order. Positions the buyer has not
+ * touched yet come back empty so the selection screen can render a partial
+ * formation.
+ */
+export function positionsFromSession(
+  session: PurchaseSession,
+  poolType: PoolType,
+): readonly (readonly number[])[] {
+  return POSITION_KEYS.slice(0, poolDefinition(poolType).selectionSize).map((key) =>
+    parsePosition(session.payload[key]),
   );
-  if (selections.some((value) => !isHorseNumber(value))) {
-    throw new Error(`${definition.label} selection is incomplete.`);
-  }
-  try {
-    return selectionCode(poolType, (selections as string[]).map(Number));
-  } catch {
-    throw new Error('The same horse cannot fill two positions.');
-  }
 }
 
-export function requireHorseNumber(value: string | undefined): string {
-  if (!isHorseNumber(value)) throw new Error('Horse selection is missing.');
-  return value;
+export function selectionsFromSession(
+  session: PurchaseSession,
+  poolType: PoolType,
+): readonly string[] {
+  const positions = positionsFromSession(session, poolType);
+  if (positions.some((position) => position.length === 0)) {
+    throw new Error(`${poolDefinition(poolType).label} selection is incomplete.`);
+  }
+  return formationSelections(poolType, positions);
+}
+
+export function parsePosition(value: string | undefined): readonly number[] {
+  if (value === undefined || value === '') return [];
+  const horseNumbers = value.split(',');
+  if (!horseNumbers.every((horseNumber) => isHorseNumber(horseNumber))) {
+    throw new Error('Horse selection is invalid.');
+  }
+  return [...new Set(horseNumbers.map(Number))].sort((left, right) => left - right);
+}
+
+export function formatPosition(horseNumbers: readonly number[]): string {
+  return [...horseNumbers].sort((left, right) => left - right).join(',');
+}
+
+export function requirePositionIndex(value: string | undefined, poolType: PoolType): number {
+  const index = Number(value);
+  if (!Number.isInteger(index) || index < 1 || index > poolDefinition(poolType).selectionSize) {
+    throw new Error('Horse position is invalid.');
+  }
+  return index;
 }
 
 export function requireStep(session: PurchaseSession, expected: string): void {
   if (session.step !== expected) throw new Error('Purchase session step is stale.');
-}
-
-export function finalPickStep(poolType: PoolType): 'pick-1' | 'pick-2' | 'pick-3' {
-  return `pick-${String(poolDefinition(poolType).selectionSize)}` as 'pick-1' | 'pick-2' | 'pick-3';
 }
 
 function isHorseNumber(value: string | undefined): value is string {

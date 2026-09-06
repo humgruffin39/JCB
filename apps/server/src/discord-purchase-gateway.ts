@@ -43,47 +43,40 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
     readonly discordUserId: string;
     readonly raceId: string;
     readonly poolType: PoolType;
-    readonly selectionCode: string;
-    readonly stake: Money;
+    readonly selectionCodes: readonly string[];
+    readonly stakePerPoint: Money;
   }): Promise<PurchasePreview> {
     if (!(await this.membership.isCurrentMember(input.discordUserId))) {
       throw new Error('Current guild membership is required.');
     }
-    const row = this.database
+    const points = input.selectionCodes.length;
+    if (points === 0) throw new Error('Selection is missing.');
+    const totalStake = money(input.stakePerPoint * BigInt(points));
+    const account = this.database
       .prepare(
-        `SELECT ab.amount AS balance, bp.seed_liquidity AS seedLiquidity,
-                bp.user_stake_total AS userStakeTotal, op.seed_stake AS seedSelectionStake,
-                COALESCE(SUM(b.stake), 0) AS userSelectionStake
-         FROM users u
+        `SELECT ab.amount AS balance FROM users u
          JOIN accounts a ON a.owner_key = u.id AND a.account_type = 'user'
          JOIN account_balances ab ON ab.account_id = a.id
-         JOIN bet_pools bp ON bp.race_id = ?
-         JOIN odds_probabilities op ON op.race_id = bp.race_id
-              AND op.pool_type = bp.pool_type AND op.selection_code = ?
-         LEFT JOIN bets b ON b.pool_id = bp.id AND b.selection_code = ?
-              AND b.status = 'open'
-         WHERE u.discord_user_id = ? AND bp.pool_type = ?
-         GROUP BY u.id, bp.id, op.id`,
+         WHERE u.discord_user_id = ?`,
       )
-      .get(
-        input.raceId,
-        input.selectionCode,
-        input.selectionCode,
-        input.discordUserId,
-        input.poolType,
-      ) as
-      | {
-          balance: bigint;
-          seedLiquidity: bigint;
-          userStakeTotal: bigint;
-          seedSelectionStake: bigint;
-          userSelectionStake: bigint;
-        }
-      | undefined;
-    if (row === undefined) throw new Error('User, pool, or selection was not found.');
-    if (row.balance < input.stake) throw new Error('Insufficient balance.');
-    const poolTotal = money(row.seedLiquidity + row.userStakeTotal);
-    const selectionTotal = money(row.seedSelectionStake + row.userSelectionStake);
+      .get(input.discordUserId) as { balance: bigint } | undefined;
+    const pool = this.database
+      .prepare(
+        `SELECT id, seed_liquidity AS seedLiquidity, user_stake_total AS userStakeTotal
+         FROM bet_pools WHERE race_id = ? AND pool_type = ?`,
+      )
+      .get(input.raceId, input.poolType) as
+      { id: string; seedLiquidity: bigint; userStakeTotal: bigint } | undefined;
+    if (account === undefined || pool === undefined) {
+      throw new Error('User, pool, or selection was not found.');
+    }
+    if (account.balance < totalStake) throw new Error('Insufficient balance.');
+    const stakes = this.selectionStakes(
+      input.raceId,
+      input.poolType,
+      pool.id,
+      input.selectionCodes,
+    );
     const carryover =
       input.poolType === 'trifecta'
         ? ((
@@ -91,23 +84,68 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
               .prepare(
                 "SELECT amount_projection AS amount FROM trifecta_carryover WHERE id = 'global'",
               )
-              .get() as { amount: bigint }
-          ).amount ?? 0n)
+              .get() as { amount: bigint } | undefined
+          )?.amount ?? 0n)
         : 0n;
-    const carryoverBonus =
-      input.poolType === 'trifecta'
-        ? money((carryover * input.stake) / (row.userSelectionStake + input.stake))
-        : money(0n);
-    return {
-      estimatedBasePayout: estimatedGrossPayout(
-        input.stake,
-        poolTotal,
-        selectionTotal,
+    // Every point of a formation enters the pool, so each one is quoted against
+    // the pool the whole purchase leaves behind rather than against itself alone.
+    const poolAfterOtherPoints = money(
+      pool.seedLiquidity + pool.userStakeTotal + totalStake - input.stakePerPoint,
+    );
+    const payouts = input.selectionCodes.map((code) => {
+      const selection = stakes.get(code);
+      if (selection === undefined) throw new Error('User, pool, or selection was not found.');
+      const base = estimatedGrossPayout(
+        input.stakePerPoint,
+        poolAfterOtherPoints,
+        money(selection.seedStake + selection.userStake),
         POOL_TYPE_DEFINITIONS[input.poolType].winningSelectionCount,
-      ),
-      estimatedCarryoverBonus: carryoverBonus,
-      balanceAfter: money(row.balance - input.stake),
+      );
+      const bonus =
+        carryover > 0n
+          ? (carryover * input.stakePerPoint) / (selection.userStake + input.stakePerPoint)
+          : 0n;
+      return base + bonus;
+    });
+    return {
+      points,
+      totalStake,
+      minimumPayout: money(payouts.reduce((low, value) => (value < low ? value : low))),
+      maximumPayout: money(payouts.reduce((high, value) => (value > high ? value : high))),
+      includesCarryover: carryover > 0n,
+      balanceAfter: money(account.balance - totalStake),
     };
+  }
+
+  private selectionStakes(
+    raceId: string,
+    poolType: PoolType,
+    poolId: string,
+    selectionCodes: readonly string[],
+  ): ReadonlyMap<string, { readonly seedStake: bigint; readonly userStake: bigint }> {
+    const placeholders = selectionCodes.map(() => '?').join(',');
+    const rows = this.database
+      .prepare(
+        `SELECT op.selection_code AS selectionCode, op.seed_stake AS seedStake,
+                COALESCE(SUM(b.stake), 0) AS userStake
+         FROM odds_probabilities op
+         LEFT JOIN bets b ON b.pool_id = ? AND b.selection_code = op.selection_code
+              AND b.status = 'open'
+         WHERE op.race_id = ? AND op.pool_type = ?
+           AND op.selection_code IN (${placeholders})
+         GROUP BY op.id`,
+      )
+      .all(poolId, raceId, poolType, ...selectionCodes) as Array<{
+      selectionCode: string;
+      seedStake: bigint;
+      userStake: bigint;
+    }>;
+    return new Map(
+      rows.map((row) => [
+        row.selectionCode,
+        { seedStake: row.seedStake, userStake: row.userStake },
+      ]),
+    );
   }
 
   public async purchase(input: {
@@ -115,11 +153,12 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
     readonly raceId: string;
     readonly raceVersion: number;
     readonly poolType: PoolType;
-    readonly selectionCode: string;
-    readonly stake: Money;
+    readonly selectionCodes: readonly string[];
+    readonly stakePerPoint: Money;
     readonly interactionId: string;
     readonly operationId: string;
   }): Promise<PurchaseReceipt> {
+    if (input.selectionCodes.length === 0) throw new Error('Selection is missing.');
     const isGuildMember = await this.membership.isCurrentMember(input.discordUserId);
     const user = this.database
       .prepare('SELECT id FROM users WHERE discord_user_id = ?')
@@ -129,24 +168,27 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
       .prepare('SELECT id FROM bet_pools WHERE race_id = ? AND pool_type = ?')
       .get(input.raceId, input.poolType) as { id: string } | undefined;
     if (pool === undefined) throw new Error('Bet pool is not open.');
+    // One transaction for the whole formation: a partially bought ticket set is
+    // worse than none, the per-race cap has to see every point at once, and the
+    // odds refresh still has to be scheduled or the purchase undone.
     const purchased = this.database
       .transaction(() => {
-        const result = this.gameStore.purchaseBet({
-          userId: user.id,
-          poolId: pool.id,
-          poolType: input.poolType,
-          selectionCode: input.selectionCode,
-          stake: input.stake,
-          interactionId: input.interactionId,
-          idempotencyKey: `discord-session:${input.operationId}`,
-          expectedRaceVersion: input.raceVersion,
-          isGuildMember,
-          now: this.clock.now(),
-        });
+        const result = this.gameStore.purchaseBets(
+          input.selectionCodes.map((selectionCode) => ({
+            userId: user.id,
+            poolId: pool.id,
+            poolType: input.poolType,
+            selectionCode,
+            stake: input.stakePerPoint,
+            interactionId: input.interactionId,
+            idempotencyKey: `discord-session:${input.operationId}:${selectionCode}`,
+            expectedRaceVersion: input.raceVersion,
+            isGuildMember,
+            now: this.clock.now(),
+          })),
+        );
         if (!result.wasDuplicate) {
-          const current = this.clock.now();
-          const interval = this.oddsRefreshInterval();
-          const refreshAt = nextOddsRefreshAt(current, interval);
+          const refreshAt = nextOddsRefreshAt(this.clock.now(), this.oddsRefreshInterval());
           new SqliteJobStore(this.database, cryptoUnit, () => this.clock.now()).enqueue({
             jobType: 'refresh_race_message',
             deduplicationKey: `refresh-race:${input.raceId}:${String(input.raceVersion)}:${String(refreshAt)}`,
@@ -157,8 +199,12 @@ export class SqliteDiscordPurchaseGateway implements DiscordPurchaseGateway {
         return result;
       })
       .immediate();
+    const first = purchased.bets[0];
+    if (first === undefined) throw new Error('Purchase produced no bet.');
     return {
-      betId: purchased.id,
+      betId: first.id,
+      points: purchased.bets.length,
+      totalStake: money(input.stakePerPoint * BigInt(purchased.bets.length)),
       balanceAfter: purchased.balanceAfter,
       wasDuplicate: purchased.wasDuplicate,
     };

@@ -4,6 +4,7 @@ import {
   type ReliefOptions,
   type OpenBettingPoolsInput,
   type PurchaseBetInput,
+  type PurchasedBetGroup,
   type PurchasedBet,
 } from './game-finance-store.js';
 import { SqliteHorseStore } from './game-horse-store.js';
@@ -20,7 +21,7 @@ import type {
   RegisteredUser,
 } from './game-store-types.js';
 
-export type { PurchaseBetInput, PurchasedBet } from './game-finance-store.js';
+export type { PurchaseBetInput, PurchasedBet, PurchasedBetGroup } from './game-finance-store.js';
 export type {
   HorseRecord,
   HorseWrite,
@@ -110,6 +111,10 @@ export class SqliteGameStore {
 
   public openBettingPools(input: OpenBettingPoolsInput): void {
     this.finance.openBettingPools(input);
+  }
+
+  public purchaseBets(inputs: readonly PurchaseBetInput[]): PurchasedBetGroup {
+    return this.finance.purchaseBets(inputs);
   }
 
   public purchaseBet(input: PurchaseBetInput): PurchasedBet {

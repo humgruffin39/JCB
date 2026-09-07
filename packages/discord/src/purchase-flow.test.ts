@@ -171,7 +171,36 @@ describe('purchase flow', () => {
       second.options?.filter((option) => option.default).map((option) => option.value),
     ).toEqual(['1', '2', '3']);
     // Nothing to price until every position is filled.
-    expect(message.components[3]!.toJSON().components[0]!.disabled).toBe(true);
+    expect(message.components[3]!.toJSON().components[1]!.disabled).toBe(true);
+  });
+
+  it('boxes a formation by copying the first position over the rest', async () => {
+    const store = memoryStore(picksSession({ poolType: 'trifecta', first: '1,2,3' }));
+    let rendered: unknown;
+
+    expect(
+      await handlePurchaseInteraction(
+        buttonInteraction('jcb:box:session', (message) => {
+          rendered = message;
+        }),
+        dependenciesFor(store),
+      ),
+    ).toBe(true);
+
+    expect(store.current().payload).toEqual({
+      poolType: 'trifecta',
+      first: '1,2,3',
+      second: '1,2,3',
+      third: '1,2,3',
+    });
+    const message = rendered as {
+      readonly content: string;
+      readonly components: readonly {
+        toJSON(): { readonly components: readonly { readonly label?: string }[] };
+      }[];
+    };
+    expect(message.content).toContain('点数: 6点');
+    expect(message.components[3]!.toJSON().components[1]!.label).toBe('賭け金を入力（6点）');
   });
 
   it('rejects a formation that would spend more than the race allows', async () => {

@@ -140,8 +140,12 @@ function countPoints(session: PurchaseSession, poolType: PoolType): number {
 
 function positionPrompt(definition: ReturnType<typeof poolDefinition>, position: number): string {
   if (definition.selectionSize === 1) return `${definition.label}の馬`;
-  return definition.ordered ? `${String(position)}着` : `${String(position)}頭目`;
+  // Full-width numerals so the labels line up under one another.
+  const numeral = POSITION_NUMERALS[position - 1] ?? String(position);
+  return definition.ordered ? `${numeral}着` : `${numeral}頭目`;
 }
+
+const POSITION_NUMERALS = ['１', '２', '３'] as const;
 
 export async function showAmountModal(
   interaction: ButtonInteraction,

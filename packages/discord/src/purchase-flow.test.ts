@@ -104,7 +104,7 @@ describe('purchase flow', () => {
     expect(store.current().step).toBe('picks');
     expect(store.current().payload).toEqual({ poolType: 'quinella' });
     expect((rendered as { readonly content: string }).content).toBe(
-      ['馬連', '1頭目: 未選択', '2頭目: 未選択', '点数: —'].join('\n'),
+      ['馬連', '１頭目: 未選択', '２頭目: 未選択', '点数: —'].join('\n'),
     );
     expect((rendered as { readonly embeds: readonly unknown[] }).embeds).toEqual([]);
   });
@@ -163,7 +163,7 @@ describe('purchase flow', () => {
         };
       }[];
     };
-    expect(message.content).toContain('3着: 未選択');
+    expect(message.content).toContain('３着: 未選択');
     expect(message.content).toContain('点数: —');
     const second = message.components[1]!.toJSON().components[0]!;
     expect(second.max_values).toBe(8);

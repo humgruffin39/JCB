@@ -38,11 +38,13 @@ export function requireSession(
   return session;
 }
 
+export const MINIMUM_STAKE = 100n;
+
 export function parseStake(value: string): ReturnType<typeof money> | undefined {
   const normalized = value.trim();
   if (!/^\d+$/.test(normalized)) return undefined;
   const parsed = BigInt(normalized);
-  return parsed >= 100n ? money(parsed) : undefined;
+  return parsed >= MINIMUM_STAKE ? money(parsed) : undefined;
 }
 
 export function isPurchaseSessionValid(
@@ -116,6 +118,18 @@ export function requirePositionIndex(value: string | undefined, poolType: PoolTy
 
 export function requireStep(session: PurchaseSession, expected: string): void {
   if (session.step !== expected) throw new Error('Purchase session step is stale.');
+}
+
+/**
+ * The selection screen stays usable after the amount modal is dismissed. Discord
+ * reports nothing when someone closes a modal, so a session parked at `amount`
+ * has to keep accepting edits to the buy or the whole screen goes dead.
+ */
+export function requireSelectionStep(session: PurchaseSession): 'picks' | 'amount' {
+  if (session.step !== 'picks' && session.step !== 'amount') {
+    throw new Error('Purchase session step is stale.');
+  }
+  return session.step;
 }
 
 function isHorseNumber(value: string | undefined): value is string {

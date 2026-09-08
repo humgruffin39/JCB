@@ -168,7 +168,7 @@ describe('Discord contracts', () => {
       raceId: 'race-1',
       raceVersion: 1,
       step: 'pool',
-      payload: {},
+      payload: { poolType: 'win' },
       expiresAt: timestamp(2_000),
     };
     const dependencies: PurchaseFlowDependencies = {
@@ -210,7 +210,7 @@ describe('Discord contracts', () => {
       },
     };
     const interaction = {
-      customId: 'jcb:pool:session:win',
+      customId: 'jcb:pool-confirm:session',
       user: { id: 'user-1' },
       isButton: () => true,
       isStringSelectMenu: () => false,

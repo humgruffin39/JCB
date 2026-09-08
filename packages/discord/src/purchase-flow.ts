@@ -4,7 +4,6 @@ import {
   applyBox,
   beginPurchase,
   choosePosition,
-  chooseLegacyPool,
   choosePoolType,
   confirmPool,
   confirmPurchase,
@@ -46,12 +45,6 @@ export async function handlePurchaseInteraction(
     if (!interaction.isButton()) return false;
     const session = requireSession(interaction, route.sessionId, dependencies);
     await confirmPool(interaction, session, dependencies);
-    return true;
-  }
-  if (route.action === 'pool-legacy') {
-    if (!interaction.isButton()) return false;
-    const session = requireSession(interaction, route.sessionId, dependencies);
-    await chooseLegacyPool(interaction, session, route.poolType, dependencies);
     return true;
   }
   if (route.action === 'pick') {
@@ -97,7 +90,6 @@ type PurchaseRoute =
   | { readonly action: 'buy'; readonly raceId: string }
   | { readonly action: 'pool-select'; readonly sessionId: string }
   | { readonly action: 'pool-confirm'; readonly sessionId: string }
-  | { readonly action: 'pool-legacy'; readonly sessionId: string; readonly poolType: string }
   | { readonly action: 'pick'; readonly sessionId: string; readonly position: number }
   | {
       readonly action: 'box' | 'picks' | 'amount' | 'confirm' | 'back';
@@ -115,9 +107,6 @@ function purchaseRoute(customId: string): PurchaseRoute | undefined {
   }
   if (parts[1] === 'pool-confirm' && parts.length === 3 && hasValue(parts[2])) {
     return { action: 'pool-confirm', sessionId: parts[2] };
-  }
-  if (parts[1] === 'pool' && parts.length === 4 && hasValue(parts[2]) && hasValue(parts[3])) {
-    return { action: 'pool-legacy', sessionId: parts[2], poolType: parts[3] };
   }
   if (
     parts[1] === 'pick' &&

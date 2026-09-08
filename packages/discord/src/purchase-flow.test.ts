@@ -203,6 +203,61 @@ describe('purchase flow', () => {
     expect(message.components[3]!.toJSON().components[1]!.label).toBe('賭け金を入力（6点）');
   });
 
+  it('keeps the selection screen usable after the amount modal is dismissed', async () => {
+    // Discord reports nothing when a modal is closed, so the session is still
+    // parked on the amount step when the next click arrives.
+    const store = memoryStore({
+      ...picksSession({ poolType: 'trifecta', first: '6', second: '1,2', third: '1,2' }),
+      step: 'amount',
+    });
+    let rendered: unknown;
+
+    expect(
+      await handlePurchaseInteraction(
+        pickInteraction(1, ['5'], (message) => {
+          rendered = message;
+        }),
+        dependenciesFor(store),
+      ),
+    ).toBe(true);
+
+    expect(store.current().step).toBe('picks');
+    expect(store.current().payload).toMatchObject({ first: '5' });
+    expect((rendered as { readonly content: string }).content).toContain('点数: 2点');
+  });
+
+  it('says the buy cannot fit instead of asking for an impossible stake', async () => {
+    const store = memoryStore(
+      picksSession({
+        poolType: 'trifecta',
+        first: '1,2,3,4,5,6,7,8',
+        second: '1,2,3,4,5,6,7,8',
+        third: '1,2,3,4,5,6,7,8',
+      }),
+    );
+    let replied: unknown;
+    const interaction = {
+      id: 'picks-interaction',
+      customId: 'jcb:picks:session',
+      user: { id: 'user-1' },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      reply: vi.fn(async (message: unknown) => {
+        replied = message;
+      }),
+      showModal: vi.fn(async () => {
+        throw new Error('the modal must not open');
+      }),
+      deferUpdate: vi.fn(async () => undefined),
+      editReply: vi.fn(async () => undefined),
+    } as unknown as Interaction;
+
+    expect(await handlePurchaseInteraction(interaction, dependenciesFor(store))).toBe(true);
+    expect((replied as { readonly content: string }).content).toContain('336点');
+    expect(store.current().step).toBe('picks');
+  });
+
   it('rejects a formation that would spend more than the race allows', async () => {
     const store = memoryStore(
       amountSession({

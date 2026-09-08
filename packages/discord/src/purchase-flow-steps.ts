@@ -16,12 +16,14 @@ import {
 } from './purchase-flow-render.js';
 import {
   formatPosition,
+  MINIMUM_STAKE,
   parsePoolType,
   poolDefinition,
   parseStake,
   parsePosition,
   POSITION_KEYS,
   positionsFromSession,
+  requireSelectionStep,
   requireStep,
   selectionsFromSession,
 } from './purchase-flow-validation.js';
@@ -84,31 +86,13 @@ export async function confirmPool(
   }
 }
 
-export async function chooseLegacyPool(
-  interaction: ButtonInteraction,
-  session: PurchaseSession,
-  poolTypeValue: string | undefined,
-  dependencies: PurchaseFlowDependencies,
-): Promise<void> {
-  requireStep(session, 'pool');
-  const poolType = parsePoolType(poolTypeValue);
-  await interaction.deferUpdate();
-  const updated = dependencies.sessions.update(session.id, 'pool', 'picks', { poolType });
-  try {
-    await interaction.editReply(await formationChoice(updated, dependencies.gateway));
-  } catch (error) {
-    rollbackSession(dependencies, updated, 'pool', session.payload);
-    throw error;
-  }
-}
-
 export async function choosePosition(
   interaction: StringSelectMenuInteraction,
   session: PurchaseSession,
   position: number,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
-  requireStep(session, 'picks');
+  const step = requireSelectionStep(session);
   const poolType = parsePoolType(session.payload.poolType);
   const key = POSITION_KEYS[position - 1];
   if (key === undefined || position > poolDefinition(poolType).selectionSize) {
@@ -118,11 +102,11 @@ export async function choosePosition(
   if (chosen.length === 0) throw new Error('Horse selection is missing.');
   await interaction.deferUpdate();
   const payload = { ...session.payload, [key]: formatPosition(chosen) };
-  const updated = dependencies.sessions.update(session.id, 'picks', 'picks', payload);
+  const updated = dependencies.sessions.update(session.id, step, 'picks', payload);
   try {
     await interaction.editReply(await formationChoice(updated, dependencies.gateway));
   } catch (error) {
-    rollbackSession(dependencies, updated, 'picks', session.payload);
+    rollbackSession(dependencies, updated, step, session.payload);
     throw error;
   }
 }
@@ -133,7 +117,7 @@ export async function applyBox(
   session: PurchaseSession,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
-  requireStep(session, 'picks');
+  const step = requireSelectionStep(session);
   const poolType = parsePoolType(session.payload.poolType);
   const first = positionsFromSession(session, poolType)[0] ?? [];
   if (first.length === 0) throw new Error('Horse selection is missing.');
@@ -142,11 +126,11 @@ export async function applyBox(
   for (const key of POSITION_KEYS.slice(0, poolDefinition(poolType).selectionSize)) {
     payload[key] = formatPosition(first);
   }
-  const updated = dependencies.sessions.update(session.id, 'picks', 'picks', payload);
+  const updated = dependencies.sessions.update(session.id, step, 'picks', payload);
   try {
     await interaction.editReply(await formationChoice(updated, dependencies.gateway));
   } catch (error) {
-    rollbackSession(dependencies, updated, 'picks', session.payload);
+    rollbackSession(dependencies, updated, step, session.payload);
     throw error;
   }
 }
@@ -156,15 +140,27 @@ export async function confirmSelection(
   session: PurchaseSession,
   dependencies: PurchaseFlowDependencies,
 ): Promise<void> {
-  requireStep(session, 'picks');
+  const step = requireSelectionStep(session);
   const poolType = parsePoolType(session.payload.poolType);
   const points = selectionsFromSession(session, poolType).length;
   const raceBetLimit = await dependencies.gateway.raceBetLimit(session.raceId);
-  const updated = dependencies.sessions.update(session.id, 'picks', 'amount', session.payload);
+  if (raceBetLimit / BigInt(points) < MINIMUM_STAKE) {
+    // The cheapest possible buy already breaks the cap, so there is no amount to
+    // ask for. Saying it here keeps the selection screen alive to be trimmed.
+    await interaction.reply({
+      content:
+        `${String(points)}点は1点${MINIMUM_STAKE.toLocaleString('ja-JP')} CPでも合計 ` +
+        `${(MINIMUM_STAKE * BigInt(points)).toLocaleString('ja-JP')} CP になり、` +
+        `このレースの上限 ${raceBetLimit.toLocaleString('ja-JP')} CP を超えます。買い目を減らしてください。`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const updated = dependencies.sessions.update(session.id, step, 'amount', session.payload);
   try {
     await showAmountModal(interaction, updated, raceBetLimit, points);
   } catch (error) {
-    rollbackSession(dependencies, updated, 'picks', session.payload);
+    rollbackSession(dependencies, updated, step, session.payload);
     throw error;
   }
 }

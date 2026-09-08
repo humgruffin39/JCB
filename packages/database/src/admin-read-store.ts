@@ -90,10 +90,13 @@ export class SqliteAdminReadStore {
                      AND rs.kind = 'odds') AS oddsSimulationStatus,
                   (SELECT COUNT(*) FROM odds_probabilities op
                    WHERE op.race_id = r.id) AS oddsSelectionCount,
+                  -- Win only: mixing the pools would report a place figure as the
+                  -- minimum and a trifecta figure as the maximum, and the range
+                  -- would say nothing about the race.
                   (SELECT MIN(base_odds) FROM odds_probabilities op
-                   WHERE op.race_id = r.id) AS minimumBaseOdds,
+                   WHERE op.race_id = r.id AND op.pool_type = 'win') AS minimumBaseOdds,
                   (SELECT MAX(base_odds) FROM odds_probabilities op
-                   WHERE op.race_id = r.id) AS maximumBaseOdds,
+                   WHERE op.race_id = r.id AND op.pool_type = 'win') AS maximumBaseOdds,
                   (SELECT COALESCE(SUM(seed_liquidity), 0) FROM bet_pools bp
                    WHERE bp.race_id = r.id) AS seedLiquidity,
                   (SELECT timeline_object_key FROM race_simulations rs

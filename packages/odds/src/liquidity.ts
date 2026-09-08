@@ -62,12 +62,47 @@ export function allocateSeedLiquidity(
     selection.stake += 1n;
     remaining -= 1n;
   }
+  fundEverySelection(floors, total);
   return floors
     .map((selection) => ({
       selectionCode: selection.selectionCode,
       stake: money(selection.stake),
     }))
     .sort((left, right) => left.selectionCode.localeCompare(right.selectionCode));
+}
+
+/**
+ * Gives every selection at least one unit, taking it from the largest holdings.
+ *
+ * A selection the model never saw wins can round down to nothing, and a pool
+ * position of zero has no odds to quote: the parimutuel divisor becomes zero,
+ * which would take the odds snapshot — and with it the close of betting — down
+ * with it. One unit keeps every selection priceable and the total unchanged.
+ */
+function fundEverySelection(
+  allocations: { selectionCode: string; stake: bigint }[],
+  total: bigint,
+): void {
+  if (total < BigInt(allocations.length)) return;
+  const empty = allocations.filter((allocation) => allocation.stake === 0n);
+  if (empty.length === 0) return;
+  const donors = allocations
+    .filter((allocation) => allocation.stake > 1n)
+    .sort((left, right) => (left.stake === right.stake ? 0 : left.stake > right.stake ? -1 : 1));
+  if (donors.length === 0) return;
+  let donorIndex = 0;
+  for (const allocation of empty) {
+    let scanned = 0;
+    while (scanned < donors.length && donors[donorIndex % donors.length]!.stake <= 1n) {
+      donorIndex += 1;
+      scanned += 1;
+    }
+    const donor = donors[donorIndex % donors.length]!;
+    if (donor.stake <= 1n) return;
+    donor.stake -= 1n;
+    allocation.stake = 1n;
+    donorIndex += 1;
+  }
 }
 
 export function adaptiveSeedLiquidity(

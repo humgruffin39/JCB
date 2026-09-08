@@ -96,6 +96,37 @@ describe('odds generation', () => {
   });
 });
 
+describe('seed liquidity allocation', () => {
+  it('funds every selection so each one still has a price', () => {
+    const probabilities = [
+      { selectionCode: 'a', modelProbability: 0.999_9, baseOdds: 1 },
+      ...Array.from({ length: 335 }, (_, index) => ({
+        selectionCode: `b${String(index)}`,
+        modelProbability: 0,
+        baseOdds: 0,
+      })),
+    ];
+
+    const allocations = allocateSeedLiquidity(money(15_000n), probabilities);
+
+    expect(allocations).toHaveLength(336);
+    expect(allocations.every((allocation) => allocation.stake > 0n)).toBe(true);
+    expect(allocations.reduce((sum, allocation) => sum + allocation.stake, 0n)).toBe(15_000n);
+  });
+
+  it('leaves the split alone when the pool cannot cover one unit each', () => {
+    const probabilities = Array.from({ length: 336 }, (_, index) => ({
+      selectionCode: `c${String(index)}`,
+      modelProbability: index === 0 ? 1 : 0,
+      baseOdds: index === 0 ? 1 : 0,
+    }));
+
+    const allocations = allocateSeedLiquidity(money(100n), probabilities);
+
+    expect(allocations.reduce((sum, allocation) => sum + allocation.stake, 0n)).toBe(100n);
+  });
+});
+
 describe('currentOddsTenths winning selection count', () => {
   it('divides the payable share by the number of selections the pool pays', () => {
     const single = currentOddsTenths(money(900n), money(100n), money(100n), money(0n));

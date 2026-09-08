@@ -13,7 +13,7 @@ import {
   type Timestamp,
 } from '@jcb/domain';
 import { transfer } from '@jcb/economy';
-import { currentOddsTenths, formatOdds } from '@jcb/odds';
+import { optionalCurrentOdds } from '@jcb/odds';
 import { verifyOfficialSimulationResult, type OfficialSimulationResult } from '@jcb/simulation';
 import { SqliteLedgerStore } from './ledger-store.js';
 import { normalizeMasterSecrets } from './master-secret-keyring.js';
@@ -339,18 +339,16 @@ export class SqliteRaceLifecycleStore {
       userSelectionStake: bigint;
     }>;
     return Object.fromEntries(
-      rows.map((row) => [
-        `${row.poolType}:${row.selectionCode}`,
-        formatOdds(
-          currentOddsTenths(
-            money(row.seedLiquidity),
-            money(row.totalUserStake),
-            money(row.seedSelectionStake),
-            money(row.userSelectionStake),
-            POOL_TYPE_DEFINITIONS[row.poolType].winningSelectionCount,
-          ),
-        ),
-      ]),
+      rows.flatMap((row) => {
+        const odds = optionalCurrentOdds(
+          money(row.seedLiquidity),
+          money(row.totalUserStake),
+          money(row.seedSelectionStake),
+          money(row.userSelectionStake),
+          POOL_TYPE_DEFINITIONS[row.poolType].winningSelectionCount,
+        );
+        return odds === undefined ? [] : [[`${row.poolType}:${row.selectionCode}`, odds] as const];
+      }),
     );
   }
 

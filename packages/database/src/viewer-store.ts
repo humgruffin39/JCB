@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import { POOL_TYPE_DEFINITIONS, money, type PoolType, type RaceStatus } from '@jcb/domain';
 import { raceBetLimitFor } from './game-store-types.js';
-import { currentOddsTenths, formatOdds } from '@jcb/odds';
+import { optionalCurrentOdds } from '@jcb/odds';
 
 const HIGH_CARDINALITY_POOL_TYPES = new Set<PoolType>(['exacta', 'trio', 'trifecta']);
 
@@ -120,26 +120,22 @@ export class SqliteViewerStore {
         baseWinOdds:
           entry.seedStake === null || entry.seedLiquidity === null
             ? '—'
-            : formatOdds(
-                currentOddsTenths(
-                  money(entry.seedLiquidity),
-                  money(0n),
-                  money(entry.seedStake),
-                  money(0n),
-                ),
-              ),
+            : (optionalCurrentOdds(
+                money(entry.seedLiquidity),
+                money(0n),
+                money(entry.seedStake),
+                money(0n),
+              ) ?? '—'),
         currentWinOdds:
           finalWinOdds.get(Number(entry.horseNumber)) ??
           (entry.seedStake === null || entry.seedLiquidity === null || entry.totalUserStake === null
             ? '—'
-            : formatOdds(
-                currentOddsTenths(
-                  money(entry.seedLiquidity),
-                  money(entry.totalUserStake),
-                  money(entry.seedStake),
-                  money(entry.userSelectionStake),
-                ),
-              )),
+            : (optionalCurrentOdds(
+                money(entry.seedLiquidity),
+                money(entry.totalUserStake),
+                money(entry.seedStake),
+                money(entry.userSelectionStake),
+              ) ?? '—')),
       })),
       raceBetLimit: String(raceBetLimitFor(race.simulationConfigJson, race.kind)),
       trifectaPoolTotal: (trifectaPool?.amount ?? 0n).toString(),
@@ -193,15 +189,14 @@ export class SqliteViewerStore {
       baseOdds: row.baseOdds.toFixed(1),
       currentOdds:
         finalOdds.get(`${poolType}:${row.selectionCode}`) ??
-        formatOdds(
-          currentOddsTenths(
-            money(row.seedLiquidity),
-            money(row.totalUserStake),
-            money(row.seedStake),
-            money(row.userSelectionStake),
-            POOL_TYPE_DEFINITIONS[poolType].winningSelectionCount,
-          ),
-        ),
+        optionalCurrentOdds(
+          money(row.seedLiquidity),
+          money(row.totalUserStake),
+          money(row.seedStake),
+          money(row.userSelectionStake),
+          POOL_TYPE_DEFINITIONS[poolType].winningSelectionCount,
+        ) ??
+        '—',
     }));
   }
 

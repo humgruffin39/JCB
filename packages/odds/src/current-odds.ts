@@ -27,3 +27,27 @@ export function currentOddsTenths(
 export function formatOdds(tenths: bigint): string {
   return `${tenths / 10n}.${tenths % 10n}`;
 }
+
+/**
+ * The same quote for display paths, which must survive a selection nothing is
+ * staked on. Betting close writes an odds snapshot for every selection of every
+ * pool, so throwing there would strand the race instead of the one price.
+ */
+export function optionalCurrentOdds(
+  seedLiquidity: Money,
+  totalUserStake: Money,
+  seedSelectionStake: Money,
+  userSelectionStake: Money,
+  winningSelectionCount = 1,
+): string | undefined {
+  if (seedSelectionStake + userSelectionStake <= 0n) return undefined;
+  return formatOdds(
+    currentOddsTenths(
+      seedLiquidity,
+      totalUserStake,
+      seedSelectionStake,
+      userSelectionStake,
+      winningSelectionCount,
+    ),
+  );
+}

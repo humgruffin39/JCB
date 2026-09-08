@@ -33,6 +33,16 @@ export default tseslint.config(
       '@typescript-eslint/ban-ts-comment': 'error',
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
       '@typescript-eslint/no-floating-promises': 'error',
+      // An underscore marks a parameter kept for the signature it implements.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          args: 'after-used',
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/only-throw-error': 'error',
       '@typescript-eslint/array-type': 'off',

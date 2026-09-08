@@ -17,8 +17,7 @@ class MockAdapter implements FailureActionAdapter {
     FailureActionAdapter['findExistingAnnouncement']
   >(() => Promise.resolve(null));
   public readonly sendAnnouncement = vi.fn<FailureActionAdapter['sendAnnouncement']>(
-    (announcement: FailureAnnouncement) => {
-      void announcement;
+    (_announcement: FailureAnnouncement) => {
       return Promise.resolve('999');
     },
   );

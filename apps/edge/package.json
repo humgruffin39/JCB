@@ -9,12 +9,12 @@
   },
   "dependencies": {
     "@jcb/contracts": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "4.5.4"
   },
   "devDependencies": {
-    "@jcb/application": "workspace:*",
     "@cloudflare/workers-types": "5.20260801.1",
+    "@jcb/application": "workspace:*",
     "esbuild": "0.28.1",
-    "wrangler": "4.118.0"
+    "wrangler": "4.129.0"
   }
 }

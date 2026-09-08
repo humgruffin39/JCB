@@ -102,9 +102,8 @@ export class FilePrivateObjectStore implements PrivateObjectStore {
   public async put(
     key: string,
     body: Uint8Array,
-    metadata: Readonly<Record<string, string>>,
+    _metadata: Readonly<Record<string, string>>,
   ): Promise<void> {
-    void metadata;
     const path = this.safePath(key);
     await mkdir(dirname(path), { recursive: true });
     const temporaryPath = `${path}.tmp-${randomUUID()}`;

@@ -34,8 +34,6 @@ describe('submitHorseAdminForm', () => {
       },
     };
     const request = vi.fn(async (_path: string, _init?: RequestInit): Promise<unknown> => {
-      void _path;
-      void _init;
       await Promise.resolve();
       return undefined;
     });

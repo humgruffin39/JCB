@@ -9,6 +9,6 @@
     "@jcb/domain": "workspace:*",
     "@jcb/odds": "workspace:*",
     "@jcb/simulation": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "4.5.4"
   }
 }

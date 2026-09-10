@@ -46,6 +46,17 @@ export function courseLengthForDistance(distanceM = REFERENCE_DISTANCE_M): numbe
   return length;
 }
 
+/**
+ * How much of a lap the home straight occupies. Progress 0 is its midpoint, so
+ * the straight runs from `1 - this` through 0 to `this`.
+ */
+export const HOME_STRAIGHT_HALF_PROGRESS = COURSE_STRAIGHT_HALF_LENGTH / COURSE_LENGTH;
+
+/** The home straight in metres, which grows with the race distance. */
+export function homeStraightLengthM(distanceM = REFERENCE_DISTANCE_M): number {
+  return COURSE_STRAIGHT_HALF_LENGTH * 2 * courseScaleForDistance(distanceM);
+}
+
 export function courseRadiusXForDistance(distanceM = REFERENCE_DISTANCE_M): number {
   return COURSE_RADIUS_X * courseScaleForDistance(distanceM);
 }

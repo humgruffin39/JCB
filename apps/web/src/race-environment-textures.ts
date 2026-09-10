@@ -1,25 +1,29 @@
 import * as THREE from 'three';
+import { venueTheme, type VenueTheme } from './race-venue-theme.js';
 
 export type RaceSurface = 'turf' | 'dirt';
 
 export function createGroundTexture(
   renderer: THREE.WebGLRenderer,
   surface: RaceSurface,
+  theme: VenueTheme = venueTheme('standard'),
 ): THREE.CanvasTexture {
-  return createSurfaceTexture(renderer, surface, 'ground');
+  return createSurfaceTexture(renderer, surface, 'ground', theme);
 }
 
 export function createTrackTexture(
   renderer: THREE.WebGLRenderer,
   surface: RaceSurface,
+  theme: VenueTheme = venueTheme('standard'),
 ): THREE.CanvasTexture {
-  return createSurfaceTexture(renderer, surface, 'track');
+  return createSurfaceTexture(renderer, surface, 'track', theme);
 }
 
 function createSurfaceTexture(
   renderer: THREE.WebGLRenderer,
   surface: RaceSurface,
   area: 'ground' | 'track',
+  theme: VenueTheme,
 ): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -27,14 +31,17 @@ function createSurfaceTexture(
   const context = canvas.getContext('2d');
   if (context === null) throw new Error('馬場テクスチャを作成できません');
   const dirt = surface === 'dirt';
-  context.fillStyle = dirt
-    ? area === 'ground'
-      ? '#59452e'
-      : '#9a7045'
-    : area === 'ground'
-      ? '#4f6d31'
-      : '#769a4d';
+  const palette = dirt ? theme.dirt : theme.turf;
+  const base = area === 'ground' ? palette.ground : palette.track;
+  context.fillStyle = `#${base.toString(16).padStart(6, '0')}`;
   context.fillRect(0, 0, 512, 512);
+  // The speckle is drawn from the base colour so a darker venue keeps its grain
+  // instead of turning into a flat panel.
+  const speckle = {
+    red: (base >> 16) & 0xff,
+    green: (base >> 8) & 0xff,
+    blue: base & 0xff,
+  };
   let seed = dirt ? (area === 'ground' ? 0x2a6d4e91 : 0x4d3a9c17) : 0x7f4a7c15;
   const random = (): number => {
     seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
@@ -44,10 +51,10 @@ function createSurfaceTexture(
   for (let index = 0; index < 13_000; index += 1) {
     const x = random() * 512;
     const y = random() * 512;
-    const light = Math.floor((dirt ? 66 : 92) + random() * (dirt ? 38 : 42));
-    const red = dirt ? Math.floor(light * 1.08) : Math.floor(light * 0.72);
-    const green = dirt ? Math.floor(light * 0.78) : light;
-    const blue = dirt ? Math.floor(light * 0.48) : Math.floor(light * 0.42);
+    const lift = 1 + (dirt ? 0.28 : 0.34) * random();
+    const red = Math.min(255, Math.floor(speckle.red * lift));
+    const green = Math.min(255, Math.floor(speckle.green * lift));
+    const blue = Math.min(255, Math.floor(speckle.blue * lift));
     context.strokeStyle = `rgb(${String(red)} ${String(green)} ${String(blue)} / ${String(
       0.16 + random() * 0.24,
     )})`;

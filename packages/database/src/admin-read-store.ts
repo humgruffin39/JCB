@@ -32,7 +32,7 @@ export class SqliteAdminReadStore {
       this.database
         .prepare(
           `SELECT r.id AS raceId, r.race_date AS raceDate, r.name AS raceName,
-                  r.kind, r.distance_m AS distanceM, r.surface, r.status,
+                  r.kind, r.venue_theme AS venueTheme, r.distance_m AS distanceM, r.surface, r.status,
                   re.horse_number AS horseNumber, re.condition,
                   re.finish_position AS finishPosition, re.finish_time_ms AS finishTimeMs
            FROM race_entries re

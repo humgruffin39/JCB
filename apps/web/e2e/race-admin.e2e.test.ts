@@ -24,6 +24,7 @@ const race = {
   status: 'draft',
   version: 1,
   kind: 'regular',
+  venueTheme: 'standard',
   distanceM: '1200',
   surface: 'turf',
   scheduledAt: '1786453200000',

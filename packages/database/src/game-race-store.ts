@@ -10,6 +10,7 @@ import { hashSimulationInput } from '@jcb/simulation';
 import { ulid } from 'ulid';
 import {
   DEFAULT_RACE_BET_LIMITS,
+  defaultVenueTheme,
   DEFAULT_RACE_LOCK_SETTINGS,
   DEFAULT_SEED_LIQUIDITY_CLAMP,
   legacyAptitudes,
@@ -62,6 +63,7 @@ export class SqliteRaceStore {
       throw new Error('Race schedule ordering is invalid.');
     }
     const id = ulid();
+    const kind = input.kind ?? raceKindForJstDate(input.raceDate);
     const now = BigInt(this.now());
     const run = this.database.transaction(() => {
       this.assertScheduleAvailable(
@@ -72,15 +74,17 @@ export class SqliteRaceStore {
       this.database
         .prepare(
           `INSERT INTO races
-           (id, race_date, name, kind, status, version, distance_m, going, surface, scheduled_at,
-            betting_opens_at, betting_closes_at, viewer_opens_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'draft', 0, ?, 'firm', ?, ?, ?, ?, ?, ?, ?)`,
+           (id, race_date, name, kind, venue_theme, status, version, distance_m, going, surface,
+            scheduled_at, betting_opens_at, betting_closes_at, viewer_opens_at, created_at,
+            updated_at)
+           VALUES (?, ?, ?, ?, ?, 'draft', 0, ?, 'firm', ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
           input.raceDate,
           input.name,
-          input.kind ?? raceKindForJstDate(input.raceDate),
+          kind,
+          input.venueTheme ?? defaultVenueTheme(kind),
           input.distanceM,
           input.surface,
           BigInt(input.scheduledAt),
@@ -106,7 +110,7 @@ export class SqliteRaceStore {
     return (
       this.database
         .prepare(
-          `SELECT id, race_date AS raceDate, name, kind, status, version,
+          `SELECT id, race_date AS raceDate, name, kind, venue_theme AS venueTheme, status, version,
                   distance_m AS distanceM, surface, scheduled_at AS scheduledAt,
                   betting_opens_at AS bettingOpensAt, betting_closes_at AS bettingClosesAt,
                   viewer_opens_at AS viewerOpensAt, input_hash AS inputHash
@@ -124,6 +128,7 @@ export class SqliteRaceStore {
         raceDate: patch.raceDate ?? current.raceDate,
         name: patch.name ?? current.name,
         kind: patch.kind ?? current.kind,
+        venueTheme: patch.venueTheme ?? current.venueTheme,
         distanceM: patch.distanceM ?? current.distanceM,
         surface: patch.surface ?? current.surface,
         scheduledAt: patch.scheduledAt ?? current.scheduledAt,
@@ -146,14 +151,15 @@ export class SqliteRaceStore {
       );
       this.database
         .prepare(
-          `UPDATE races SET race_date = ?, name = ?, kind = ?, distance_m = ?, surface = ?,
-           scheduled_at = ?, betting_opens_at = ?, betting_closes_at = ?,
+          `UPDATE races SET race_date = ?, name = ?, kind = ?, venue_theme = ?, distance_m = ?,
+           surface = ?, scheduled_at = ?, betting_opens_at = ?, betting_closes_at = ?,
            viewer_opens_at = ?, updated_at = ? WHERE id = ? AND status = 'draft'`,
         )
         .run(
           next.raceDate,
           next.name,
           next.kind,
+          next.venueTheme,
           next.distanceM,
           next.surface,
           BigInt(next.scheduledAt),
@@ -222,7 +228,7 @@ export class SqliteRaceStore {
   public getRace(id: string): RaceRecord {
     const row = this.database
       .prepare(
-        `SELECT id, race_date AS raceDate, name, kind, status, version,
+        `SELECT id, race_date AS raceDate, name, kind, venue_theme AS venueTheme, status, version,
                 distance_m AS distanceM, surface, scheduled_at AS scheduledAt,
                 betting_opens_at AS bettingOpensAt, betting_closes_at AS bettingClosesAt,
                 viewer_opens_at AS viewerOpensAt, input_hash AS inputHash

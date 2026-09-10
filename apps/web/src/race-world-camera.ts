@@ -43,6 +43,9 @@ export class RaceWorldCameraController {
     private readonly horses: readonly CameraHorse[],
     private readonly onCameraModeChange?: (mode: RaceCameraMode) => void,
     private readonly onTrackedHorseChange?: (horseNumber: number | undefined) => void,
+    // Where the key light sits relative to whatever the camera is watching. A
+    // night venue moves it behind the field so the horses read as rim-lit.
+    private readonly sunOffset: readonly [number, number, number] = [-18, 36, 24],
   ) {
     this.battleTracker = new RaceCameraBattleTracker(distanceM);
     this.inputController = new RaceCameraInputController(
@@ -230,8 +233,9 @@ export class RaceWorldCameraController {
   }
 
   private updateSun(focus: THREE.Vector3): void {
-    this.sun.position.set(focus.x - 18, 36, focus.z + 24);
-    this.sunTarget.position.set(focus.x + 8, 0, focus.z);
+    const [offsetX, offsetY, offsetZ] = this.sunOffset;
+    this.sun.position.set(focus.x + offsetX, offsetY, focus.z + offsetZ);
+    this.sunTarget.position.set(focus.x - Math.sign(offsetX) * 8, 0, focus.z);
     this.sunTarget.updateMatrixWorld();
   }
 

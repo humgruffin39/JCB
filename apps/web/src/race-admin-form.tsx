@@ -8,6 +8,7 @@ import {
   type ScheduleSettings,
 } from './race-admin-model.js';
 import {
+  defaultVenueThemeForKind,
   entriesFor,
   moveTimestampToJstDate,
   raceKindForDate,
@@ -98,6 +99,11 @@ export function RaceForm({
               : { kind: String(form.get('kind')) }),
             distanceM: Number(form.get('distanceM')),
             surface: String(form.get('surface')),
+            ...(String(form.get('venueTheme')) === ''
+              ? race === undefined
+                ? {}
+                : { venueTheme: defaultVenueThemeForKind(String(form.get('kind')), raceDate) }
+              : { venueTheme: String(form.get('venueTheme')) }),
             scheduledAt:
               race === undefined
                 ? Date.parse(`${raceDate}T${schedule.startTime}+09:00`)
@@ -199,6 +205,14 @@ export function RaceForm({
             <select name="surface" defaultValue={race?.surface ?? 'turf'}>
               <option value="turf">芝</option>
               <option value="dirt">ダート</option>
+            </select>
+          </label>
+          <label>
+            会場
+            <select name="venueTheme" defaultValue={race?.venueTheme ?? ''}>
+              <option value="">種別から自動決定</option>
+              <option value="standard">昼</option>
+              <option value="night">ナイター</option>
             </select>
           </label>
         </div>

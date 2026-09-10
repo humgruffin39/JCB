@@ -42,10 +42,11 @@ export function registerAdminRaceRoutes(app: FastifyInstance, context: ServerRou
   app.post('/api/v1/admin/races', async (request) => {
     const session = await authenticate(request, { admin: true, csrf: true });
     const input = createRaceSchema.parse(request.body);
-    const { kind, ...raceInput } = input;
+    const { kind, venueTheme, ...raceInput } = input;
     const race = gameStore.createRaceDraft({
       ...raceInput,
       ...(kind === undefined ? {} : { kind }),
+      ...(venueTheme === undefined ? {} : { venueTheme }),
       scheduledAt: timestamp(input.scheduledAt),
       bettingOpensAt: timestamp(input.bettingOpensAt),
       bettingClosesAt: timestamp(input.bettingClosesAt),

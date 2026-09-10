@@ -10,6 +10,7 @@ interface RaceDetailRow {
   readonly raceDate: string;
   readonly name: string;
   readonly kind: 'regular' | 'midweek' | 'saturday_night';
+  readonly venueTheme: 'standard' | 'night';
   readonly status: RaceStatus;
   readonly version: bigint;
   readonly distanceM: bigint;
@@ -47,7 +48,7 @@ export class SqliteViewerStore {
   public getRaceDetail(raceId: string) {
     const race = this.database
       .prepare(
-        `SELECT id, race_date AS raceDate, name, kind, status, version,
+        `SELECT id, race_date AS raceDate, name, kind, venue_theme AS venueTheme, status, version,
                 distance_m AS distanceM, surface, scheduled_at AS scheduledAt,
                 betting_closes_at AS bettingClosesAt, viewer_opens_at AS viewerOpensAt,
                 final_odds_json AS finalOddsJson,
@@ -101,6 +102,7 @@ export class SqliteViewerStore {
       raceDate: race.raceDate,
       name: race.name,
       kind: race.kind,
+      venueTheme: race.venueTheme,
       status: race.status,
       version: Number(race.version),
       distanceM: Number(race.distanceM),

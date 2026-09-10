@@ -36,7 +36,9 @@ describe('race camera director', () => {
     const shot = getFinishCameraShot();
     expect(shot.id).toBe('finish-line');
     expect(shot.tangentOffset).toBe(0);
-    expect(shot.normalOffset).toBeLessThan(-20);
+    // Inside the course: outside the rail is the grandstand, and a camera in
+    // there is looking at the back of a building.
+    expect(shot.normalOffset).toBeGreaterThan(20);
     expect(shot.height).toBeGreaterThan(4);
     expect(shot.fieldOfView).toBeGreaterThanOrEqual(34);
   });
@@ -46,7 +48,7 @@ describe('race camera director', () => {
     expect(shot.id).toBe('home-stretch-track');
     expect(shot.movement).toBe('fixed');
     expect(shot.anchorRaceProgress).toBeCloseTo(0.93, 6);
-    expect(shot.normalOffset).toBeLessThan(-20);
+    expect(shot.normalOffset).toBeGreaterThan(20);
     expect(shot.fieldOfView).toBeGreaterThanOrEqual(32);
   });
 

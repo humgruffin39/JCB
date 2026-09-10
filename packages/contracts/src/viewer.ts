@@ -43,6 +43,7 @@ export const raceDetailSchema = z.object({
   raceDate: z.string(),
   name: z.string(),
   kind: z.enum(['regular', 'midweek', 'saturday_night']),
+  venueTheme: z.enum(['standard', 'night']),
   status: z.enum([
     'draft',
     'locked',

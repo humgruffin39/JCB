@@ -5,6 +5,7 @@ const race = {
   raceDate: '2026-08-03',
   name: 'ジョサン記念',
   kind: 'regular',
+  venueTheme: 'standard',
   status: 'betting_open',
   version: 1,
   distanceM: 1200,

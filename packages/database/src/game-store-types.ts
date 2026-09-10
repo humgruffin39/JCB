@@ -27,10 +27,18 @@ export interface RaceEntryDraftInput {
   readonly horseNumber: number;
 }
 
+export type VenueThemeName = 'standard' | 'night';
+
+/** Saturday night racing is the fixture that already meant "after dark". */
+export function defaultVenueTheme(kind: RaceKind): VenueThemeName {
+  return kind === 'saturday_night' ? 'night' : 'standard';
+}
+
 export interface RaceDraftInput {
   readonly raceDate: string;
   readonly name: string;
   readonly kind?: RaceKind;
+  readonly venueTheme?: VenueThemeName;
   readonly distanceM: number;
   readonly surface: 'turf' | 'dirt';
   readonly scheduledAt: Timestamp;
@@ -47,6 +55,7 @@ export interface RaceRecord {
   readonly raceDate: string;
   readonly name: string;
   readonly kind: RaceKind;
+  readonly venueTheme: VenueThemeName;
   readonly status: RaceStatus;
   readonly version: number;
   readonly distanceM: number;
@@ -106,6 +115,7 @@ export interface RaceRow {
   readonly raceDate: string;
   readonly name: string;
   readonly kind: RaceKind;
+  readonly venueTheme: VenueThemeName;
   readonly status: RaceStatus;
   readonly version: bigint;
   readonly distanceM: bigint;
@@ -144,6 +154,7 @@ export function mapRace(row: RaceRow): RaceRecord {
     raceDate: row.raceDate,
     name: row.name,
     kind: row.kind,
+    venueTheme: row.venueTheme,
     status: row.status,
     version: Number(row.version),
     distanceM: Number(row.distanceM),

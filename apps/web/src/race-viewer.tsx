@@ -196,6 +196,7 @@ function RaceViewerSession({ race, connectionError }: RaceViewerProps) {
     return selectCurrentFrame(viewer.frames, position, finalOrder, viewer.duration);
   }, [finalOrder, position, viewer]);
   const orderedHorses = useMemo(() => selectOrderedHorses(currentFrame), [currentFrame]);
+  const venueThemeId = race.venueTheme;
   const { isMobile, isPortrait, isFullscreen, toggleImmersiveMode } = useRaceViewerOrientation(
     broadcastRef,
     activityRuntime.isActivity,
@@ -262,7 +263,7 @@ function RaceViewerSession({ race, connectionError }: RaceViewerProps) {
             />
           ) : null}
           <RaceScene3D
-            key={`${race.id}:${String(race.distanceM)}:${race.surface}`}
+            key={`${race.id}:${String(race.distanceM)}:${race.surface}:${venueThemeId}`}
             frames={viewer.frames}
             durationMs={viewer.duration}
             playbackPosition={playbackPositionRef}
@@ -273,6 +274,7 @@ function RaceViewerSession({ race, connectionError }: RaceViewerProps) {
             horseCoats={horseCoats}
             distanceM={race.distanceM}
             surface={race.surface}
+            venueThemeId={venueThemeId}
             onTrackHorse={setTrackedHorseNumber}
             onCameraModeChange={setCameraMode}
             onFinishSnapshot={setFinishSnapshot}

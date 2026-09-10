@@ -22,6 +22,7 @@ describe('race follow-up jobs', () => {
       raceDate: '2026-08-12',
       name: '通知確認',
       kind: 'regular',
+      venueTheme: 'standard',
       status: 'betting_open',
       version: 2,
       distanceM: 1_200,

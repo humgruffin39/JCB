@@ -64,6 +64,7 @@ function raceFixture() {
     raceDate: '2026-08-03',
     name: '50クライアント負荷試験',
     kind: 'regular',
+    venueTheme: 'standard',
     status: 'betting_open',
     version: 1,
     distanceM: 1_600,

@@ -107,3 +107,13 @@ export function selectBalancedField(
   }
   return shuffle(picked);
 }
+
+/**
+ * The venue a race runs under when the operator leaves it on automatic. Saturday
+ * night is the fixture that already meant "after dark", so it is the one that
+ * turns the lights on.
+ */
+export function defaultVenueThemeForKind(kind: string, raceDate: string): 'standard' | 'night' {
+  const resolved = kind === '' ? raceKindForDate(raceDate) : kind;
+  return resolved === 'saturday_night' ? 'night' : 'standard';
+}

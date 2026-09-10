@@ -11,6 +11,7 @@ import type { HorseCoatColor } from './race-horse-model.js';
 import type { RaceSurface } from './race-environment.js';
 import { PublicState } from './public-state.js';
 import type { RaceRenderQuality } from './race-viewer-performance.js';
+import { venueTheme, type VenueThemeId } from './race-venue-theme.js';
 
 export interface RaceScene3DProps {
   readonly frames: readonly TimelineFrameContract[];
@@ -30,6 +31,7 @@ export interface RaceScene3DProps {
   }[];
   readonly distanceM: number;
   readonly surface: RaceSurface;
+  readonly venueThemeId?: VenueThemeId;
   readonly onReady?: () => void;
   readonly renderQuality?: RaceRenderQuality;
   readonly minimumFrameIntervalMs?: number;
@@ -51,6 +53,7 @@ function RaceScene3DComponent({
   horseCoats,
   distanceM,
   surface,
+  venueThemeId = 'standard',
   onReady,
   renderQuality = 'high',
   minimumFrameIntervalMs = 0,
@@ -213,6 +216,7 @@ function RaceScene3DComponent({
         onFinishSnapshotErrorRef.current?.();
       },
       renderQualityRef.current,
+      venueTheme(venueThemeId),
     )
       .then((createdWorld) => {
         if (disposed || contextLost) {
@@ -249,7 +253,7 @@ function RaceScene3DComponent({
       worldRef.current = undefined;
       world?.dispose();
     };
-  }, [contextGeneration, distanceM, surface]);
+  }, [contextGeneration, distanceM, surface, venueThemeId]);
 
   return (
     <div className="race-scene-3d" aria-busy={status === 'loading'}>

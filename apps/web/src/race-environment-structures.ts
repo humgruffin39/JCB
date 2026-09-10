@@ -82,11 +82,28 @@ export function createStartingGate(): {
   return { group, doors };
 }
 
+/**
+ * The winning post: two banded pylons on plinths, a gantry across the course
+ * with a lattice under it, and the mirror on the inside that a judge reads the
+ * finish through. The rest of the venue caught up with it, so a bare pole and a
+ * beam had started to look like the one thing nobody had finished.
+ */
 export function createFinishStructure(labelTexture: THREE.Texture): THREE.Group {
   const group = new THREE.Group();
   const white = new THREE.MeshStandardMaterial({ color: WHITE, roughness: 0.42 });
   const black = new THREE.MeshStandardMaterial({ color: 0x171817, roughness: 0.52 });
+  const glass = new THREE.MeshStandardMaterial({
+    color: 0x9fb4c4,
+    roughness: 0.12,
+    metalness: 0.7,
+  });
+
   for (const z of [-TRACK_HALF_WIDTH - 0.35, TRACK_HALF_WIDTH + 0.35]) {
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 1.6), white);
+    plinth.position.set(0, 0.27, z);
+    plinth.receiveShadow = true;
+    group.add(plinth);
+
     const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.4, 6.3, 0.5), white);
     pylon.position.set(0, 3.12, z);
     pylon.castShadow = true;
@@ -96,11 +113,42 @@ export function createFinishStructure(labelTexture: THREE.Texture): THREE.Group 
       band.position.set(0, y, z);
       group.add(band);
     }
+    const finial = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 4), white);
+    finial.position.set(0, 6.7, z);
+    group.add(finial);
+
+    // Knee braces from the plinth up to the gantry, on the outside of each pylon.
+    const outward = Math.sign(z);
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.6, 0.18), white);
+    brace.position.set(0, 4.6, z + outward * 0.62);
+    brace.rotation.x = outward * 0.42;
+    group.add(brace);
   }
+
   const beam = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.52, 13.2), black);
   beam.position.set(0, 6.05, 0);
   beam.castShadow = true;
   group.add(beam);
+  const underBeam = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 13.2), black);
+  underBeam.position.set(0, 5.35, 0);
+  group.add(underBeam);
+  // A zig-zag web between the two chords, which is what a gantry actually is.
+  for (let index = 0; index < 16; index += 1) {
+    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.86, 0.14), black);
+    strut.position.set(0, 5.7, -6.2 + index * 0.83);
+    strut.rotation.x = index % 2 === 0 ? 0.55 : -0.55;
+    group.add(strut);
+  }
+
+  // The judge's mirror, angled at the line from the infield side.
+  const mirrorPost = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.6, 6), white);
+  mirrorPost.position.set(0, 1.3, TRACK_HALF_WIDTH + 2.4);
+  group.add(mirrorPost);
+  const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.5, 1.1), glass);
+  mirror.position.set(0, 3.1, TRACK_HALF_WIDTH + 2.4);
+  mirror.rotation.z = 0.18;
+  group.add(mirror);
+
   group.add(createFinishSign(labelTexture));
   return group;
 }

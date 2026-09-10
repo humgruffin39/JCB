@@ -5,12 +5,17 @@ import {
   sampleCourse,
   TRACK_HALF_WIDTH,
 } from './race-course.js';
+import { venueTheme, type VenueTheme } from './race-venue-theme.js';
 
-export function createInfield(): THREE.Group {
+export function createInfield(theme: VenueTheme = venueTheme('standard')): THREE.Group {
   const group = new THREE.Group();
   const water = new THREE.Mesh(
     new THREE.CircleGeometry(1, 96),
-    new THREE.MeshStandardMaterial({ color: 0x7fa6a5, roughness: 0.25, metalness: 0.04 }),
+    new THREE.MeshStandardMaterial({
+      color: theme.id === 'night' ? 0x24384c : 0x7fa6a5,
+      roughness: theme.id === 'night' ? 0.08 : 0.25,
+      metalness: theme.id === 'night' ? 0.35 : 0.04,
+    }),
   );
   water.rotation.x = -Math.PI / 2;
   water.scale.set(68, 22, 1);
@@ -19,11 +24,17 @@ export function createInfield(): THREE.Group {
   return group;
 }
 
-export function createHorizon(distanceM: number): THREE.Group {
+export function createHorizon(
+  distanceM: number,
+  theme: VenueTheme = venueTheme('standard'),
+): THREE.Group {
   const group = new THREE.Group();
   const courseRadiusX = courseRadiusXForDistance(distanceM);
   const hillGeometry = new THREE.SphereGeometry(7, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-  const hillMaterial = new THREE.MeshStandardMaterial({ color: 0x456c34, roughness: 1 });
+  const hillMaterial = new THREE.MeshStandardMaterial({
+    color: theme.id === 'night' ? 0x172415 : 0x456c34,
+    roughness: 1,
+  });
   const hillCount = 44;
   const hills = new THREE.InstancedMesh(hillGeometry, hillMaterial, hillCount);
   const matrix = new THREE.Matrix4();
@@ -44,32 +55,6 @@ export function createHorizon(distanceM: number): THREE.Group {
   hills.receiveShadow = true;
   group.add(hills);
 
-  const trunkGeometry = new THREE.CylinderGeometry(0.1, 0.15, 1.5, 7);
-  const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x59452e, roughness: 1 });
-  const treeCount = 104;
-  const trunks = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, treeCount);
-  const treeGeometry = new THREE.IcosahedronGeometry(1, 2);
-  const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x31552d, roughness: 0.96 });
-  const trees = new THREE.InstancedMesh(treeGeometry, treeMaterial, treeCount);
-  for (let index = 0; index < treeCount; index += 1) {
-    const progress = index / treeCount;
-    const sceneryPosition = outerCoursePosition(progress, 16 + (index % 4) * 2.4, distanceM);
-    const x = sceneryPosition.x;
-    const z = sceneryPosition.z;
-    const height = 0.72 + ((index * 13) % 9) / 20;
-    position.set(x, 0.75 * height, z);
-    scale.set(height, height, height);
-    matrix.compose(position, quaternion, scale);
-    trunks.setMatrixAt(index, matrix);
-    position.set(x, 2.3 * height, z);
-    scale.set(0.8 * height, 1.45 * height, 0.8 * height);
-    matrix.compose(position, quaternion, scale);
-    trees.setMatrixAt(index, matrix);
-  }
-  trunks.castShadow = true;
-  group.add(trunks);
-  trees.castShadow = true;
-  group.add(trees);
   return group;
 }
 
@@ -82,14 +67,20 @@ export function outerCoursePosition(
     .position;
 }
 
-export function createClouds(distanceM: number): THREE.Group {
+export function createClouds(
+  distanceM: number,
+  theme: VenueTheme = venueTheme('standard'),
+): THREE.Group {
   const group = new THREE.Group();
+  // Unlit cloud geometry reads as a dark disc from above, which is worse than no
+  // cloud at all on a night sky.
+  if (theme.cloud.opacity <= 0.15) return group;
   const courseRadiusX = courseRadiusXForDistance(distanceM);
   const geometry = new THREE.IcosahedronGeometry(1, 2);
   const material = new THREE.MeshBasicMaterial({
-    color: 0xf5f6f1,
+    color: theme.cloud.color,
     transparent: true,
-    opacity: 0.46,
+    opacity: theme.cloud.opacity * 0.74,
     depthWrite: false,
     fog: true,
   });
@@ -114,5 +105,65 @@ export function createClouds(distanceM: number): THREE.Group {
     }
   }
   group.add(clouds);
+  return group;
+}
+
+/**
+ * Four masts outside the turns. The lamps are emissive geometry with one small
+ * point light each: enough to pool light on the track without paying for four
+ * more shadow maps on a phone.
+ */
+export function createFloodlights(distanceM: number, theme: VenueTheme): THREE.Group {
+  const group = new THREE.Group();
+  if (theme.floodlights === undefined) return group;
+  const { mast, lamp, intensity, range } = theme.floodlights;
+  // A faint emissive keeps the masts readable as silhouettes against a dark sky.
+  const mastMaterial = new THREE.MeshStandardMaterial({
+    color: mast,
+    roughness: 0.7,
+    emissive: new THREE.Color(mast),
+    emissiveIntensity: 0.12,
+  });
+  const lampMaterial = new THREE.MeshStandardMaterial({
+    color: lamp,
+    emissive: new THREE.Color(lamp),
+    emissiveIntensity: 1.8,
+    roughness: 0.4,
+  });
+  const height = 34;
+  // Six, spread away from the stand: four left the turns in the dark, which is
+  // where a night race spends most of its time.
+  for (const progress of [0.1, 0.24, 0.38, 0.52, 0.66, 0.8]) {
+    const base = outerCoursePosition(progress, 26, distanceM);
+    const inward = sampleCourse(progress, 0, distanceM).position;
+    const tower = new THREE.Group();
+    tower.position.copy(base);
+    // Only the heading turns: tilting the group would stand the mast up at an
+    // angle, because its origin sits on the ground and the track does not.
+    tower.rotation.y = Math.atan2(-(inward.x - base.x), -(inward.z - base.z));
+
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.85, height, 8), mastMaterial);
+    column.position.y = height / 2;
+    tower.add(column);
+
+    // The head alone leans down at the track, the way a real mast is rigged.
+    const head = new THREE.Group();
+    head.position.y = height;
+    head.rotation.x = -0.62;
+    const rack = new THREE.Mesh(new THREE.BoxGeometry(9.5, 2.6, 0.9), mastMaterial);
+    rack.position.y = 1.5;
+    head.add(rack);
+    for (let index = 0; index < 4; index += 1) {
+      const lampMesh = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.9, 0.4), lampMaterial);
+      lampMesh.position.set(-3.45 + index * 2.3, 1.5, -0.65);
+      head.add(lampMesh);
+    }
+    tower.add(head);
+
+    const light = new THREE.PointLight(lamp, intensity, range, 2);
+    light.position.set(0, height - 1, -3);
+    tower.add(light);
+    group.add(tower);
+  }
   return group;
 }

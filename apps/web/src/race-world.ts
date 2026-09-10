@@ -16,9 +16,18 @@ import {
 } from './race-world-snapshot.js';
 import { RaceWorldCameraController } from './race-world-camera.js';
 import { createRaceWorldScene } from './race-world-scene.js';
+import { venueTheme, type VenueTheme } from './race-venue-theme.js';
 import type { RaceRenderQuality } from './race-viewer-performance.js';
 import { RaceHorseField } from './race-world-horses.js';
 import { RACE_RENDER_QUALITY, renderPixelRatioFor } from './race-world-render-quality.js';
+
+/** How much of the crowd each device tier builds and animates. */
+const CROWD_DETAIL: Readonly<Record<RaceRenderQuality, number>> = {
+  high: 1,
+  balanced: 0.75,
+  low: 0.45,
+  minimal: 0.25,
+};
 
 export type {
   FinishPosition,
@@ -63,10 +72,11 @@ export class RaceWorld {
     onTrackedHorseChange?: (horseNumber: number | undefined) => void,
     private readonly onFinishSnapshot?: (snapshot: string | undefined) => void,
     private readonly onFinishSnapshotError?: () => void,
+    theme: VenueTheme = venueTheme('standard'),
   ) {
     this.renderer = renderer;
     this.environment = environment;
-    const worldScene = createRaceWorldScene(renderer, environment);
+    const worldScene = createRaceWorldScene(renderer, environment, theme);
     this.scene = worldScene.scene;
     this.camera = worldScene.camera;
     this.sky = worldScene.sky;
@@ -81,6 +91,7 @@ export class RaceWorld {
       this.horseField.horses,
       onCameraModeChange,
       onTrackedHorseChange,
+      theme.sun.offset,
     );
 
     for (const horse of this.horseField.horses) this.scene.add(horse.rig.root);
@@ -96,6 +107,7 @@ export class RaceWorld {
     onFinishSnapshot?: (snapshot: string | undefined) => void,
     onFinishSnapshotError?: () => void,
     initialRenderQuality: RaceRenderQuality = 'high',
+    theme: VenueTheme = venueTheme('standard'),
   ): Promise<RaceWorld> {
     const renderer = new THREE.WebGLRenderer({
       canvas,
@@ -119,7 +131,13 @@ export class RaceWorld {
       for (let index = 0; index < 8; index += 1) {
         rigs.push(createHorseRig(assets, index + 1, horseCoats.get(index + 1)));
       }
-      environment = new RaceEnvironment(renderer, distanceM, surface);
+      environment = new RaceEnvironment(
+        renderer,
+        distanceM,
+        surface,
+        theme,
+        CROWD_DETAIL[initialRenderQuality],
+      );
       const world = new RaceWorld(
         renderer,
         environment,
@@ -129,6 +147,7 @@ export class RaceWorld {
         onTrackedHorseChange,
         onFinishSnapshot,
         onFinishSnapshotError,
+        theme,
       );
       world.setRenderQuality(initialRenderQuality);
       return world;
@@ -208,10 +227,9 @@ export class RaceWorld {
       this.finishSnapshotAttempts = 0;
       this.finishSnapshotFailed = false;
     }
-    this.environment.update(state.positionMs);
-
     const horseUpdate = this.horseField.update(state, rewound, snap, deltaSeconds);
     const leaderProgress = horseUpdate.leaderProgress;
+    this.environment.update(state.positionMs, leaderProgress);
     const focusRaceProgress = state.isPhoto ? 1 : Math.min(leaderProgress, 1);
 
     if (

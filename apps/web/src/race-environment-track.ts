@@ -6,8 +6,11 @@ import {
   sampleCourse,
   TRACK_HALF_WIDTH,
 } from './race-course.js';
+import { venueTheme, type VenueTheme } from './race-venue-theme.js';
 
-const WHITE = 0xe8e7df;
+/** Where the second surface sits, measured inward from the racing line. */
+const INNER_COURSE_NEAR = TRACK_HALF_WIDTH + 7;
+const INNER_COURSE_FAR = TRACK_HALF_WIDTH + 18;
 
 export function createTrack(
   groundTexture: THREE.Texture,
@@ -47,7 +50,52 @@ export function createTrack(
   return group;
 }
 
-function createCourseRibbonGeometry(distanceM: number): THREE.BufferGeometry {
+/**
+ * The other surface, laid inside the one being raced on.
+ *
+ * A Japanese course has both: turf outside, dirt within it. Showing only the
+ * strip the race happens to use is what made the infield read as a lawn with a
+ * ribbon on it.
+ */
+export function createSecondSurface(texture: THREE.Texture, distanceM: number): THREE.Group {
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({
+    map: texture,
+    color: 0xffffff,
+    roughness: 0.96,
+    side: THREE.DoubleSide,
+  });
+  const track = new THREE.Mesh(
+    createCourseRibbonGeometry(distanceM, INNER_COURSE_NEAR, INNER_COURSE_FAR),
+    material,
+  );
+  track.position.y = -0.01;
+  track.receiveShadow = true;
+  group.add(track);
+
+  // A hedge on the inner course's outer edge, which is the line the eye reads as
+  // the boundary between the two surfaces.
+  const hedgeMaterial = new THREE.MeshStandardMaterial({ color: 0x2f4a29, roughness: 1 });
+  const hedge = new THREE.Mesh(
+    new THREE.TubeGeometry(
+      createOffsetCourseCurve(INNER_COURSE_NEAR - 0.4, 0.42, distanceM),
+      384,
+      0.42,
+      6,
+      true,
+    ),
+    hedgeMaterial,
+  );
+  hedge.receiveShadow = true;
+  group.add(hedge);
+  return group;
+}
+
+function createCourseRibbonGeometry(
+  distanceM: number,
+  near = -TRACK_HALF_WIDTH,
+  far = TRACK_HALF_WIDTH,
+): THREE.BufferGeometry {
   const segments = 512;
   const positions: number[] = [];
   const normals: number[] = [];
@@ -55,11 +103,11 @@ function createCourseRibbonGeometry(distanceM: number): THREE.BufferGeometry {
   const indices: number[] = [];
   for (let index = 0; index <= segments; index += 1) {
     const progress = index / segments;
-    for (const side of [-TRACK_HALF_WIDTH, TRACK_HALF_WIDTH]) {
+    for (const side of [near, far]) {
       const sample = sampleCourse(progress, side, distanceM);
       positions.push(sample.position.x, 0, sample.position.z);
       normals.push(0, 1, 0);
-      uvs.push(progress * 96, side < 0 ? 0 : 3);
+      uvs.push(progress * 96, side === near ? 0 : 3);
     }
     if (index < segments) {
       const cursor = index * 2;
@@ -75,10 +123,13 @@ function createCourseRibbonGeometry(distanceM: number): THREE.BufferGeometry {
   return geometry;
 }
 
-export function createRails(distanceM: number): THREE.Group {
+export function createRails(
+  distanceM: number,
+  theme: VenueTheme = venueTheme('standard'),
+): THREE.Group {
   const group = new THREE.Group();
   const railMaterial = new THREE.MeshStandardMaterial({
-    color: WHITE,
+    color: theme.rail,
     roughness: 0.48,
     metalness: 0.04,
   });

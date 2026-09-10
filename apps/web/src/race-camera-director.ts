@@ -29,6 +29,9 @@ export interface BroadcastCameraShot {
   readonly targetDamping: number;
 }
 
+// Every shot sits inside the course. Outside the running rail is now the
+// service road, the hedge and the grandstand, so a camera out there is buried in
+// scenery; from the infield the stand and its crowd fill the background instead.
 const SHOTS = {
   break: {
     id: 'break',
@@ -85,7 +88,7 @@ const SHOTS = {
     movement: 'fixed',
     anchorRaceProgress: 0.39,
     tangentOffset: 8,
-    normalOffset: 32,
+    normalOffset: 17,
     height: 10.5,
     lookAhead: 0,
     lookHeight: 1.3,
@@ -97,7 +100,7 @@ const SHOTS = {
     id: 'backstretch-track',
     movement: 'tracking',
     tangentOffset: -1,
-    normalOffset: 24,
+    normalOffset: 14,
     height: 5.8,
     lookAhead: -1.5,
     lookHeight: 1.35,
@@ -109,7 +112,7 @@ const SHOTS = {
     id: 'rear-quarter',
     movement: 'tracking',
     tangentOffset: -16,
-    normalOffset: -22,
+    normalOffset: 16,
     height: 6.2,
     lookAhead: 5.5,
     lookHeight: 1.45,
@@ -122,7 +125,7 @@ const SHOTS = {
     movement: 'fixed',
     anchorRaceProgress: 0.53,
     tangentOffset: 5,
-    normalOffset: 32,
+    normalOffset: 18,
     height: 11,
     lookAhead: 0.5,
     lookHeight: 1.25,
@@ -185,7 +188,7 @@ const SHOTS = {
     movement: 'fixed',
     anchorRaceProgress: 0.93,
     tangentOffset: 20,
-    normalOffset: -30,
+    normalOffset: 26,
     height: 8.5,
     lookAhead: 0.5,
     lookHeight: 1.45,
@@ -198,7 +201,7 @@ const SHOTS = {
     movement: 'fixed',
     anchorRaceProgress: 1,
     tangentOffset: 0,
-    normalOffset: -24,
+    normalOffset: 24,
     height: 4.8,
     lookAhead: 0,
     lookHeight: 1.2,

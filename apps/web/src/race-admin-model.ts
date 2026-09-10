@@ -12,6 +12,7 @@ export interface AdminRace {
   readonly status: string;
   readonly version: number | string;
   readonly kind: 'regular' | 'midweek' | 'saturday_night';
+  readonly venueTheme: 'standard' | 'night';
   readonly distanceM: number | string;
   readonly surface: 'turf' | 'dirt';
   readonly scheduledAt: string;

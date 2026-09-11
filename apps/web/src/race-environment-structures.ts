@@ -163,13 +163,9 @@ export function createFinishSign(labelTexture: THREE.Texture): THREE.Group {
     roughness: 0.72,
     side: THREE.FrontSide,
   });
+  // Lettered on the course side only. A second face on the back of the board
+  // read as a mirrored FINISH from the stands, which no real board does.
   const signGeometry = new THREE.PlaneGeometry(2.55, 0.7);
-  const spectatorFace = new THREE.Mesh(signGeometry, signMaterial);
-  spectatorFace.name = 'finish-sign-spectator-face';
-  spectatorFace.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.71);
-  spectatorFace.rotation.y = Math.PI;
-  group.add(spectatorFace);
-
   const infieldFace = new THREE.Mesh(signGeometry, signMaterial);
   infieldFace.name = 'finish-sign-infield-face';
   infieldFace.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.57);

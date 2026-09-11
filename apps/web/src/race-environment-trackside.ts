@@ -164,18 +164,9 @@ function createCameraTowers(distanceM: number, theme: VenueTheme): THREE.Group {
     const platform = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.35, 2.8), deck);
     platform.position.y = height;
     tower.add(platform);
-    for (const [x, z, width] of [
-      [0, 1.35, 2.8],
-      [-1.35, 0, 0.12],
-      [1.35, 0, 0.12],
-    ] as const) {
-      const rail = new THREE.Mesh(
-        new THREE.BoxGeometry(width === 0.12 ? 0.12 : width, 0.9, width === 0.12 ? 2.8 : 0.12),
-        mast,
-      );
-      rail.position.set(x, height + 0.62, z);
-      tower.add(rail);
-    }
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.9, 0.12), mast);
+    rail.position.set(0, height + 0.62, 1.35);
+    tower.add(rail);
     const ladder = new THREE.Mesh(new THREE.BoxGeometry(0.9, height, 0.12), mast);
     ladder.position.set(0, height / 2, -0.9);
     tower.add(ladder);

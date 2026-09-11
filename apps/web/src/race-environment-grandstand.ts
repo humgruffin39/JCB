@@ -14,8 +14,14 @@ import type { VenueTheme } from './race-venue-theme.js';
  * 2400m course is not left with a short stand floating in the middle of it.
  */
 const STAND_SPAN_FRACTION = 0.97;
-/** Total spectators to build at full detail, however long the stand gets. */
-const CROWD_BUDGET = 6_000;
+/**
+ * Total spectators to build at full detail, however long the stand gets.
+ *
+ * Each one is two instances, so this is the single biggest lever on how long the
+ * viewer takes to come up. A slow device that spends thirty seconds painting the
+ * first frame misses the race it was opened to watch.
+ */
+const CROWD_BUDGET = 2_400;
 
 const TERRACE_FRONT = TRACK_HALF_WIDTH + 3.2;
 const TERRACE_ROWS = 5;
@@ -32,7 +38,7 @@ const BUILDING_FLOORS = 5;
 const FLOOR_HEIGHT = 4.2;
 const COLONNADE_BAYS = 11;
 
-const ROOF_BAYS = 22;
+const ROOF_BAYS = 11;
 /** How many full scallops run the length of the roof. */
 const ROOF_WAVES = 5;
 const ROOF_WAVE_DEPTH = 3.6;
@@ -191,9 +197,10 @@ export function createGrandstand(distanceM: number, theme: VenueTheme, detail = 
     const bayEnd = start + ((bay + 1) / ROOF_BAYS) * (end - start);
     const { front, lift } = bayGeometry(bay);
     const span = roofBackDepth - front;
+    // Deck and fascia only: the extra under-beam per bay tripled the draw calls
+    // for a line nobody can pick out from the stands.
     group.add(shell(front + span / 2, roofY + lift, span, 0.5, trim, bayStart, bayEnd));
     group.add(shell(front + 0.3, roofY + lift - 1, 0.55, 2, trim, bayStart, bayEnd));
-    group.add(shell(front + span * 0.55, roofY + lift - 0.65, 0.3, 0.8, trim, bayStart, bayEnd));
   }
   // An upper deck set back over the building, the second tier a big stand has.
   group.add(shell(buildingMiddle, roofY + ROOF_WAVE_LIFT + 3.4, BUILDING_DEPTH - 2, 0.45, trim));

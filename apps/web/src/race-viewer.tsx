@@ -176,10 +176,22 @@ function RaceViewerSession({ race, connectionError }: RaceViewerProps) {
 
   useEffect(() => {
     if (viewer.state !== 'ready' || phase !== 'race' || position < finishCameraPosition) return;
+    // A paused viewer stays on the race screen: pulling the photo finish over
+    // someone who deliberately stopped the replay takes the controls away from
+    // them mid-interaction.
+    if (isPaused) return;
     if (finishSnapshot === undefined && !finishSnapshotUnavailable) return;
     setIsPaused(true);
     setPhase(finishSnapshotUnavailable ? 'results' : 'photo');
-  }, [finishCameraPosition, finishSnapshotUnavailable, finishSnapshot, phase, position, viewer]);
+  }, [
+    finishCameraPosition,
+    finishSnapshotUnavailable,
+    finishSnapshot,
+    isPaused,
+    phase,
+    position,
+    viewer,
+  ]);
 
   useEffect(() => {
     if (phase !== 'photo') return;

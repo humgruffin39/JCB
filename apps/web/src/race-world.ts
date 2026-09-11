@@ -19,7 +19,13 @@ import { createRaceWorldScene } from './race-world-scene.js';
 import { venueTheme, type VenueTheme } from './race-venue-theme.js';
 import type { RaceRenderQuality } from './race-viewer-performance.js';
 import { RaceHorseField } from './race-world-horses.js';
-import { RACE_RENDER_QUALITY, renderPixelRatioFor } from './race-world-render-quality.js';
+import {
+  RACE_RENDER_QUALITY,
+  isSoftwareRenderer,
+  lowerRenderQuality,
+  renderPixelRatioFor,
+  rendererName,
+} from './race-world-render-quality.js';
 
 /** How much of the crowd each device tier builds and animates. */
 const CROWD_DETAIL: Readonly<Record<RaceRenderQuality, number>> = {
@@ -61,6 +67,7 @@ export class RaceWorld {
   private viewportWidth = 1;
   private viewportHeight = 1;
   private renderQuality: RaceRenderQuality = 'high';
+  private qualityCeiling: RaceRenderQuality = 'high';
   private renderPixelRatio = 0;
 
   private constructor(
@@ -120,7 +127,11 @@ export class RaceWorld {
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
-    const settings = RACE_RENDER_QUALITY[initialRenderQuality];
+    const quality = lowerRenderQuality(
+      initialRenderQuality,
+      isSoftwareRenderer(rendererName(renderer)) ? 'low' : 'high',
+    );
+    const settings = RACE_RENDER_QUALITY[quality];
     renderer.shadowMap.enabled = settings.shadows;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.maximumPixelRatio));
 
@@ -131,13 +142,7 @@ export class RaceWorld {
       for (let index = 0; index < 8; index += 1) {
         rigs.push(createHorseRig(assets, index + 1, horseCoats.get(index + 1)));
       }
-      environment = new RaceEnvironment(
-        renderer,
-        distanceM,
-        surface,
-        theme,
-        CROWD_DETAIL[initialRenderQuality],
-      );
+      environment = new RaceEnvironment(renderer, distanceM, surface, theme, CROWD_DETAIL[quality]);
       const world = new RaceWorld(
         renderer,
         environment,
@@ -149,6 +154,7 @@ export class RaceWorld {
         onFinishSnapshotError,
         theme,
       );
+      world.qualityCeiling = quality;
       world.setRenderQuality(initialRenderQuality);
       return world;
     } catch (error) {
@@ -171,7 +177,8 @@ export class RaceWorld {
     this.cameraController.setInteractive(interactive);
   }
 
-  setRenderQuality(quality: RaceRenderQuality): void {
+  setRenderQuality(requested: RaceRenderQuality): void {
+    const quality = lowerRenderQuality(requested, this.qualityCeiling);
     if (quality === this.renderQuality && this.viewportWidth > 1 && this.viewportHeight > 1) return;
     const previousShadows = this.renderer.shadowMap.enabled;
     const settings = RACE_RENDER_QUALITY[quality];

@@ -10,33 +10,11 @@ export interface RaceViewerPerformanceProfile {
 
 const QUALITY_ORDER: readonly RaceRenderQuality[] = ['high', 'balanced', 'low', 'minimal'];
 
-/**
- * The best a screen of this size should be asked for. A handset renders the
- * same racecourse as a desktop, and paying for shadow maps and a dense crowd on
- * one costs frames it does not have.
- */
-export function deviceRenderCeiling(
-  width: number,
-  height: number,
-  coarsePointer: boolean,
-): RaceRenderQuality {
-  const shortEdge = Math.min(width, height);
-  if (shortEdge <= 480 || (coarsePointer && shortEdge <= 820)) return 'low';
-  return 'high';
-}
-
-function currentDeviceCeiling(): RaceRenderQuality {
-  if (typeof window === 'undefined') return 'high';
-  const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-  return deviceRenderCeiling(window.innerWidth, window.innerHeight, coarse);
-}
-
 export function deriveRaceViewerPerformance(
   runtime: ActivityRuntimeState,
-  deviceCeiling: RaceRenderQuality = currentDeviceCeiling(),
 ): RaceViewerPerformanceProfile {
   if (!runtime.isActivity) {
-    return { quality: deviceCeiling, minimumFrameIntervalMs: 0, compact: false };
+    return { quality: 'high', minimumFrameIntervalMs: 0, compact: false };
   }
 
   const thermal = (() => {
@@ -63,7 +41,7 @@ export function deriveRaceViewerPerformance(
   })();
 
   return {
-    quality: lowerQuality(deviceCeiling, lowerQuality(thermal.quality, layout.quality)),
+    quality: lowerQuality(thermal.quality, layout.quality),
     minimumFrameIntervalMs: Math.max(thermal.interval, layout.interval),
     compact: layout.compact,
   };

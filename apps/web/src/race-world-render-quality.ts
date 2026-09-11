@@ -1,3 +1,4 @@
+import type * as THREE from 'three';
 import type { RaceRenderQuality } from './race-viewer-performance.js';
 
 export interface RaceRenderQualitySettings {
@@ -12,6 +13,36 @@ export const RACE_RENDER_QUALITY: Readonly<Record<RaceRenderQuality, RaceRenderQ
   low: { maximumPixelRatio: 1, maximumPixels: 2_100_000, shadows: false },
   minimal: { maximumPixelRatio: 0.8, maximumPixels: 1_200_000, shadows: false },
 };
+
+const QUALITY_ORDER: readonly RaceRenderQuality[] = ['high', 'balanced', 'low', 'minimal'];
+
+/**
+ * True when the page is being drawn by the CPU instead of a GPU — a headless
+ * runner, a virtual machine, or a browser that has fallen back after a driver
+ * crash. Every real phone has a GPU, so this never costs a handset its quality.
+ */
+export function isSoftwareRenderer(name: string): boolean {
+  return /swiftshader|llvmpipe|softpipe|software|basic render|paravirtual/i.test(name);
+}
+
+export function rendererName(renderer: THREE.WebGLRenderer): string {
+  try {
+    const context = renderer.getContext();
+    const info = context.getExtension('WEBGL_debug_renderer_info');
+    if (info === null) return '';
+    return String(context.getParameter(info.UNMASKED_RENDERER_WEBGL) ?? '');
+  } catch {
+    return '';
+  }
+}
+
+/** The stricter of two qualities. */
+export function lowerRenderQuality(
+  left: RaceRenderQuality,
+  right: RaceRenderQuality,
+): RaceRenderQuality {
+  return QUALITY_ORDER[Math.max(QUALITY_ORDER.indexOf(left), QUALITY_ORDER.indexOf(right))]!;
+}
 
 export function renderPixelRatioFor(
   quality: RaceRenderQuality,

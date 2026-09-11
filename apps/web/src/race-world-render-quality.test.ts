@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { renderPixelRatioFor } from './race-world-render-quality.js';
+import {
+  isSoftwareRenderer,
+  lowerRenderQuality,
+  renderPixelRatioFor,
+} from './race-world-render-quality.js';
 
 describe('renderPixelRatioFor', () => {
   it('preserves high-DPI rendering on a regular full-HD viewer', () => {
@@ -16,5 +20,20 @@ describe('renderPixelRatioFor', () => {
     const ratio = renderPixelRatioFor('minimal', 3, 2_400, 1_080);
     expect(ratio).toBeLessThan(0.7);
     expect(ratio).toBeGreaterThanOrEqual(0.5);
+  });
+});
+
+describe('software renderers', () => {
+  it('recognises a CPU rasterizer and leaves real hardware alone', () => {
+    expect(isSoftwareRenderer('Google SwiftShader')).toBe(true);
+    expect(isSoftwareRenderer('llvmpipe (LLVM 15.0.7, 256 bits)')).toBe(true);
+    expect(isSoftwareRenderer('Apple GPU')).toBe(false);
+    expect(isSoftwareRenderer('Adreno (TM) 620')).toBe(false);
+    expect(isSoftwareRenderer('')).toBe(false);
+  });
+
+  it('never raises a quality, only lowers it', () => {
+    expect(lowerRenderQuality('high', 'low')).toBe('low');
+    expect(lowerRenderQuality('minimal', 'high')).toBe('minimal');
   });
 });

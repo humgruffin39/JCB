@@ -38,11 +38,11 @@ const BUILDING_FLOORS = 5;
 const FLOOR_HEIGHT = 4.2;
 const COLONNADE_BAYS = 11;
 
-const ROOF_BAYS = 22;
-/** How many full scallops run the length of the roof. */
-const ROOF_WAVES = 5;
-const ROOF_WAVE_DEPTH = 3.6;
-const ROOF_WAVE_LIFT = 1.1;
+/** How far over the bowl the roof reaches, measured from the terrace front. */
+const ROOF_REACH = 1.2;
+/** Bays the roof is split into, so its edge follows the curve of the course. */
+const ROOF_BAYS = 8;
+const ROOF_LIFT = 1.1;
 
 export interface Grandstand {
   readonly group: THREE.Group;
@@ -178,36 +178,31 @@ export function createGrandstand(distanceM: number, theme: VenueTheme, detail = 
   group.add(shell(buildingMiddle, buildingTop + 0.4, BUILDING_DEPTH, 0.8, concrete));
   group.add(shell(buildingBack + 0.6, buildingTop / 2, 1.2, buildingTop, concrete));
 
-  // 5. The roof. One deck per bay, each reaching a different distance over the
-  // bowl, so the front edge scallops instead of ruling a straight white line
-  // across the sky. Each bay carries its own fascia and a raking strut back to
-  // the colonnade, which is what makes it read as carried rather than floating.
+  // 5. The roof: one cantilevered deck over the bowl with a fascia along its
+  // front edge and a beam under it, carried on the colonnade. It is split into
+  // bays only so that its edge follows the curve of the course rather than
+  // cutting the corner; every bay reaches the same distance, so the edge rules
+  // one straight line instead of scalloping.
   const roofY = buildingTop + 2.6;
   const roofBackDepth = buildingBack;
-  const bayGeometry = (bay: number): { readonly front: number; readonly lift: number } => {
-    const phase = (bay + 0.5) / ROOF_BAYS;
-    const wave = Math.sin(phase * Math.PI * ROOF_WAVES);
-    return {
-      front: TERRACE_FRONT + 1.2 - wave * ROOF_WAVE_DEPTH,
-      lift: wave * ROOF_WAVE_LIFT,
-    };
-  };
+  const front = TERRACE_FRONT + ROOF_REACH;
+  const span = roofBackDepth - front;
   for (let bay = 0; bay < ROOF_BAYS; bay += 1) {
     const bayStart = start + (bay / ROOF_BAYS) * (end - start);
     const bayEnd = start + ((bay + 1) / ROOF_BAYS) * (end - start);
-    const { front, lift } = bayGeometry(bay);
-    const span = roofBackDepth - front;
-    group.add(shell(front + span / 2, roofY + lift, span, 0.5, trim, bayStart, bayEnd));
-    group.add(shell(front + 0.3, roofY + lift - 1, 0.55, 2, trim, bayStart, bayEnd));
-    group.add(shell(front + span * 0.55, roofY + lift - 0.65, 0.3, 0.8, trim, bayStart, bayEnd));
+    group.add(shell(front + span / 2, roofY + ROOF_LIFT, span, 0.5, trim, bayStart, bayEnd));
+    group.add(shell(front + 0.3, roofY + ROOF_LIFT - 1, 0.55, 2, trim, bayStart, bayEnd));
+    group.add(
+      shell(front + span * 0.55, roofY + ROOF_LIFT - 0.65, 0.3, 0.8, trim, bayStart, bayEnd),
+    );
   }
   // An upper deck set back over the building, the second tier a big stand has.
-  group.add(shell(buildingMiddle, roofY + ROOF_WAVE_LIFT + 3.4, BUILDING_DEPTH - 2, 0.45, trim));
+  group.add(shell(buildingMiddle, roofY + ROOF_LIFT + 3.4, BUILDING_DEPTH - 2, 0.45, trim));
   for (let index = 0; index < COLONNADE_BAYS; index += 1) {
     const progress = start + (index / (COLONNADE_BAYS - 1)) * (end - start);
     const sample = sampleCourse(progress, -buildingMiddle, distanceM);
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3.4, 0.4), trim);
-    post.position.set(sample.position.x, roofY + ROOF_WAVE_LIFT + 1.7, sample.position.z);
+    post.position.set(sample.position.x, roofY + ROOF_LIFT + 1.7, sample.position.z);
     post.rotation.y = sample.heading;
     group.add(post);
   }

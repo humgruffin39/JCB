@@ -11,7 +11,6 @@ import { createTrackside } from './race-environment-trackside.js';
 import { venueTheme, type VenueTheme } from './race-venue-theme.js';
 import { createFinishStructure, createStartingGate } from './race-environment-structures.js';
 import {
-  createFinishTexture,
   createGroundTexture,
   createTrackTexture,
   type RaceSurface,
@@ -25,7 +24,6 @@ import {
 
 export type { RaceSurface } from './race-environment-textures.js';
 export { outerCoursePosition } from './race-environment-scenery.js';
-export { createFinishSign } from './race-environment-structures.js';
 
 export class RaceEnvironment {
   readonly group = new THREE.Group();
@@ -48,8 +46,7 @@ export class RaceEnvironment {
     const trackTexture = createTrackTexture(renderer, surface, theme);
     const innerSurface = surface === 'turf' ? 'dirt' : 'turf';
     const innerTexture = createTrackTexture(renderer, innerSurface, theme);
-    const finishTexture = createFinishTexture(renderer);
-    this.ownedTextures = [groundTexture, trackTexture, innerTexture, finishTexture];
+    this.ownedTextures = [groundTexture, trackTexture, innerTexture];
     this.group.add(
       createTrack(groundTexture, trackTexture, distanceM),
       createSecondSurface(innerTexture, distanceM),
@@ -64,7 +61,7 @@ export class RaceEnvironment {
     const gate = createStartingGate();
     placeOnCourse(gate.group, RACE_START_COURSE_PROGRESS, 1.15, distanceM);
     this.gateDoors = gate.doors;
-    const finish = createFinishStructure(finishTexture);
+    const finish = createFinishStructure();
     placeOnCourse(finish, 0, 0, distanceM);
     this.group.add(gate.group, finish);
   }

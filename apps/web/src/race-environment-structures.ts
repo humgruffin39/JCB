@@ -88,7 +88,7 @@ export function createStartingGate(): {
  * finish through. The rest of the venue caught up with it, so a bare pole and a
  * beam had started to look like the one thing nobody had finished.
  */
-export function createFinishStructure(labelTexture: THREE.Texture): THREE.Group {
+export function createFinishStructure(): THREE.Group {
   const group = new THREE.Group();
   const white = new THREE.MeshStandardMaterial({ color: WHITE, roughness: 0.42 });
   const black = new THREE.MeshStandardMaterial({ color: 0x171817, roughness: 0.52 });
@@ -142,33 +142,5 @@ export function createFinishStructure(labelTexture: THREE.Texture): THREE.Group 
   mirror.rotation.z = 0.18;
   group.add(mirror);
 
-  group.add(createFinishSign(labelTexture));
-  return group;
-}
-
-export function createFinishSign(labelTexture: THREE.Texture): THREE.Group {
-  const group = new THREE.Group();
-  const backingMaterial = new THREE.MeshStandardMaterial({
-    color: 0x171817,
-    roughness: 0.52,
-  });
-  const signBacking = new THREE.Mesh(new THREE.BoxGeometry(2.75, 0.88, 0.12), backingMaterial);
-  signBacking.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.64);
-  signBacking.castShadow = true;
-  group.add(signBacking);
-
-  const signMaterial = new THREE.MeshStandardMaterial({
-    map: labelTexture,
-    color: 0xffffff,
-    roughness: 0.72,
-    side: THREE.FrontSide,
-  });
-  // Lettered on the course side only. A second face on the back of the board
-  // read as a mirrored FINISH from the stands, which no real board does.
-  const signGeometry = new THREE.PlaneGeometry(2.55, 0.7);
-  const infieldFace = new THREE.Mesh(signGeometry, signMaterial);
-  infieldFace.name = 'finish-sign-infield-face';
-  infieldFace.position.set(0.2, 4.85, -TRACK_HALF_WIDTH - 0.57);
-  group.add(infieldFace);
   return group;
 }

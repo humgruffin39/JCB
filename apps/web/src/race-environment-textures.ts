@@ -72,22 +72,3 @@ function createSurfaceTexture(
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   return texture;
 }
-
-export function createFinishTexture(renderer: THREE.WebGLRenderer): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 144;
-  const context = canvas.getContext('2d');
-  if (context === null) throw new Error('ゴール表示を作成できません');
-  context.fillStyle = '#f3f1e9';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = '#151615';
-  context.font = '900 72px "Noto Sans JP Variable", "Noto Sans JP", sans-serif';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillText('FINISH', canvas.width / 2, canvas.height / 2 + 3);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  return texture;
-}

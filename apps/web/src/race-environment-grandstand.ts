@@ -38,7 +38,7 @@ const BUILDING_FLOORS = 5;
 const FLOOR_HEIGHT = 4.2;
 const COLONNADE_BAYS = 11;
 
-const ROOF_BAYS = 11;
+const ROOF_BAYS = 22;
 /** How many full scallops run the length of the roof. */
 const ROOF_WAVES = 5;
 const ROOF_WAVE_DEPTH = 3.6;
@@ -197,10 +197,9 @@ export function createGrandstand(distanceM: number, theme: VenueTheme, detail = 
     const bayEnd = start + ((bay + 1) / ROOF_BAYS) * (end - start);
     const { front, lift } = bayGeometry(bay);
     const span = roofBackDepth - front;
-    // Deck and fascia only: the extra under-beam per bay tripled the draw calls
-    // for a line nobody can pick out from the stands.
     group.add(shell(front + span / 2, roofY + lift, span, 0.5, trim, bayStart, bayEnd));
     group.add(shell(front + 0.3, roofY + lift - 1, 0.55, 2, trim, bayStart, bayEnd));
+    group.add(shell(front + span * 0.55, roofY + lift - 0.65, 0.3, 0.8, trim, bayStart, bayEnd));
   }
   // An upper deck set back over the building, the second tier a big stand has.
   group.add(shell(buildingMiddle, roofY + ROOF_WAVE_LIFT + 3.4, BUILDING_DEPTH - 2, 0.45, trim));

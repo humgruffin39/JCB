@@ -21,7 +21,6 @@ export function createTrackside(distanceM: number, theme: VenueTheme): THREE.Gro
 
   group.add(createBigScreen(distanceM, theme));
   group.add(createFurlongMarkers(distanceM, courseLength, theme));
-  group.add(createOfficials(distanceM, theme));
   group.add(createCameraTowers(distanceM, theme));
   group.add(createInfield(distanceM, theme));
   group.add(createPerimeter(distanceM, theme));
@@ -110,33 +109,6 @@ function createFurlongMarkers(
     cap.rotation.y = sample.heading;
     group.add(cap);
   }
-  return group;
-}
-
-function createOfficials(distanceM: number, theme: VenueTheme): THREE.Group {
-  const group = new THREE.Group();
-  const hut = new THREE.MeshStandardMaterial({
-    color: theme.grandstand.structure,
-    roughness: 0.9,
-  });
-  const roof = new THREE.MeshStandardMaterial({ color: theme.grandstand.roof, roughness: 0.6 });
-
-  // On the grass between the turf and the inner course, level with the post.
-  const judge = sampleCourse(0, TRACK_HALF_WIDTH + 3.4, distanceM);
-  const box = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3, 2.8), hut);
-  box.position.set(judge.position.x, 3.3, judge.position.z);
-  box.rotation.y = judge.heading;
-  group.add(box);
-  const canopy = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.3, 3.4), roof);
-  canopy.position.set(judge.position.x, 4.95, judge.position.z);
-  canopy.rotation.y = judge.heading;
-  group.add(canopy);
-  for (const side of [-1.2, 1.2]) {
-    const stilt = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.8, 0.35), hut);
-    stilt.position.set(judge.position.x, 0.9, judge.position.z + side);
-    group.add(stilt);
-  }
-
   return group;
 }
 

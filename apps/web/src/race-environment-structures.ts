@@ -116,13 +116,6 @@ export function createFinishStructure(labelTexture: THREE.Texture): THREE.Group 
     const finial = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 4), white);
     finial.position.set(0, 6.7, z);
     group.add(finial);
-
-    // Knee braces from the plinth up to the gantry, on the outside of each pylon.
-    const outward = Math.sign(z);
-    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.6, 0.18), white);
-    brace.position.set(0, 4.6, z + outward * 0.62);
-    brace.rotation.x = outward * 0.42;
-    group.add(brace);
   }
 
   const beam = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.52, 13.2), black);

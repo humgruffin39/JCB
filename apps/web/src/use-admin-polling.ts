@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useIsSectionActive } from './admin-section-visibility.js';
 
 interface AdminPollingState {
+  /** True until the first load settles. The pane has nothing to show yet. */
   readonly isInitialLoading: boolean;
   readonly error?: string;
   readonly refreshNow: () => Promise<void>;
@@ -10,6 +12,7 @@ export function useAdminPolling(
   refresh: () => Promise<void>,
   intervalMilliseconds = 5_000,
 ): AdminPollingState {
+  const isSectionActive = useIsSectionActive();
   const refreshRef = useRef(refresh);
   const queueRef = useRef(Promise.resolve());
   const autoRefreshQueuedRef = useRef(false);
@@ -54,6 +57,14 @@ export function useAdminPolling(
     let tickRunning = false;
     let timer: number | undefined;
     mountedRef.current = true;
+    // A hidden section keeps its rows but stops asking for new ones. Showing it
+    // again re-runs this effect, which loads once and resumes the interval.
+    if (!isSectionActive) {
+      return () => {
+        active = false;
+        mountedRef.current = false;
+      };
+    }
     const schedule = (): void => {
       if (active && !document.hidden && timer === undefined) {
         timer = window.setTimeout(tick, Math.max(1_000, intervalMilliseconds));
@@ -85,7 +96,7 @@ export function useAdminPolling(
       if (timer !== undefined) window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [enqueue, intervalMilliseconds]);
+  }, [enqueue, intervalMilliseconds, isSectionActive]);
 
   return {
     isInitialLoading: !hasLoaded,

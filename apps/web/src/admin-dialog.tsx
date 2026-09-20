@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { CloseIcon } from './admin-icons.js';
 
 interface FocusTarget {
   readonly current: HTMLElement | null;
@@ -24,6 +25,7 @@ export function AdminDialog({
   readonly className?: string;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const backdropMouseDown = useRef(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -59,6 +61,23 @@ export function AdminDialog({
         event.preventDefault();
         if (canCancel) onCancel();
       }}
+      /*
+       * The backdrop is not an element, so a click on it is reported against
+       * the dialog. Comparing the target to the dialog is not enough, because
+       * the dialog's own padding answers to that too; the pointer has to be
+       * outside the box the dialog actually occupies.
+       */
+      onMouseDown={(event) => {
+        backdropMouseDown.current = isOutside(event, dialogRef.current);
+      }}
+      onClick={(event) => {
+        const startedOutside = backdropMouseDown.current;
+        backdropMouseDown.current = false;
+        // A drag that began inside and ended outside is a text selection
+        // running past the edge, not a click on the backdrop.
+        if (!startedOutside || !isOutside(event, dialogRef.current)) return;
+        if (canCancel) onCancel();
+      }}
     >
       <div className="admin-dialog__header">
         <h2 id={titleId}>{title}</h2>
@@ -69,7 +88,7 @@ export function AdminDialog({
           aria-label="閉じる"
           disabled={!canCancel}
         >
-          ×
+          <CloseIcon size={15} ariaHidden />
         </button>
       </div>
       {description === undefined ? null : (
@@ -85,5 +104,23 @@ export function AdminDialog({
 function findFirstFocusable(dialog: HTMLDialogElement): HTMLElement | null {
   return dialog.querySelector<HTMLElement>(
     '[autofocus], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]):not(.admin-dialog__close), [tabindex]:not([tabindex="-1"])',
+  );
+}
+
+/**
+ * Whether a pointer event landed outside the dialog's box. A keyboard-driven
+ * click reports no coordinates at all, and those are never a backdrop click.
+ */
+function isOutside(
+  event: { readonly clientX: number; readonly clientY: number; readonly detail: number },
+  dialog: HTMLDialogElement | null,
+): boolean {
+  if (dialog === null || event.detail === 0) return false;
+  const box = dialog.getBoundingClientRect();
+  return (
+    event.clientX < box.left ||
+    event.clientX > box.right ||
+    event.clientY < box.top ||
+    event.clientY > box.bottom
   );
 }

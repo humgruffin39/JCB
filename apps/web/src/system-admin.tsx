@@ -1,5 +1,5 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { z } from 'zod';
 import { AdministratorAdmin } from './administrator-admin.js';
 import { AdminTabList } from './admin-tab-list.js';
@@ -45,30 +45,36 @@ export function SystemAdmin() {
   const retryingJobRef = useRef<string | undefined>(undefined);
   const retryingPublicationRef = useRef<string | undefined>(undefined);
   const [section, setSection] = useState<SystemSection>('status');
-  const previousSection = useRef(section);
   const { success } = useAdminToast();
 
-  const refresh = useCallback(async () => {
-    if (section === 'status') {
-      const nextHealth = await apiRequest<unknown>('/api/v1/admin/health');
-      setHealth(z.record(z.string(), z.unknown()).parse(nextHealth));
-    } else if (section === 'jobs') {
-      const nextJobs = await apiRequest<unknown>('/api/v1/admin/jobs');
-      setJobs(z.array(z.record(z.string(), z.string().nullable())).parse(nextJobs));
-    } else if (section === 'objects') {
-      setObjects(await apiRequest<SystemObjects>('/api/v1/admin/system-objects'));
-    } else if (section === 'audit') {
-      const nextAudit = await apiRequest<unknown>('/api/v1/admin/audit');
-      setAudit(z.array(z.record(z.string(), z.string().nullable())).parse(nextAudit));
-    }
-  }, [section]);
-  const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 7_500);
+  const loadHealth = useCallback(async () => {
+    const next = await apiRequest<unknown>('/api/v1/admin/health');
+    setHealth(z.record(z.string(), z.unknown()).parse(next));
+  }, []);
+  const loadJobs = useCallback(async () => {
+    const next = await apiRequest<unknown>('/api/v1/admin/jobs');
+    setJobs(z.array(z.record(z.string(), z.string().nullable())).parse(next));
+  }, []);
+  const loadObjects = useCallback(async () => {
+    setObjects(await apiRequest<SystemObjects>('/api/v1/admin/system-objects'));
+  }, []);
+  const loadAudit = useCallback(async () => {
+    const next = await apiRequest<unknown>('/api/v1/admin/audit');
+    setAudit(z.array(z.record(z.string(), z.string().nullable())).parse(next));
+  }, []);
 
-  useEffect(() => {
-    if (previousSection.current === section) return;
-    previousSection.current = section;
-    void refreshNow().catch(() => undefined);
-  }, [refreshNow, section]);
+  /*
+   * Only the section on screen is fetched. The others keep whatever they last
+   * loaded, so coming back to one is instant.
+   */
+  const refresh = useCallback(async () => {
+    if (section === 'status') await loadHealth();
+    else if (section === 'jobs') await loadJobs();
+    else if (section === 'objects') await loadObjects();
+    else if (section === 'audit') await loadAudit();
+  }, [loadAudit, loadHealth, loadJobs, loadObjects, section]);
+
+  const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 7_500);
 
   const retryJob = (jobId: string): void => {
     if (retryingJobRef.current !== undefined) return;
@@ -145,11 +151,7 @@ export function SystemAdmin() {
         ) : section === 'administrators' ? (
           <AdministratorAdmin />
         ) : section === 'status' ? (
-          <SystemStatusPanel
-            health={health}
-            isInitialLoading={isInitialLoading}
-            isNominal={systemIsNominal(health)}
-          />
+          <SystemStatusPanel health={health} isInitialLoading={isInitialLoading} />
         ) : section === 'objects' ? (
           <SystemObjectsPanel
             objects={objects}
@@ -157,49 +159,34 @@ export function SystemAdmin() {
             onRetryPublication={retryPublication}
           />
         ) : section === 'jobs' ? (
-          <SystemJobsPanel jobs={jobs} retryingJob={retryingJob} onRetryJob={retryJob} />
+          <SystemJobsPanel
+            jobs={jobs}
+            isInitialLoading={isInitialLoading}
+            retryingJob={retryingJob}
+            onRetryJob={retryJob}
+          />
         ) : (
-          <SystemAuditPanel audit={audit} />
+          <SystemAuditPanel audit={audit} isInitialLoading={isInitialLoading} />
         )}
       </div>
     </div>
   );
 }
 
+/**
+ * The readings speak for themselves. A summary word above them only says the
+ * same thing again, less precisely.
+ */
 function SystemStatusPanel({
   health,
   isInitialLoading,
-  isNominal,
 }: {
   readonly health: Record<string, unknown>;
   readonly isInitialLoading: boolean;
-  readonly isNominal: boolean;
 }) {
   return (
-    <TerminalPanel
-      heading="システム状態"
-      status={isInitialLoading ? '読み込み中' : isNominal ? '正常' : '要確認'}
-    >
-      {isInitialLoading ? (
-        <p role="status" aria-live="polite">
-          システム情報を読み込んでいます。
-        </p>
-      ) : (
-        <SystemHealthReadout health={health} />
-      )}
+    <TerminalPanel heading="システム状態">
+      {isInitialLoading ? null : <SystemHealthReadout health={health} />}
     </TerminalPanel>
-  );
-}
-
-function systemIsNominal(health: Record<string, unknown>): boolean {
-  return (
-    health.ledgerProjectionValid === true &&
-    health.databaseReadWrite === true &&
-    health.memoryStatus !== 'failure' &&
-    health.schedulerStatus !== 'failure' &&
-    health.r2AccessStatus !== 'failure' &&
-    health.discordGatewayConnected === true &&
-    Number(health.deadJobs ?? 0) === 0 &&
-    Number(health.deadObjectPublications ?? 0) === 0
   );
 }

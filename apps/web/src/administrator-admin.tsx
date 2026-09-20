@@ -1,6 +1,7 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
+import { AddIcon, RemoveIcon } from './admin-icons.js';
 import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { useAdminPolling } from './use-admin-polling.js';
@@ -82,58 +83,87 @@ export function AdministratorAdmin() {
   }
 
   return (
-    <TerminalPanel heading="管理者許可リスト" status={`${String(administrators.length)}人`}>
-      {refreshError === undefined ? null : (
-        <p className="field-error" role="alert">
-          {refreshError} 管理者一覧を更新できません。
-        </p>
-      )}
-      {isInitialLoading ? (
-        <p className="empty-copy" role="status" aria-live="polite">
-          管理者一覧を読み込んでいます。
-        </p>
-      ) : administrators.length === 0 ? (
-        <p className="empty-copy" role="status">
-          管理者が登録されていません。
-        </p>
-      ) : (
-        <ul className="ticket-list">
-          {administrators.map((administrator) => (
-            <li key={administrator.discordUserId}>
-              <span>{administrator.discordUserId}</span>
-              <small>登録日 {formatDate(administrator.createdAt)}</small>
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setRemovalTarget(administrator.discordUserId)}
-                disabled={administrators.length <= 1}
-              >
-                権限を外す
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form className="terminal-form" aria-busy={isAdding} onSubmit={(event) => void add(event)}>
-        <div className="form-row">
+    <div className="admin-surface-grid">
+      <TerminalPanel heading="管理者" status={`${String(administrators.length)}人`}>
+        {refreshError === undefined ? null : (
+          <p className="field-error" role="alert">
+            {refreshError} 管理者一覧を更新できません。
+          </p>
+        )}
+        {isInitialLoading ? null : administrators.length === 0 ? (
+          <p className="empty-copy" role="status">
+            管理者が登録されていません。
+          </p>
+        ) : (
+          <div className="data-table-wrap">
+            <table className="data-table data-table--actions">
+              <caption className="visually-hidden">管理者</caption>
+              <thead>
+                <tr>
+                  <th scope="col">DiscordユーザーID</th>
+                  <th scope="col">登録日</th>
+                  <th scope="col">
+                    <span className="visually-hidden">操作</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {administrators.map((administrator) => (
+                  <tr key={administrator.discordUserId}>
+                    <td className="numeric">{administrator.discordUserId}</td>
+                    <td>{formatDate(administrator.createdAt)}</td>
+                    <td>
+                      <div className="inline-actions">
+                        <button
+                          type="button"
+                          className="text-button button-danger"
+                          onClick={() => setRemovalTarget(administrator.discordUserId)}
+                          disabled={administrators.length <= 1}
+                          aria-label={`${administrator.discordUserId}の権限を外す`}
+                        >
+                          <RemoveIcon size={13} ariaHidden />
+                          権限を外す
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </TerminalPanel>
+
+      <TerminalPanel heading="管理者を追加">
+        <form className="terminal-form" aria-busy={isAdding} onSubmit={(event) => void add(event)}>
           <label>
             DiscordユーザーID
-            <input name="discordUserId" inputMode="numeric" pattern="\d{5,25}" required />
+            <input
+              name="discordUserId"
+              inputMode="numeric"
+              pattern="\d{5,25}"
+              placeholder="000000000000000000"
+              required
+            />
           </label>
           <label>
             追加理由
             <input name="reason" minLength={5} maxLength={300} required />
           </label>
-        </div>
-        {error === '' ? null : (
-          <p className="field-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button type="submit" className="form-submit" disabled={isAdding}>
-          {isAdding ? '追加中…' : '管理者を追加'}
-        </button>
-      </form>
+          {error === '' ? null : (
+            <p className="field-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="form-actions">
+            <button type="submit" className="form-submit" disabled={isAdding}>
+              <AddIcon size={14} ariaHidden />
+              {isAdding ? '追加中…' : '管理者を追加'}
+            </button>
+          </div>
+        </form>
+      </TerminalPanel>
+
       {removalTarget === undefined ? null : (
         <AdministratorRemovalDialog
           discordUserId={removalTarget}
@@ -141,7 +171,7 @@ export function AdministratorAdmin() {
           onConfirm={remove}
         />
       )}
-    </TerminalPanel>
+    </div>
   );
 }
 

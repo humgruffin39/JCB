@@ -13,6 +13,8 @@ export interface UseRaceAdminData {
   readonly races: readonly AdminRace[];
   readonly horses: readonly HorseOption[];
   readonly schedule: ScheduleSettings;
+  /** The per-race stake ceiling, keyed by race kind. */
+  readonly betLimits: Readonly<Record<string, number>>;
   readonly isInitialLoading: boolean;
   readonly refreshError: string | undefined;
   readonly formOptionsError: string;
@@ -26,7 +28,9 @@ export interface UseRaceAdminData {
 }
 
 interface AdminSettingsResponse {
-  readonly gameSettings: ScheduleSettings;
+  readonly gameSettings: ScheduleSettings & {
+    readonly raceBetLimits: Readonly<Record<string, number>>;
+  };
 }
 
 export function useRaceAdminData(): UseRaceAdminData {
@@ -37,6 +41,7 @@ export function useRaceAdminData(): UseRaceAdminData {
   const mountedRef = useRef(false);
   const [horses, setHorses] = useState<readonly HorseOption[]>([]);
   const [schedule, setSchedule] = useState<ScheduleSettings>(DEFAULT_SCHEDULE);
+  const [betLimits, setBetLimits] = useState<Readonly<Record<string, number>>>({});
   const [formOptionsError, setFormOptionsError] = useState('');
   const [operationError, setOperationError] = useState('');
   const [pendingOperation, setPendingOperation] = useState<string>();
@@ -68,6 +73,8 @@ export function useRaceAdminData(): UseRaceAdminData {
         bettingCloseTime: settings.bettingCloseTime,
         startTime: settings.startTime,
       });
+      setBetLimits(settings.raceBetLimits);
+
       setFormOptionsError('');
     } catch (caught) {
       if (mountedRef.current && requestId === formOptionsRequestId.current) {
@@ -197,6 +204,7 @@ export function useRaceAdminData(): UseRaceAdminData {
     races,
     horses,
     schedule,
+    betLimits,
     isInitialLoading,
     refreshError,
     formOptionsError,

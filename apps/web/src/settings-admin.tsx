@@ -6,7 +6,6 @@ import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { SettingsFormFields } from './settings-form-fields.js';
 import { readSettings, requiredString } from './settings-form-model.js';
-import { SettingsHistory } from './settings-history.js';
 import { useAdminPolling } from './use-admin-polling.js';
 import { useSubmitLock } from './use-submit-lock.js';
 
@@ -64,8 +63,8 @@ export function SettingsAdmin() {
       } catch (caught) {
         setError(
           caught instanceof Error
-            ? `設定は保存されましたが、履歴を更新できませんでした。${caught.message}`
-            : '設定は保存されましたが、履歴を更新できませんでした。',
+            ? `設定は保存されましたが、表示を更新できませんでした。${caught.message}`
+            : '設定は保存されましたが、表示を更新できませんでした。',
         );
       }
     } catch (caught) {
@@ -81,22 +80,22 @@ export function SettingsAdmin() {
 
   if (data === undefined) {
     return (
-      <TerminalPanel heading="運用設定" status="読み込み中">
+      <TerminalPanel heading="運用設定">
         {refreshError === undefined ? null : (
           <p className="field-error" role="alert">
             {refreshError} 設定を更新できません。
           </p>
         )}
-        <p aria-live="polite">設定履歴を読み込んでいます。</p>
+        <p aria-live="polite">設定を読み込んでいます。</p>
       </TerminalPanel>
     );
   }
 
   return (
-    <TerminalPanel heading="運用設定" status={`${String(data.history.length)}件の変更履歴`}>
+    <TerminalPanel heading="運用設定">
       {refreshError === undefined ? null : (
         <p className="field-error" role="alert">
-          {refreshError} 設定履歴を更新できません。
+          {refreshError} 設定を更新できません。
         </p>
       )}
       <form
@@ -122,7 +121,6 @@ export function SettingsAdmin() {
           {isSubmitting ? '保存中…' : '設定を保存'}
         </button>
       </form>
-      <SettingsHistory history={data.history} />
     </TerminalPanel>
   );
 }

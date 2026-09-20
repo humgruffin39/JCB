@@ -1,5 +1,5 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AdminTabList } from './admin-tab-list.js';
 import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
@@ -31,24 +31,25 @@ export function CurrencyAdmin() {
   const [ledger, setLedger] = useState<readonly OperationRow[]>([]);
   const [operationError, setOperationError] = useState('');
   const [section, setSection] = useState<CurrencySection>('overview');
-  const previousSection = useRef(section);
   const { success } = useAdminToast();
 
-  const refresh = useCallback(async () => {
-    if (section === 'ledger') {
-      setLedger(await apiRequest<readonly OperationRow[]>('/api/v1/admin/ledger'));
-      return;
-    }
+  const loadLedger = useCallback(async () => {
+    setLedger(await apiRequest<readonly OperationRow[]>('/api/v1/admin/ledger'));
+  }, []);
+  const loadEconomy = useCallback(async () => {
     setEconomy(await apiRequest<EconomyOperations>('/api/v1/admin/economy'));
-  }, [section]);
+  }, []);
+
+  /*
+   * Only the section on screen is fetched. The other keeps what it last
+   * loaded, so coming back to it is instant.
+   */
+  const refresh = useCallback(async () => {
+    if (section === 'ledger') await loadLedger();
+    else await loadEconomy();
+  }, [loadEconomy, loadLedger, section]);
 
   const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 7_500);
-
-  useEffect(() => {
-    if (previousSection.current === section) return;
-    previousSection.current = section;
-    void refreshNow().catch(() => undefined);
-  }, [refreshNow, section]);
 
   async function confirmAdjustment(draft: AdjustmentDraft): Promise<void> {
     setOperationError('');
@@ -74,16 +75,18 @@ export function CurrencyAdmin() {
   if (economy === undefined) {
     return (
       <div className="admin-page">
-        <TerminalPanel heading="通貨データ" status="読み込み中">
-          {refreshError === undefined ? null : (
-            <p className="field-error" role="alert">
-              {refreshError} 通貨データを取得できません。時間をおいて再確認してください。
-            </p>
-          )}
-          <p role="status" aria-live="polite">
-            {isInitialLoading ? '通貨データを読み込んでいます。' : '通貨データを表示できません。'}
+        {refreshError === undefined ? null : (
+          <p className="field-error" role="alert">
+            {refreshError} 通貨データを取得できません。時間をおいて再確認してください。
           </p>
-        </TerminalPanel>
+        )}
+        {isInitialLoading ? null : (
+          <TerminalPanel heading="口座残高">
+            <p className="empty-copy" role="status">
+              通貨データを表示できません。
+            </p>
+          </TerminalPanel>
+        )}
       </div>
     );
   }

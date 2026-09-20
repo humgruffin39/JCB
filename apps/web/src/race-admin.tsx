@@ -1,5 +1,6 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useRef, useState } from 'react';
+import { AddIcon } from './admin-icons.js';
 import {
   CancellationDialog,
   EmergencyRevealDialog,
@@ -16,6 +17,7 @@ export function RaceAdmin() {
     races,
     horses,
     schedule,
+    betLimits,
     isInitialLoading,
     refreshError,
     formOptionsError,
@@ -52,6 +54,7 @@ export function RaceAdmin() {
             className="text-button"
             onClick={(event) => openRaceForm(undefined, event.currentTarget)}
           >
+            <AddIcon size={14} ariaHidden />
             レースを作成
           </button>
         }
@@ -71,17 +74,14 @@ export function RaceAdmin() {
             {operationError}
           </p>
         )}
-        {isInitialLoading ? (
-          <div className="empty-copy" role="status" aria-live="polite">
-            <strong>レース一覧を読み込んでいます</strong>
-          </div>
-        ) : races.length === 0 ? (
+        {isInitialLoading ? null : races.length === 0 ? (
           <div className="empty-copy" role="status">
             <strong>レースがありません</strong>
           </div>
         ) : (
           <RaceAdminList
             races={races}
+            betLimits={betLimits}
             pendingOperation={pendingOperation}
             onEdit={openRaceForm}
             onTransition={transition}

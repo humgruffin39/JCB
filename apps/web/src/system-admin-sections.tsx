@@ -135,17 +135,23 @@ export function SystemObjectsPanel({
 
 export function SystemJobsPanel({
   jobs,
+  isInitialLoading,
   retryingJob,
   onRetryJob,
 }: {
   readonly jobs: readonly SystemJobRow[];
+  readonly isInitialLoading: boolean;
   readonly retryingJob: string | undefined;
   readonly onRetryJob: (jobId: string) => void;
 }) {
+  if (isInitialLoading) return <TerminalPanel heading="ジョブキュー">{null}</TerminalPanel>;
+
   return (
     <TerminalPanel heading="ジョブキュー" status={`${String(jobs.length)}件`}>
       <div className="data-table-wrap">
-        <table className="data-table">
+        {/* The retry button turns up on failed rows only. Reserving its column
+            keeps the other five from shifting when one appears. */}
+        <table className="data-table data-table--actions">
           <caption className="visually-hidden">ジョブキュー</caption>
           <thead>
             <tr>
@@ -190,9 +196,17 @@ export function SystemJobsPanel({
   );
 }
 
-export function SystemAuditPanel({ audit }: { readonly audit: readonly SystemAuditRow[] }) {
+export function SystemAuditPanel({
+  audit,
+  isInitialLoading,
+}: {
+  readonly audit: readonly SystemAuditRow[];
+  readonly isInitialLoading: boolean;
+}) {
+  if (isInitialLoading) return <TerminalPanel heading="監査ログ">{null}</TerminalPanel>;
+
   return (
-    <TerminalPanel heading="監査ログ" status="追記専用">
+    <TerminalPanel heading="監査ログ" status={`${String(audit.length)}件`}>
       <ul className="audit-list">
         {audit.slice(0, 100).map((row) => (
           <li key={row.id}>

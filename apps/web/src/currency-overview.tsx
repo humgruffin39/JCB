@@ -56,69 +56,74 @@ export function CurrencyOverview({
         ]}
         moneyColumns={new Set(['amount'])}
       />
-      <TerminalPanel heading="残高補正">
-        {adjustmentDraft === undefined ? (
-          <form ref={adjustmentForm} className="terminal-form" onSubmit={reviewAdjustment}>
-            <label>
-              対象口座
-              <select name="accountId" required defaultValue="">
-                <option value="" disabled>
-                  口座を選択
-                </option>
-                {accounts.map((account) => (
-                  <option key={String(account.id)} value={String(account.id)}>
-                    {String(account.displayName ?? account.ownerKey)} /{' '}
-                    {accountTypeLabel(String(account.accountType))} / {formatMoney(account.amount)}
+      {/* The carryover reads as a consequence of the correction above it, so the
+          two share a column rather than sitting on opposite sides. */}
+      <div className="admin-page">
+        <TerminalPanel heading="残高補正">
+          {adjustmentDraft === undefined ? (
+            <form ref={adjustmentForm} className="terminal-form" onSubmit={reviewAdjustment}>
+              <label>
+                対象口座
+                <select name="accountId" required defaultValue="">
+                  <option value="" disabled>
+                    口座を選択
                   </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              補正額
-              <input name="amount" type="number" step={1} required />
-            </label>
-            <label>
-              理由
-              <textarea name="reason" minLength={3} maxLength={300} required />
-            </label>
-            <div className="form-actions">
-              <button type="submit" className="form-submit">
-                確認する
-              </button>
-            </div>
-          </form>
-        ) : (
-          <AdjustmentReview
-            draft={adjustmentDraft}
-            onClose={() => setAdjustmentDraft(undefined)}
-            onConfirm={async (draft) => {
-              await onConfirmAdjustment(draft);
-              setAdjustmentDraft(undefined);
-              adjustmentForm.current?.reset();
-            }}
-          />
-        )}
-      </TerminalPanel>
-      <TerminalPanel heading="三連単キャリーオーバー">
-        {carryover === null ? (
-          <p>キャリーオーバー口座がありません。</p>
-        ) : (
-          <dl className="metric-list">
-            <div>
-              <dt>予測残高</dt>
-              <dd>{formatMoney(carryover.amountProjection)}</dd>
-            </div>
-            <div>
-              <dt>口座残高</dt>
-              <dd>{formatMoney(carryover.accountBalance)}</dd>
-            </div>
-            <div>
-              <dt>更新日時</dt>
-              <dd>{formatTimestamp(carryover.updatedAt)}</dd>
-            </div>
-          </dl>
-        )}
-      </TerminalPanel>
+                  {accounts.map((account) => (
+                    <option key={String(account.id)} value={String(account.id)}>
+                      {String(account.displayName ?? account.ownerKey)} /{' '}
+                      {accountTypeLabel(String(account.accountType))} /{' '}
+                      {formatMoney(account.amount)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                補正額
+                <input name="amount" type="number" step={1} required />
+              </label>
+              <label>
+                理由
+                <textarea name="reason" minLength={3} maxLength={300} required />
+              </label>
+              <div className="form-actions">
+                <button type="submit" className="form-submit">
+                  確認する
+                </button>
+              </div>
+            </form>
+          ) : (
+            <AdjustmentReview
+              draft={adjustmentDraft}
+              onClose={() => setAdjustmentDraft(undefined)}
+              onConfirm={async (draft) => {
+                await onConfirmAdjustment(draft);
+                setAdjustmentDraft(undefined);
+                adjustmentForm.current?.reset();
+              }}
+            />
+          )}
+        </TerminalPanel>
+        <TerminalPanel heading="三連単キャリーオーバー">
+          {carryover === null ? (
+            <p>キャリーオーバー口座がありません。</p>
+          ) : (
+            <dl className="metric-list">
+              <div>
+                <dt>予測残高</dt>
+                <dd>{formatMoney(carryover.amountProjection)}</dd>
+              </div>
+              <div>
+                <dt>口座残高</dt>
+                <dd>{formatMoney(carryover.accountBalance)}</dd>
+              </div>
+              <div>
+                <dt>更新日時</dt>
+                <dd>{formatTimestamp(carryover.updatedAt)}</dd>
+              </div>
+            </dl>
+          )}
+        </TerminalPanel>
+      </div>
     </div>
   );
 }

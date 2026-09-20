@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
 allowBuilds:
+  '@central-icons-react/round-filled-radius-3-stroke-2': false
   better-sqlite3: true
   esbuild: true
   unrs-resolver: true

@@ -156,10 +156,6 @@
   gap: var(--space-4);
 }
 
-.app-shell--admin .system-layout {
-  gap: var(--space-3);
-}
-
 .terminal-panel {
   min-width: 0;
   background: var(--surface-1);
@@ -202,30 +198,6 @@
   padding: var(--space-3);
 }
 
-.app-shell--admin .terminal-panel {
-  border-radius: 0.25rem;
-}
-
-.app-shell--admin .terminal-panel__header {
-  min-height: 2.25rem;
-  padding: var(--space-1) var(--space-2);
-}
-
-.app-shell--admin .terminal-panel__header h2 {
-  font-size: 0.82rem;
-}
-
-.app-shell--admin .terminal-panel__header-actions > button {
-  min-height: 1.75rem;
-  padding: var(--space-1) var(--space-2);
-  font-size: 0.72rem;
-  white-space: nowrap;
-}
-
-.app-shell--admin .terminal-panel__body {
-  padding: var(--space-2);
-}
-
 .status-readout {
   color: var(--muted);
   font: 500 0.75rem/1 var(--font-display);
@@ -234,9 +206,7 @@
 
 .horse-list,
 .ticket-list,
-.result-list,
-.audit-list,
-.race-admin-list {
+.result-list {
   display: grid;
   padding: 0;
   margin: 0;

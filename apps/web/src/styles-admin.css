@@ -1,206 +1,3 @@
-.admin-terminal {
-  display: grid;
-  gap: var(--space-2);
-}
-
-[data-sonner-toaster] {
-  --normal-bg: #151515;
-  --normal-border: #363636;
-  --normal-text: #f0f0f0;
-  transition: none !important;
-}
-
-[data-sonner-toast].admin-toast {
-  width: min(22rem, calc(100vw - 2rem));
-  min-height: 2.75rem;
-  padding: var(--space-2) var(--space-3);
-  color: #f0f0f0 !important;
-  background: #151515 !important;
-  border: 0.0625rem solid #363636 !important;
-  border-radius: 0.35rem !important;
-  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 28%) !important;
-  font: 600 0.78rem/1.4 var(--font-display);
-  transition: none !important;
-}
-
-[data-sonner-toast].admin-toast > * {
-  transition: none !important;
-}
-
-[data-sonner-toast].admin-toast::before {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 0;
-  height: 0.125rem;
-  content: '';
-  background: #fff;
-  pointer-events: none;
-  animation: admin-toast-progress 4.2s linear forwards;
-  z-index: 1;
-}
-
-[data-sonner-toast].admin-toast::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 0.125rem;
-  content: '';
-  background: rgb(255 255 255 / 35%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-[data-sonner-toast].admin-toast[data-expanded='true']::before {
-  animation-play-state: paused;
-}
-
-[data-sonner-toast].admin-toast [data-title] {
-  color: inherit;
-}
-
-@keyframes admin-toast-progress {
-  from {
-    width: 0;
-  }
-
-  to {
-    width: 100%;
-  }
-}
-
-.terminal-tabs,
-.inline-actions,
-.form-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.terminal-tabs button {
-  color: var(--text);
-  background: transparent;
-  border-color: var(--line-contrast);
-  font-weight: 500;
-}
-
-.terminal-tabs button[aria-current='true'],
-.terminal-tabs button[aria-selected='true'] {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line-contrast);
-}
-
-.app-shell--admin .terminal-tabs {
-  gap: 0;
-  border-bottom: 0.0625rem solid var(--line);
-}
-
-.app-shell--admin .terminal-tabs button {
-  border-color: transparent;
-  border-radius: 0;
-}
-
-.app-shell--admin .terminal-tabs button[aria-current='true'],
-.app-shell--admin .terminal-tabs button[aria-selected='true'] {
-  color: var(--text);
-  background: transparent;
-  border-color: transparent;
-  border-bottom: 0.125rem solid var(--text);
-}
-
-.admin-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(20rem, 0.9fr);
-  align-items: start;
-  gap: var(--space-3);
-}
-
-.admin-page {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-2);
-}
-
-.admin-subnav {
-  display: flex;
-  min-width: 0;
-  overflow-x: auto;
-  border-bottom: 0.0625rem solid var(--line);
-}
-
-.admin-subnav button {
-  flex: 0 0 auto;
-  min-height: 2.25rem;
-  padding-inline: var(--space-2);
-  color: var(--muted);
-  background: transparent;
-  border-color: transparent;
-  border-radius: 0;
-  font-size: 0.76rem;
-  white-space: nowrap;
-}
-
-.admin-subnav button {
-  transition-property: color;
-  transition-duration: 120ms;
-}
-
-.admin-subnav button:hover {
-  color: var(--text);
-  background: transparent;
-  border-color: transparent;
-  transform: none;
-}
-
-.admin-subnav button[aria-selected='true'] {
-  color: var(--text);
-  background: transparent;
-  border-color: transparent;
-  border-bottom: 0.125rem solid var(--text);
-  transform: none;
-}
-
-.admin-subnav button:active {
-  transform: none;
-}
-
-.admin-surface-grid {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: var(--space-2);
-}
-
-.data-table-wrap {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.78rem;
-}
-
-.data-table th,
-.data-table td {
-  padding: var(--space-2);
-  border-bottom: 0.0625rem solid var(--line);
-  text-align: left;
-  white-space: nowrap;
-}
-
-.data-table th {
-  color: var(--muted);
-  font: 700 0.68rem/1 var(--font-display);
-}
-
-.app-shell--admin .data-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
 /*
  * Padding and borders belong inside an element's declared size. Without this the
  * admin screens repeatedly grew wider than their container - dialogs past the
@@ -218,174 +15,523 @@
   box-sizing: border-box;
 }
 
-.admin-dialog {
-  width: min(48rem, calc(100vw - 2rem));
+/* ---- Shell ---------------------------------------------------------------
+ * A header strip, then the work. The tab row stays put and the panel below it
+ * is the only thing that moves.
+ */
+
+.admin-terminal {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.admin-terminal > [role='tabpanel'] {
+  display: grid;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  padding: 0 0.5rem 0.5rem;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.admin-terminal > [role='tabpanel']:focus-visible {
+  outline-offset: -0.125rem;
+}
+
+@supports (scrollbar-width: thin) {
+  .admin-terminal > [role='tabpanel'] {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .admin-terminal > [role='tabpanel']:hover {
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+/* ---- Tabs ----------------------------------------------------------------
+ * No chrome around them. A tab is lit by taking the selected surface, which is
+ * the same thing a selected row does, so the two read as one idea.
+ */
+
+.terminal-tabs,
+.inline-actions,
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+/* The chip's text lands on 1.25rem, which is where the panel heading below it
+   starts: the card is inset 0.5rem and its header pads 0.75rem. */
+.app-shell--admin .terminal-tabs {
+  height: 3rem;
+  position: relative;
+  padding: 0 0.625rem;
+  flex-wrap: nowrap;
+  gap: 0.125rem;
+}
+
+.app-shell--admin .terminal-tabs button,
+.app-shell--admin .admin-subnav button {
+  min-height: 0;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.625rem;
+  line-height: 1.25;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  font-size: var(--text-label);
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.app-shell--admin .terminal-tabs button:hover:not(:disabled),
+.app-shell--admin .admin-subnav button:hover:not(:disabled) {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--selected) 40%, transparent);
+  border-color: transparent;
+  opacity: 1;
+}
+
+/* The lit surface belongs to the indicator below, not to the button, so the
+   button only changes its text colour. */
+.app-shell--admin .terminal-tabs button[aria-current='true'],
+.app-shell--admin .terminal-tabs button[aria-selected='true'],
+.app-shell--admin .admin-subnav button[aria-selected='true'] {
+  color: var(--fg);
+  background: transparent;
+  border-color: transparent;
+  opacity: 1;
+}
+
+/* Already lit. Hovering what you are on has nothing to report. */
+.app-shell--admin .terminal-tabs button[aria-current='true']:hover,
+.app-shell--admin .terminal-tabs button[aria-selected='true']:hover,
+.app-shell--admin .admin-subnav button[aria-selected='true']:hover {
+  background: transparent;
+}
+
+/*
+ * The one surface, moved between tabs rather than switched off one and on
+ * another. Width and position are the only things that change; nothing fades,
+ * nothing scales. Its box is measured from the selected tab, so none of that
+ * is written here.
+ */
+.admin-tab-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  background: var(--selected);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.admin-tab-indicator[data-placed] {
+  transition:
+    transform 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    width 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* The label has to sit over the surface that is sliding under it. */
+.app-shell--admin .terminal-tabs button,
+.app-shell--admin .admin-subnav button {
+  position: relative;
+  z-index: 1;
+}
+
+/* A fixed height, because this row is present on some sections and absent on
+   others. Letting it size itself makes the card jump every time you change
+   tab. */
+.admin-subnav {
+  display: flex;
+  position: relative;
+  height: 2.5rem;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0 0.125rem;
+  align-items: center;
+  gap: 0.125rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 0;
+}
+
+/* ---- Cards ---------------------------------------------------------------
+ * Each panel is a surface lifted off the background, not a walled-off cell.
+ * A change of surface separates it already, so no border is drawn over that.
+ */
+
+.admin-page {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.5rem;
+}
+
+.admin-surface-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.app-shell--admin .terminal-panel {
+  overflow: hidden;
+  background: var(--panel);
+  border: 0;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-1);
+}
+
+.app-shell--admin .terminal-panel__header {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  gap: 0.75rem;
+  border-bottom: 0.0625rem solid var(--line);
+}
+
+.app-shell--admin .terminal-panel__header h2 {
+  margin: 0;
+  color: var(--fg);
+  font: 600 var(--text-title) / 1.3 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.app-shell--admin .terminal-panel__heading {
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.app-shell--admin .terminal-panel__header-actions {
+  gap: 0.375rem;
+}
+
+.app-shell--admin .terminal-panel__body {
+  padding: 0.5rem;
+}
+
+.app-shell--admin .status-readout {
+  color: var(--faint);
+  font: 400 var(--text-meta) / 1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* An icon is inline content by default, so it sits on the text baseline and
+   hangs by the font's descender. As a block it is the flex centring that
+   places it, which is what lines it up with its label. */
+.app-shell--admin svg {
+  display: block;
+}
+
+/* An icon never carries the meaning on its own here: every one of these sits
+   beside its label. It keeps its size when the label wraps. */
+.app-shell--admin button > svg,
+.app-shell--admin .button-link > svg {
+  flex: 0 0 auto;
+}
+
+/* ---- Button variants -----------------------------------------------------
+ * Primary lives on the bare element. These are the other three.
+ */
+
+.app-shell--admin .button-secondary {
+  color: var(--fg);
+  background: var(--bg);
+  border-color: var(--line);
+  opacity: 1;
+}
+
+.app-shell--admin .button-secondary:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--bg);
+  border-color: var(--line-strong);
+  opacity: 1;
+}
+
+.app-shell--admin .text-button {
+  min-height: var(--control);
+  gap: 0.375rem;
+  padding: 0 0.625rem;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  text-decoration: none;
+  opacity: 1;
+}
+
+.app-shell--admin .text-button:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--selected);
+  border-color: transparent;
+  opacity: 1;
+}
+
+/* Destructive work says so in the word and the colour of the word. A filled
+   red button beside every row is shouting. */
+.app-shell--admin .button-danger {
+  color: var(--danger);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.app-shell--admin .button-danger:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--selected);
+  border-color: transparent;
+  opacity: 1;
+}
+
+.app-shell--admin .form-submit {
+  width: fit-content;
+}
+
+.app-shell--admin .button-link {
+  display: inline-flex;
+  width: fit-content;
+  min-height: var(--control);
+  padding: 0 0.875rem;
+  align-items: center;
+  color: var(--bg);
+  background: var(--fg);
+  border: 0.0625rem solid transparent;
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-1);
+  font: 500 var(--text-body) / 1 var(--font-display);
+  text-decoration: none;
+}
+
+.app-shell--admin .button-link:hover {
+  background: var(--fg);
+  opacity: 0.85;
+}
+
+/* ---- Tables and rows -----------------------------------------------------
+ * A row is lit by the selected surface and nothing else, so it has nothing to
+ * say by moving.
+ */
+
+.data-table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.app-shell--admin .data-table th {
+  height: 2rem;
+  color: var(--muted);
+  font: 500 var(--text-label) / 1 var(--font-display);
+}
+
+.app-shell--admin .data-table td {
+  height: var(--control);
+  color: var(--muted);
+  border-top: 0.0625rem solid var(--line);
+}
+
+.app-shell--admin .data-table td:first-child {
+  color: var(--fg);
+}
+
+.app-shell--admin .data-table tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.app-shell--admin .data-table tbody tr:hover {
+  background: color-mix(in srgb, var(--selected) 60%, transparent);
+}
+
+/* ---- Status --------------------------------------------------------------
+ * The palette carries three meanings and no more. Anything else is neutral.
+ */
+
+.status-badge {
+  display: inline-flex;
+  min-height: auto;
+  padding: 0;
+  align-items: center;
+  color: var(--faint);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font: 500 var(--text-meta) / 1.4 var(--font-display);
+  white-space: nowrap;
+}
+
+.status-badge--info,
+.status-badge--success {
+  color: var(--muted);
+}
+
+.status-badge--warning {
+  color: var(--warn);
+}
+
+.status-badge--danger {
+  color: var(--danger);
+}
+
+/* ---- Alerts --------------------------------------------------------------
+ * A tint, not a box. The colour is the whole message.
+ */
+
+.app-shell--admin :is(.inline-alert, .field-error) {
+  margin: 0;
+  padding: 0.375rem 0.75rem;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 0;
+  border-radius: var(--radius-lg);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}
+
+.app-shell--admin :is(.terminal-note, .empty-copy) {
+  display: grid;
+  padding: 0.25rem;
+  gap: 0.125rem;
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.app-shell--admin .empty-copy strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+/* ---- Overlays ------------------------------------------------------------ */
+
+.admin-dialog,
+.confirmation-dialog {
   /* Without border-box the padding is added to the width and the dialog ends up
-     wider than the screen, which lets a touch drag it sideways. `svh` keeps the
+     wider than the screen, which lets a touch drag it sideways. `dvh` keeps the
      height from being recomputed while the browser chrome slides in and out,
      and containing the overscroll stops a scroll from running on into the page
      behind once the dialog reaches its end. */
   box-sizing: border-box;
-  max-height: calc(100vh - 2rem);
-  max-height: calc(100svh - 2rem);
-  padding: var(--space-4);
+  max-height: calc(100dvh - 2rem);
+  padding: 0.75rem;
   overflow: auto;
   overscroll-behavior: contain;
-  color: var(--text);
-  background: var(--surface-1);
-  border: 0.0625rem solid var(--line-contrast);
-  border-radius: 0.25rem;
+  color: var(--fg);
+  background: var(--panel);
+  border: 0.0625rem solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-2);
 }
 
-.admin-dialog::backdrop {
-  background: var(--overlay);
+.admin-dialog {
+  width: min(48rem, calc(100vw - 1rem));
+}
+
+.confirmation-dialog {
+  width: min(28rem, calc(100vw - 1rem));
+}
+
+.admin-dialog::backdrop,
+.confirmation-dialog::backdrop {
+  background: rgb(0 0 0 / 50%);
+  animation: admin-fade-in 180ms ease-out;
+}
+
+@supports (scrollbar-width: thin) {
+  .admin-dialog,
+  .confirmation-dialog {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  .admin-dialog:hover,
+  .confirmation-dialog:hover {
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+@keyframes admin-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .admin-dialog__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 0.0625rem solid var(--line);
+  gap: 0.5rem;
+  padding: 0.25rem 0 0.5rem 0.25rem;
 }
 
 .admin-dialog__header h2 {
   margin: 0;
-  font: 650 1rem/1.25 var(--font-display);
+  color: var(--fg);
+  font: 600 var(--text-title) / 1.3 var(--font-display);
+  letter-spacing: -0.01em;
 }
 
-.admin-dialog__close {
-  min-width: 2.25rem;
-  padding-inline: var(--space-2);
+.app-shell--admin .admin-dialog__close {
+  display: grid;
+  width: var(--control);
+  min-width: var(--control);
+  padding: 0;
+  place-items: center;
   color: var(--muted);
   background: transparent;
   border-color: transparent;
-  font-size: 1.15rem;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  font-size: var(--text-title);
   line-height: 1;
+  opacity: 1;
 }
 
-.admin-dialog__close:hover {
-  color: var(--text);
-  background: transparent;
+.app-shell--admin .admin-dialog__close:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--selected);
   border-color: transparent;
+  opacity: 1;
 }
 
 .admin-dialog__description {
-  margin: var(--space-2) 0 0;
-  color: var(--muted);
-  font-size: 0.76rem;
+  margin: 0 0 0 0.25rem;
+  color: var(--faint);
+  font-size: var(--text-label);
+  line-height: 1.6;
 }
 
 .admin-dialog > .terminal-form,
 .admin-dialog > form {
-  margin-top: var(--space-3);
-}
-
-.app-shell--admin :is(button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 0.125rem solid var(--focus);
-  outline-offset: 0.125rem;
-}
-
-.text-button {
-  min-height: 1.75rem;
-  padding: var(--space-1) var(--space-2);
-  color: var(--cyan);
-  background: transparent;
-  border-color: transparent;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-
-.text-button:hover {
-  color: var(--accent-strong);
-  background: transparent;
-  border-color: transparent;
-}
-
-.button-secondary {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line);
-}
-
-.button-secondary:hover {
-  color: var(--text);
-  background: var(--surface-1);
-  border-color: var(--line-contrast);
-}
-
-.button-danger {
-  color: var(--danger-text);
-  background: var(--danger-fill);
-  border-color: var(--danger-fill);
-}
-
-.button-danger:hover {
-  color: var(--danger-text);
-  background: var(--danger-hover);
-  border-color: var(--danger-hover);
-}
-
-.form-submit {
-  width: fit-content;
-  min-height: 2rem;
-  padding: var(--space-1) var(--space-3);
-  font-size: 0.76rem;
-}
-
-.terminal-form {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.currency-adjustment-review {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.currency-adjustment-review h3 {
-  margin: 0;
-  font: 650 0.88rem/1.3 var(--font-display);
-}
-
-.currency-adjustment-review form {
-  display: grid;
-  gap: var(--space-3);
-}
-
-.settings-form fieldset {
-  padding: var(--space-3);
-  border: 0.0625rem solid var(--line);
-}
-
-.settings-form legend {
-  padding-inline: var(--space-2);
-  color: var(--cyan);
-  font: 700 0.75rem/1 var(--font-display);
-}
-
-.confirmation-dialog {
-  width: min(36rem, calc(100vw - 2rem));
-  box-sizing: border-box;
-  max-height: calc(100vh - 2rem);
-  max-height: calc(100svh - 2rem);
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: var(--space-6);
-  color: var(--text);
-  background: var(--surface-1);
-  border: 0.125rem solid var(--red);
-  border-radius: 0.5rem;
-}
-
-.confirmation-dialog::backdrop {
-  background: var(--overlay);
+  margin-top: 0.75rem;
 }
 
 .confirmation-dialog form {
   display: grid;
-  gap: var(--space-4);
+  gap: 0.75rem;
 }
 
 .confirmation-dialog h2,
@@ -393,10 +539,76 @@
   margin: 0;
 }
 
+.confirmation-dialog h2 {
+  color: var(--fg);
+  font: 600 var(--text-title) / 1.3 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.confirmation-dialog p {
+  color: var(--muted);
+  font-size: var(--text-label);
+  line-height: 1.6;
+}
+
 .confirmation-dialog label {
   display: grid;
-  gap: var(--space-1);
+  gap: 0.375rem;
   color: var(--muted);
+  font-size: var(--text-label);
+  font-weight: 500;
+}
+
+/* The one place a fill is earned: the step that does the damage. */
+.confirmation-dialog .button-danger {
+  color: var(--bg);
+  background: var(--danger);
+  border-color: transparent;
+  box-shadow: var(--elevation-1);
+}
+
+.confirmation-dialog .button-danger:hover:not(:disabled) {
+  color: var(--bg);
+  background: var(--danger);
+  border-color: transparent;
+  opacity: 0.85;
+}
+
+/* The spin buttons are a pair of 8px targets nobody aims for, and they put
+   a control inside a control. The field takes a typed number. */
+.app-shell--admin input[type='number'] {
+  appearance: textfield;
+}
+
+.app-shell--admin input[type='number']::-webkit-outer-spin-button,
+.app-shell--admin input[type='number']::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+/* The browser's own clock button opens a picker nobody asked for, in a style
+   that belongs to the browser rather than to this app. The field takes a
+   typed time. */
+.app-shell--admin input[type='time']::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* ---- Forms ---------------------------------------------------------------
+ * A label is 12px medium and muted; the hint beside it is 11px and fainter.
+ */
+
+.terminal-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.terminal-form label {
+  display: grid;
+  gap: 0.375rem;
+  color: var(--muted);
+  font-size: var(--text-label);
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .form-row,
@@ -405,182 +617,7 @@
 .entry-selects {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.ability-group {
-  margin: 0;
-  padding: var(--space-3);
-  border: 0.0625rem solid var(--line);
-  border-radius: 0.25rem;
-}
-
-.ability-group legend {
-  padding-inline: var(--space-2);
-  color: var(--text);
-  font: 650 0.85rem/1 var(--font-display);
-}
-
-.ability-slider {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-1);
-}
-
-.ability-slider__heading,
-.preference-slider__heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.ability-slider__heading label,
-.preference-slider__heading label {
-  color: var(--text);
-  font: 600 0.8rem/1.3 var(--font-display);
-}
-
-.ability-slider__heading output,
-.preference-slider__heading output {
-  min-width: 4ch;
-  padding: 0;
-  color: var(--muted-contrast);
-  background: transparent;
-  font: 600 0.75rem/1.4 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-}
-
-.ability-slider__value,
-.preference-slider__value {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.ability-slider__value input[type='number'],
-.preference-slider__value input[type='number'] {
-  width: 4.25rem;
-  min-height: 1.75rem;
-  padding: var(--space-1);
-  font: 600 0.75rem/1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.ability-slider > input[type='number'],
-.preference-slider > input[type='number'] {
-  min-height: 2rem;
-  padding: var(--space-1) var(--space-2);
-  font: 650 0.82rem/1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.ability-meter,
-.preference-meter {
-  position: relative;
-  height: 0.25rem;
-  overflow: hidden;
-  background: var(--line);
-}
-
-.ability-meter span,
-.preference-meter span {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  display: block;
-  width: 0;
-  background: var(--text);
-}
-
-.preference-meter::after {
-  position: absolute;
-  top: -0.25rem;
-  left: 50%;
-  width: 0.0625rem;
-  height: 0.75rem;
-  background: var(--line-contrast);
-  content: '';
-}
-
-.ability-slider input[type='range'],
-.preference-slider input[type='range'] {
-  min-height: 2rem;
-  margin: 0;
-  padding: 0;
-  appearance: none;
-  accent-color: var(--cyan);
-  background: transparent;
-  border: 0;
-  cursor: ew-resize;
-}
-
-.ability-slider input[type='range']::-webkit-slider-runnable-track,
-.preference-slider input[type='range']::-webkit-slider-runnable-track {
-  height: 0.125rem;
-  background: var(--line);
-  border-radius: 999px;
-}
-
-.ability-slider input[type='range']::-moz-range-track,
-.preference-slider input[type='range']::-moz-range-track {
-  height: 0.125rem;
-  background: var(--line);
-  border-radius: 999px;
-}
-
-.ability-slider input[type='range']::-webkit-slider-thumb,
-.preference-slider input[type='range']::-webkit-slider-thumb {
-  width: 0.875rem;
-  height: 0.875rem;
-  margin-top: -0.375rem;
-  background: var(--surface-1);
-  border: 0.1875rem solid var(--cyan);
-  border-radius: 50%;
-  appearance: none;
-}
-
-.ability-slider input[type='range']::-moz-range-thumb,
-.preference-slider input[type='range']::-moz-range-thumb {
-  width: 0.5rem;
-  height: 0.5rem;
-  background: var(--surface-1);
-  border: 0.1875rem solid var(--cyan);
-  border-radius: 50%;
-}
-
-.preference-grid {
-  grid-template-columns: 1fr;
-  gap: var(--space-3);
-}
-
-.preference-slider {
-  display: grid;
-  gap: var(--space-1);
-}
-
-.preference-slider__control {
-  position: relative;
-}
-
-.preference-slider__control::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0.0625rem;
-  height: 1rem;
-  background: var(--line-contrast);
-  content: '';
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.preference-slider input[type='range'] {
-  position: relative;
-  z-index: 1;
+  gap: 0.75rem;
 }
 
 /*
@@ -605,32 +642,40 @@
   max-width: 100%;
 }
 
-.terminal-form label {
-  display: grid;
-  gap: var(--space-1);
-  color: var(--muted);
-  font-size: 0.8rem;
+/* Content that belongs inside a card and should look inset drops back to the
+   page colour. That is how a group earns its recess without a border. */
+.entry-selects,
+.ability-group,
+.settings-form fieldset {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--bg);
+  border: 0;
+  border-radius: var(--radius-lg);
 }
 
-.entry-selects {
-  padding: var(--space-3);
-  border: 0.0625rem solid var(--line);
+/* A legend is not a grid item: the fieldset renders it above the grid. Floating
+   it, as an earlier pass did, pushes every field into the zero-width strip
+   beside the float, which is what collapsed these groups. */
+.entry-selects legend,
+.ability-group legend,
+.settings-form legend {
+  width: 100%;
+  margin-bottom: 0.625rem;
+  padding: 0;
+  color: var(--muted);
+  font: 500 var(--text-label) / 1.3 var(--font-display);
 }
 
 .entry-selects legend {
   display: flex;
-  width: 100%;
-  box-sizing: border-box;
   align-items: center;
-  gap: var(--space-2);
-  padding-inline: var(--space-2);
-  color: var(--cyan);
-  font: 700 0.75rem/1 var(--font-display);
+  gap: 0.5rem;
 }
 
 .entry-selects legend .entry-selects-divider {
   flex: 1 1 auto;
-  min-width: var(--space-2);
+  min-width: 0.5rem;
   height: 0;
   border-block-start: 0.0625rem solid var(--line);
 }
@@ -640,175 +685,352 @@
   font: inherit;
 }
 
-.race-admin-list article {
+.settings-form {
   display: grid;
-  padding: var(--space-3);
-  grid-template-columns: 1fr auto;
-  gap: var(--space-2);
+  gap: 0.5rem;
+}
+
+.currency-adjustment-review {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.currency-adjustment-review h3 {
+  margin: 0;
+  color: var(--fg);
+  font: 600 var(--text-title) / 1.3 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.currency-adjustment-review form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* ---- Sliders ------------------------------------------------------------- */
+
+.ability-slider,
+.preference-slider {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.ability-slider__heading,
+.preference-slider__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ability-slider__heading label,
+.preference-slider__heading label {
+  color: var(--muted);
+  font: 500 var(--text-label) / 1.2 var(--font-display);
+}
+
+.ability-slider__heading output,
+.preference-slider__heading output {
+  min-width: 4ch;
+  padding: 0;
+  color: var(--faint);
+  background: transparent;
+  font: 400 var(--text-meta) / 1.2 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.ability-slider__value,
+.preference-slider__value {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.ability-slider__value input[type='number'],
+.preference-slider__value input[type='number'],
+.ability-slider > input[type='number'],
+.preference-slider > input[type='number'] {
+  width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ability-meter,
+.preference-meter {
+  position: relative;
+  height: 0.25rem;
+  overflow: hidden;
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+.ability-meter span,
+.preference-meter span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: block;
+  width: 0;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.preference-meter::after {
+  position: absolute;
+  top: -0.25rem;
+  left: 50%;
+  width: 0.0625rem;
+  height: 0.75rem;
+  background: var(--line-strong);
+  content: '';
+}
+
+.ability-slider input[type='range'],
+.preference-slider input[type='range'] {
+  min-height: var(--control);
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  cursor: ew-resize;
+}
+
+.ability-slider input[type='range']::-webkit-slider-runnable-track,
+.preference-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+.ability-slider input[type='range']::-moz-range-track,
+.preference-slider input[type='range']::-moz-range-track {
+  height: 0.25rem;
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+.ability-slider input[type='range']::-webkit-slider-thumb,
+.preference-slider input[type='range']::-webkit-slider-thumb {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-top: -0.25rem;
+  background: var(--fg);
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+}
+
+.ability-slider input[type='range']::-moz-range-thumb,
+.preference-slider input[type='range']::-moz-range-thumb {
+  width: 0.75rem;
+  height: 0.75rem;
+  background: var(--fg);
+  border: 0;
+  border-radius: 999px;
+}
+
+.preference-grid {
+  grid-template-columns: 1fr;
+}
+
+.preference-slider__control {
+  position: relative;
+}
+
+.preference-slider__control::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.0625rem;
+  height: 1rem;
+  background: var(--line-strong);
+  content: '';
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.preference-slider input[type='range'] {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Readouts ------------------------------------------------------------ */
+
+.app-shell--admin .metric-list {
+  gap: 0;
+}
+
+.app-shell--admin .metric-list div {
+  padding: 0.375rem 0.25rem;
   border-bottom: 0.0625rem solid var(--line);
 }
 
-.terminal-panel
-  :is(.horse-list, .ticket-list, .result-list, .audit-list, .race-admin-list)
-  > :last-child,
 .terminal-panel .metric-list > div:last-child {
   border-bottom: 0;
 }
 
-.status-badge {
-  display: inline-flex;
-  min-height: auto;
-  padding: 0;
-  align-items: center;
+.app-shell--admin .metric-list dt {
   color: var(--muted);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  font: 600 0.68rem/1 var(--font-display);
-  white-space: nowrap;
+  font-size: var(--text-label);
 }
 
-.status-badge--success,
-.status-badge--info,
-.status-badge--warning,
-.status-badge--danger {
-  color: var(--text);
-  background: transparent;
+.app-shell--admin .metric-list dd {
+  color: var(--fg);
+  font: 500 var(--text-body) / 1.4 var(--font-display);
+  font-variant-numeric: tabular-nums;
 }
 
-.race-admin-card {
-  grid-template-columns: minmax(0, 1fr);
-  padding: var(--space-2) 0;
-  gap: var(--space-1);
+.app-shell--admin .health-groups {
+  gap: 0.75rem;
 }
 
-.race-admin-card__header {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: var(--space-2);
+.app-shell--admin .health-group h3 {
+  margin: 0 0 0.25rem;
+  color: var(--faint);
+  font: 500 var(--text-meta) / 1.3 var(--font-display);
 }
 
-.race-admin-card__eyebrow,
-.race-admin-card__meta {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.race-admin-card h3 {
-  margin: 0.1rem 0;
-  font-size: 0.9rem;
-}
-
-.race-admin-card__body,
-.race-admin-card__actions {
-  grid-column: 1 / -1;
-}
-
-.race-admin-card__facts {
-  display: flex;
-  flex-wrap: wrap;
-  margin: var(--space-1) 0 0;
-  gap: 0 var(--space-3);
-  color: var(--muted);
-  font-size: 0.68rem;
-  line-height: 1.5;
-}
-
-.race-admin-card__facts div {
-  display: inline-flex;
-  gap: 0.3rem;
-}
-
-.race-admin-card__facts dt::after {
-  content: ':';
-}
-
-.race-admin-card__facts dd {
-  margin: 0;
-  color: var(--text);
-}
-
-.condition-readout {
-  margin: 0;
-}
-
-.app-shell--admin .field-error {
-  padding: var(--space-2);
-  border-left-width: 0.15rem;
-}
-
-.race-admin-list h3,
-.race-admin-list p {
-  margin: 0;
-}
-
-.race-admin-list small {
-  color: var(--muted);
-}
-
-.race-admin-list .inline-actions {
-  grid-column: 1 / -1;
-}
-
-.condition-readout {
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.button-link {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 2.75rem;
-  padding: var(--space-2) var(--space-3);
-  align-items: center;
-  border: 0.0625rem solid var(--cyan);
-  color: var(--cyan);
-  font: 700 0.72rem/1 var(--font-display);
-  text-decoration: none;
-}
-
-.button-link:hover {
-  background: var(--cyan-dim);
-}
-
+/* A log window earns its recess by dropping back to the page colour. */
 .sealed-result {
   max-height: 20rem;
-  padding: var(--space-3);
+  padding: 0.75rem;
   overflow: auto;
-  border: 0.0625rem solid var(--red);
-  color: var(--red);
+  overscroll-behavior: contain;
+  color: var(--fg);
+  background: var(--bg);
+  border: 0;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: 1.7;
   white-space: pre-wrap;
 }
 
 .audit-list {
+  display: grid;
   max-height: 32rem;
+  scrollbar-gutter: stable;
+  margin: 0;
+  padding: 0;
+  gap: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  list-style: none;
 }
 
 .audit-list li {
   display: grid;
-  padding: var(--space-2);
-  grid-template-columns: 8rem 1fr 1fr;
-  gap: var(--space-2);
+  padding: 0.375rem 0.5rem;
+  grid-template-columns: 9rem minmax(0, 1fr) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.5rem;
   border-bottom: 0.0625rem solid var(--line);
-  font-size: 0.75rem;
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.audit-list li:last-child {
+  border-bottom: 0;
+}
+
+.audit-list strong {
+  color: var(--fg);
+  font-weight: 500;
 }
 
 .audit-list time,
 .audit-list small {
-  color: var(--muted);
+  color: var(--faint);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
 }
 
 .audit-list small {
   grid-column: 1 / -1;
 }
 
+/* ---- Toasts -------------------------------------------------------------- */
+
+[data-sonner-toaster] {
+  --normal-bg: #131313;
+  --normal-border: #212121;
+  --normal-text: #ededed;
+}
+
+[data-sonner-toast].admin-toast {
+  width: min(22rem, calc(100vw - 2rem));
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+  color: #ededed !important;
+  background: #131313 !important;
+  border: 0.0625rem solid #212121 !important;
+  border-radius: 1rem !important;
+  box-shadow:
+    0 16px 40px -12px rgb(0 0 0 / 75%),
+    0 4px 12px rgb(0 0 0 / 45%) !important;
+  font: 400 0.8125rem/1.5 var(--font-display);
+}
+
+[data-sonner-toast].admin-toast::before {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: 0;
+  height: 0.125rem;
+  background: #848484;
+  border-radius: 999px;
+  content: '';
+  pointer-events: none;
+  animation: admin-toast-progress 4.2s linear forwards;
+}
+
+[data-sonner-toast].admin-toast[data-expanded='true']::before {
+  animation-play-state: paused;
+}
+
+[data-sonner-toast].admin-toast [data-title] {
+  color: inherit;
+}
+
+@keyframes admin-toast-progress {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
+}
+
+/* ---- Breakpoints ---------------------------------------------------------
+ * A thumb needs a bigger target than a cursor does. That is a property of the
+ * pointer, not of the window: a narrow window on a desktop still has a mouse,
+ * and growing a 12px chip to 36px there only makes a slab of it.
+ */
+
+@media (pointer: coarse) {
+  .app-shell--admin .terminal-tabs button,
+  .app-shell--admin .admin-subnav button {
+    min-height: 2.25rem;
+    padding-inline: 0.75rem;
+  }
+
+  .app-shell--admin .data-table td {
+    height: 2.75rem;
+  }
+
+  .app-shell--admin .audit-list li {
+    min-height: 2.75rem;
+  }
+}
+
 @media (max-width: 52rem) {
   .race-data-grid,
-  .admin-workspace,
   .admin-surface-grid,
   .health-groups {
     grid-template-columns: 1fr;
@@ -857,10 +1079,6 @@
     flex: 1 1 8rem;
   }
 
-  .terminal-panel__body {
-    padding: var(--space-2);
-  }
-
   .horse-list li {
     grid-template-columns: 2.5rem minmax(0, 1fr) 3.4rem 3.4rem;
     gap: var(--space-1);
@@ -874,36 +1092,35 @@
     font-size: 0.84rem;
   }
 
+  .app-shell--admin .terminal-panel__body {
+    padding: 0.375rem;
+  }
+
   .form-row,
   .entry-selects {
     grid-template-columns: 1fr;
   }
 
-  .admin-dialog {
+  .admin-dialog,
+  .confirmation-dialog {
     width: calc(100vw - 1rem);
-    max-height: calc(100vh - 1rem);
-    max-height: calc(100svh - 1rem);
-    padding: var(--space-3);
+    max-height: calc(100dvh - 1rem);
   }
 
   .ability-grid {
     grid-template-columns: 1fr;
   }
 
-  .terminal-tabs {
+  .app-shell--admin .terminal-tabs {
+    height: auto;
+    padding: 0.5rem 0.5rem 0.25rem;
     display: grid;
-    width: 100%;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-1);
-  }
-
-  .terminal-tabs button {
-    padding-inline: var(--space-1);
-    white-space: nowrap;
   }
 
   .audit-list li {
     grid-template-columns: 1fr;
+    gap: 0.125rem;
   }
 
   .audit-list small {
@@ -927,4 +1144,177 @@
     --line: var(--line-contrast);
     --muted: var(--muted-contrast);
   }
+
+  .app-shell--admin {
+    --line: var(--line-strong);
+    --faint: var(--muted);
+  }
+}
+
+/* An action column that is only filled on some rows still has to hold its
+   width, or the whole table re-lays itself out the moment one row fails. */
+.app-shell--admin .data-table--actions th:last-child,
+.app-shell--admin .data-table--actions td:last-child {
+  width: 1px;
+}
+
+.app-shell--admin .data-table--actions td:last-child .inline-actions {
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+/* An id or an amount is read digit by digit, so the digits line up. */
+.app-shell--admin .data-table td.numeric,
+.app-shell--admin .data-table td.numeric * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Popover and calendar ------------------------------------------------ */
+
+.admin-popover {
+  position: fixed;
+  margin: 0;
+  padding: 0.5rem;
+  color: var(--fg);
+  background: var(--panel);
+  border: 0.0625rem solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-2);
+  inset: auto;
+}
+
+.admin-popover:popover-open {
+  display: block;
+}
+
+.admin-popover::backdrop {
+  background: transparent;
+}
+
+/* One field, not a field and a button beside it. The trigger is flat because
+   it lives inside the raised surface rather than next to it. */
+.admin-date-field {
+  display: flex;
+  min-width: 0;
+  padding-right: 0.1875rem;
+  align-items: center;
+  background: var(--bg);
+  border: 0.0625rem solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-1);
+  transition: border-color 140ms ease;
+}
+
+.admin-date-field:focus-within {
+  border-color: var(--line-strong);
+}
+
+.app-shell--admin .admin-date-field input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.app-shell--admin .admin-date-field input:focus-visible {
+  outline-offset: -0.1875rem;
+}
+
+.app-shell--admin .admin-popover__trigger {
+  width: 1.625rem;
+  min-width: 1.625rem;
+  min-height: 1.625rem;
+  padding: 0;
+  flex: 0 0 auto;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.app-shell--admin .admin-popover__trigger:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--selected);
+  border-color: transparent;
+  opacity: 1;
+}
+
+.admin-calendar {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.admin-calendar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.admin-calendar__header span {
+  color: var(--fg);
+  font-size: var(--text-label);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-shell--admin .admin-calendar__header .text-button {
+  width: 1.75rem;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+}
+
+.admin-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.125rem;
+}
+
+.admin-calendar__weekday {
+  display: grid;
+  height: 1.5rem;
+  place-items: center;
+  color: var(--faint);
+  font-size: var(--text-meta);
+  font-weight: 500;
+}
+
+.app-shell--admin .admin-calendar__day {
+  min-height: 1.875rem;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
+  opacity: 1;
+}
+
+.app-shell--admin .admin-calendar__day:hover:not(:disabled) {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--selected) 60%, transparent);
+  border-color: transparent;
+  opacity: 1;
+}
+
+/* Today is marked, not selected. The two have to stay distinguishable. */
+.app-shell--admin .admin-calendar__day[data-today] {
+  color: var(--fg);
+  box-shadow: inset 0 0 0 0.0625rem var(--line-strong);
+}
+
+.app-shell--admin .admin-calendar__day[aria-pressed='true'] {
+  color: var(--bg);
+  background: var(--fg);
+  box-shadow: none;
+}
+
+/* Every section is mounted; only one is shown. `hidden` has to win over the
+   grid display the panes carry, or all four would stack up at once. */
+.admin-section[hidden] {
+  display: none;
 }

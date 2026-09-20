@@ -148,6 +148,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@central-icons-react/round-filled-radius-3-stroke-2':
+        specifier: ^1.1.320
+        version: 1.1.320(react@19.2.8)
       '@discord/embedded-app-sdk':
         specifier: ^2.5.0
         version: 2.5.0
@@ -423,6 +426,11 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@central-icons-react/round-filled-radius-3-stroke-2@1.1.320':
+    resolution: {integrity: sha512-1aPiNpDqmWE1phjMCfDzmNNA5Zth6P7lZlz7tbOJ7gxkella4AduXyAv/12Ti4q2zdpnp/J9wrJJix043f8Exg==}
+    peerDependencies:
+      react: '>=14.0.0 <= 19'
 
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
@@ -2720,6 +2728,10 @@ snapshots:
     dependencies:
       hashery: 1.5.1
       keyv: 5.6.0
+
+  '@central-icons-react/round-filled-radius-3-stroke-2@1.1.320(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 

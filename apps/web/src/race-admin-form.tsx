@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { AdminDateField } from './admin-date-field.js';
 import { AdminDialog } from './admin-dialog.js';
 import { apiRequest } from './api.js';
 import {
@@ -175,7 +176,7 @@ export function RaceForm({
         <div className="form-row">
           <label>
             開催日
-            <input name="raceDate" type="date" required defaultValue={race?.raceDate} />
+            <AdminDateField name="raceDate" required defaultValue={race?.raceDate ?? ''} />
           </label>
           <label>
             レース名

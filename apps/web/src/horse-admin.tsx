@@ -1,5 +1,6 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import { AddIcon, EditIcon } from './admin-icons.js';
 import {
   distancePreferenceLabel,
   horseStatusLabel,
@@ -8,8 +9,7 @@ import {
 import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
 import { HorseAdminForm } from './horse-admin-form.js';
-import { horseCoatLabel, type Horse, type HorsePerformance } from './horse-admin-model.js';
-import { HorsePerformanceDialog } from './horse-performance-dialog.js';
+import { horseCoatLabel, type Horse } from './horse-admin-model.js';
 import { useAdminPolling } from './use-admin-polling.js';
 
 export function HorseAdmin() {
@@ -17,12 +17,6 @@ export function HorseAdmin() {
   const [editing, setEditing] = useState<Horse>();
   const [horseFormOpen, setHorseFormOpen] = useState(false);
   const horseFormReturnFocus = useRef<HTMLElement | null>(null);
-  const [performance, setPerformance] = useState<{
-    readonly horse: Horse;
-    readonly record: HorsePerformance;
-  }>();
-  const [loadingPerformanceId, setLoadingPerformanceId] = useState<string>();
-  const performanceRequestId = useRef(0);
   const [operationError, setOperationError] = useState('');
   const { success } = useAdminToast();
   const refresh = useCallback(async () => {
@@ -30,36 +24,10 @@ export function HorseAdmin() {
   }, []);
   const { error: refreshError, isInitialLoading, refreshNow } = useAdminPolling(refresh, 10_000);
 
-  useEffect(
-    () => () => {
-      performanceRequestId.current += 1;
-    },
-    [],
-  );
-
   function openHorseForm(horse: Horse | undefined, trigger: HTMLElement): void {
     setEditing(horse);
     horseFormReturnFocus.current = trigger;
     setHorseFormOpen(true);
-  }
-
-  async function showPerformance(horse: Horse): Promise<void> {
-    const requestId = performanceRequestId.current + 1;
-    performanceRequestId.current = requestId;
-    setLoadingPerformanceId(horse.id);
-    setOperationError('');
-    try {
-      const record = await apiRequest<HorsePerformance>(
-        `/api/v1/admin/horses/${horse.id}/performance`,
-      );
-      if (requestId === performanceRequestId.current) setPerformance({ horse, record });
-    } catch (caught) {
-      if (requestId === performanceRequestId.current) {
-        setOperationError(caught instanceof Error ? caught.message : '戦績を取得できません。');
-      }
-    } finally {
-      if (requestId === performanceRequestId.current) setLoadingPerformanceId(undefined);
-    }
   }
 
   return (
@@ -73,6 +41,7 @@ export function HorseAdmin() {
             className="text-button"
             onClick={(event) => openHorseForm(undefined, event.currentTarget)}
           >
+            <AddIcon size={14} ariaHidden />
             馬を登録
           </button>
         }
@@ -87,22 +56,13 @@ export function HorseAdmin() {
             {operationError}
           </p>
         )}
-        {isInitialLoading ? (
-          <p className="empty-copy" role="status" aria-live="polite">
-            馬の一覧を読み込んでいます。
-          </p>
-        ) : horses.length === 0 ? (
+        {isInitialLoading ? null : horses.length === 0 ? (
           <div className="empty-copy" role="status">
             <strong>馬が登録されていません</strong>
             <span>上の「馬を登録」から追加できます。</span>
           </div>
         ) : (
-          <HorseTable
-            horses={horses}
-            loadingPerformanceId={loadingPerformanceId}
-            onEdit={openHorseForm}
-            onShowPerformance={(horse) => void showPerformance(horse)}
-          />
+          <HorseTable horses={horses} onEdit={openHorseForm} />
         )}
       </TerminalPanel>
       {horseFormOpen ? (
@@ -130,27 +90,16 @@ export function HorseAdmin() {
           }}
         />
       ) : null}
-      {performance === undefined ? null : (
-        <HorsePerformanceDialog
-          horse={performance.horse}
-          record={performance.record}
-          onClose={() => setPerformance(undefined)}
-        />
-      )}
     </div>
   );
 }
 
 function HorseTable({
   horses,
-  loadingPerformanceId,
   onEdit,
-  onShowPerformance,
 }: {
   readonly horses: readonly Horse[];
-  readonly loadingPerformanceId: string | undefined;
   readonly onEdit: (horse: Horse, trigger: HTMLElement) => void;
-  readonly onShowPerformance: (horse: Horse) => void;
 }) {
   return (
     <div className="data-table-wrap">
@@ -191,15 +140,8 @@ function HorseTable({
                     className="text-button"
                     onClick={(event) => onEdit(horse, event.currentTarget)}
                   >
+                    <EditIcon size={13} ariaHidden />
                     編集する
-                  </button>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() => onShowPerformance(horse)}
-                    disabled={loadingPerformanceId !== undefined}
-                  >
-                    {loadingPerformanceId === horse.id ? '読み込み中…' : '戦績を見る'}
                   </button>
                 </div>
               </td>

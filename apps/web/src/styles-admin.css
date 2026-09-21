@@ -972,6 +972,11 @@
     padding-inline: 0.75rem;
   }
 
+  /* The chip row holds its own height, so the row it sits in grows with it. */
+  .app-shell--admin .terminal-tabs {
+    height: 3.25rem;
+  }
+
   .app-shell--admin .data-table td {
     height: 2.75rem;
   }

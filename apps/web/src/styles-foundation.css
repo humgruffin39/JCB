@@ -329,9 +329,12 @@ body:has(.app-shell--admin),
   }
 }
 
+/* A thumb is not a cursor. 2.75rem is the size a touch target is expected to
+   be, and it is what the rows of a table already stand at on a phone, so the
+   controls that get tapped match them rather than sitting 8px under. */
 @media (pointer: coarse) {
   .app-shell--admin {
-    --control: 2.25rem;
+    --control: 2.75rem;
   }
 }
 

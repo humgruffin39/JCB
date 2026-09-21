@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { AdminDateField } from './admin-date-field.js';
+import { AdminSelect } from './admin-select.js';
 import { AdminDialog } from './admin-dialog.js';
 import { apiRequest } from './api.js';
 import {
@@ -200,40 +201,45 @@ export function RaceForm({
             レース名
             <input name="name" required maxLength={100} defaultValue={race?.name} />
           </label>
-          <label>
-            種別
-            <select name="kind" defaultValue={race?.kind ?? ''}>
-              <option value="">曜日から自動決定</option>
-              <option value="regular">通常</option>
-              <option value="midweek">平日</option>
-              <option value="saturday_night">土曜夜</option>
-            </select>
-          </label>
-          <label>
-            距離
-            <select name="distanceM" defaultValue={String(currentDistance)} required>
-              {distanceOptions.map((distance) => (
-                <option key={distance} value={distance}>
-                  {String(distance)}m
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            コース
-            <select name="surface" defaultValue={race?.surface ?? 'turf'}>
-              <option value="turf">芝</option>
-              <option value="dirt">ダート</option>
-            </select>
-          </label>
-          <label>
-            会場
-            <select name="venueTheme" defaultValue={race?.venueTheme ?? ''}>
-              <option value="">種別から自動決定</option>
-              <option value="standard">昼</option>
-              <option value="night">ナイター</option>
-            </select>
-          </label>
+          <AdminSelect
+            label="種別"
+            name="kind"
+            defaultValue={race?.kind ?? ''}
+            options={[
+              { value: '', label: '曜日から自動決定' },
+              { value: 'regular', label: '通常' },
+              { value: 'midweek', label: '平日' },
+              { value: 'saturday_night', label: '土曜夜' },
+            ]}
+          />
+          <AdminSelect
+            label="距離"
+            name="distanceM"
+            defaultValue={String(currentDistance)}
+            options={distanceOptions.map((distance) => ({
+              value: String(distance),
+              label: `${String(distance)}m`,
+            }))}
+          />
+          <AdminSelect
+            label="コース"
+            name="surface"
+            defaultValue={race?.surface ?? 'turf'}
+            options={[
+              { value: 'turf', label: '芝' },
+              { value: 'dirt', label: 'ダート' },
+            ]}
+          />
+          <AdminSelect
+            label="会場"
+            name="venueTheme"
+            defaultValue={race?.venueTheme ?? ''}
+            options={[
+              { value: '', label: '種別から自動決定' },
+              { value: 'standard', label: '昼' },
+              { value: 'night', label: 'ナイター' },
+            ]}
+          />
         </div>
         {/*
           Not a fieldset: a legend is drawn across its box's top edge, which
@@ -256,42 +262,37 @@ export function RaceForm({
             {Array.from({ length: 8 }, (_, index) => {
               const selectedHorseId = selectedHorseIds[index] ?? '';
               return (
-                <label key={index}>
-                  {String(index + 1)}番
-                  <select
-                    name={`horse-${String(index + 1)}`}
-                    value={selectedHorseId}
-                    data-empty={selectedHorseId === '' ? '' : undefined}
-                    onChange={(event) => {
-                      const nextHorseId = event.currentTarget.value;
-                      setSelectedHorseIds((current) =>
-                        current.map((horseId, horseIndex) =>
-                          horseIndex === index ? nextHorseId : horseId,
+                <AdminSelect
+                  key={index}
+                  label={`${String(index + 1)}番`}
+                  name={`horse-${String(index + 1)}`}
+                  placeholder="馬を選択"
+                  value={selectedHorseId}
+                  onChange={(nextHorseId) => {
+                    setSelectedHorseIds((current) =>
+                      current.map((horseId, horseIndex) =>
+                        horseIndex === index ? nextHorseId : horseId,
+                      ),
+                    );
+                    setError('');
+                  }}
+                  options={horses
+                    .filter((horse) => horse.status !== 'retired' || horse.id === selectedHorseId)
+                    .filter(
+                      (horse) =>
+                        !selectedHorseIds.some(
+                          (selectedHorseIdAtOtherPosition, selectedIndex) =>
+                            selectedIndex !== index && selectedHorseIdAtOtherPosition === horse.id,
                         ),
-                      );
-                      setError('');
-                    }}
-                  >
-                    <option value="">馬を選択</option>
-                    {horses
-                      .filter((horse) => horse.status !== 'retired' || horse.id === selectedHorseId)
-                      .filter(
-                        (horse) =>
-                          !selectedHorseIds.some(
-                            (selectedHorseIdAtOtherPosition, selectedIndex) =>
-                              selectedIndex !== index &&
-                              selectedHorseIdAtOtherPosition === horse.id,
-                          ),
-                      )
-                      .map((horse) => (
-                        <option key={horse.id} value={horse.id}>
-                          {horse.status === 'retired'
-                            ? `${horse.name}（引退・交換してください）`
-                            : horse.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+                    )
+                    .map((horse) => ({
+                      value: horse.id,
+                      label:
+                        horse.status === 'retired'
+                          ? `${horse.name}（引退・交換してください）`
+                          : horse.name,
+                    }))}
+                />
               );
             })}
           </div>

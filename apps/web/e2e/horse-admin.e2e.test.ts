@@ -43,9 +43,12 @@ test('opens compact forms and edits abilities with accessible number inputs', as
 
   await page.getByRole('button', { name: 'レースを作成' }).click();
   const raceDialog = page.getByRole('dialog', { name: 'レースを作成' });
-  const course = raceDialog.getByLabel('コース');
-  await expect(course).toHaveValue('turf');
-  await expect(course.locator('option')).toHaveText(['芝', 'ダート']);
+  const course = raceDialog.getByRole('combobox', { name: 'コース' });
+  await expect(course).toHaveText('芝');
+  await expect(raceDialog.locator('input[name="surface"]')).toHaveValue('turf');
+  await course.click();
+  await expect(raceDialog.getByRole('listbox').getByRole('option')).toHaveText(['芝', 'ダート']);
+  await page.keyboard.press('Escape');
   await raceDialog.getByRole('button', { name: 'キャンセル' }).click();
 
   await page.getByRole('tab', { name: '馬管理' }).click();
@@ -63,13 +66,17 @@ test('opens compact forms and edits abilities with accessible number inputs', as
     horseDialog.getByText('中央は補正なし。片側へ寄せると、反対側では同じ分だけ不利になります。'),
   ).toHaveCount(0);
   await expect(horseDialog.getByText('中立', { exact: true })).toHaveCount(0);
-  await expect(horseDialog.getByLabel('毛色')).toHaveValue('chestnut');
-  await expect(horseDialog.getByLabel('毛色').locator('option')).toHaveText([
+  const coat = horseDialog.getByRole('combobox', { name: '毛色' });
+  await expect(coat).toHaveText('栗毛');
+  await expect(horseDialog.locator('input[name="coatColor"]')).toHaveValue('chestnut');
+  await coat.click();
+  await expect(horseDialog.getByRole('listbox').getByRole('option')).toHaveText([
     '黒',
     '栗毛',
     'グレー',
     'クリーム',
   ]);
+  await page.keyboard.press('Escape');
   await expect(horseDialog.getByRole('spinbutton')).toHaveCount(8);
   await expect(horseDialog.locator('.preference-slider__scale')).toHaveCount(0);
   await expect(horseDialog.locator('output')).toHaveCount(0);

@@ -11,6 +11,8 @@ import type { ComponentType } from 'react';
 import {
   type CentralIconBaseProps as IconProps,
   IconCalendar1,
+  IconCheckmark1Medium,
+  IconChevronDownMedium,
   IconChevronLeftMedium,
   IconChevronRightMedium,
   IconCrossMedium,
@@ -52,8 +54,11 @@ export const RemoveIcon = raw(IconMinusMedium);
 export const ShuffleIcon = raw(IconDice5);
 export const RetireIcon = raw(IconSword);
 export const CalendarIcon = raw(IconCalendar1);
+export const ChevronDownIcon = raw(IconChevronDownMedium);
 export const ChevronLeftIcon = raw(IconChevronLeftMedium);
 export const ChevronRightIcon = raw(IconChevronRightMedium);
+
+export const CheckIcon = raw(IconCheckmark1Medium);
 
 export const ErrorIcon = raw(IconExclamationCircle);
 export const WarningIcon = raw(IconWarningSign);

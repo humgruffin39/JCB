@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { AbilitySlider } from './ability-slider.js';
 import { AdminDialog } from './admin-dialog.js';
+import { AdminSelect } from './admin-select.js';
 import { apiRequest } from './api.js';
 import type { Horse } from './horse-admin-model.js';
 import { PreferenceSlider } from './preference-slider.js';
@@ -88,30 +89,36 @@ export function HorseAdminForm({
             馬名
             <input name="name" required maxLength={80} defaultValue={horse?.name ?? ''} />
           </label>
-          <label>
-            状態
-            <select name="status" defaultValue={horse?.status ?? 'active'}>
-              <option value="active">出走可</option>
-              <option value="resting">休養中</option>
-              <option value="retired">引退</option>
-            </select>
-          </label>
-          <label>
-            脚質
-            <select name="runningStyle" defaultValue={horse?.runningStyle ?? 'front_runner'}>
-              <option value="front_runner">逃げ</option>
-              <option value="closer">差し</option>
-            </select>
-          </label>
-          <label>
-            毛色
-            <select name="coatColor" defaultValue={horse?.coatColor ?? 'chestnut'}>
-              <option value="black">黒</option>
-              <option value="chestnut">栗毛</option>
-              <option value="gray">グレー</option>
-              <option value="cream">クリーム</option>
-            </select>
-          </label>
+          <AdminSelect
+            label="状態"
+            name="status"
+            defaultValue={horse?.status ?? 'active'}
+            options={[
+              { value: 'active', label: '出走可' },
+              { value: 'resting', label: '休養中' },
+              { value: 'retired', label: '引退' },
+            ]}
+          />
+          <AdminSelect
+            label="脚質"
+            name="runningStyle"
+            defaultValue={horse?.runningStyle ?? 'front_runner'}
+            options={[
+              { value: 'front_runner', label: '逃げ' },
+              { value: 'closer', label: '差し' },
+            ]}
+          />
+          <AdminSelect
+            label="毛色"
+            name="coatColor"
+            defaultValue={horse?.coatColor ?? 'chestnut'}
+            options={[
+              { value: 'black', label: '黒' },
+              { value: 'chestnut', label: '栗毛' },
+              { value: 'gray', label: 'グレー' },
+              { value: 'cream', label: 'クリーム' },
+            ]}
+          />
         </div>
         <fieldset className="ability-group">
           <legend>基本能力</legend>

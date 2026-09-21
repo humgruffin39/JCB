@@ -89,17 +89,23 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   const entries = createDialog.getByRole('group', { name: '出走馬' });
   await expect(entries).toBeVisible();
   await createDialog.getByRole('button', { name: '自動選択' }).click();
+  // The dropdown carries its value to the form in a hidden input, the way a
+  // native one carries its own.
   const automaticallyAssignedHorseIds = await createDialog
-    .locator('select[name^="horse-"]')
-    .evaluateAll((selects) =>
-      selects.map((select) => (select instanceof HTMLSelectElement ? select.value : '')),
+    .locator('input[name^="horse-"]')
+    .evaluateAll((inputs) =>
+      inputs.map((input) => (input instanceof HTMLInputElement ? input.value : '')),
     );
   expect(new Set(automaticallyAssignedHorseIds).size).toBe(8);
   expect(automaticallyAssignedHorseIds.sort()).toEqual(horses.map((horse) => horse.id).sort());
   const distance = createDialog.getByRole('combobox', { name: '距離' });
-  await expect(distance).toHaveValue('1200');
-  await expect(distance.locator('option[value="1200"]')).toHaveText('1200m');
-  await expect(distance.locator('option')).toHaveCount(5);
+  await expect(distance).toHaveText('1200m');
+  await expect(createDialog.locator('input[name="distanceM"]')).toHaveValue('1200');
+  await distance.click();
+  const distances = createDialog.getByRole('listbox');
+  await expect(distances.getByRole('option')).toHaveCount(5);
+  await expect(distances.getByRole('option').first()).toHaveText('1200m');
+  await page.keyboard.press('Escape');
   await createDialog.getByRole('button', { name: 'キャンセル' }).click();
   await expect(createDialog).toBeHidden();
   await expect(page.getByRole('button', { name: 'レースを作成' })).toBeFocused();
@@ -107,11 +113,14 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   await page.getByRole('button', { name: 'テスト記念の下書きを編集' }).click();
   const editDialog = page.getByRole('dialog', { name: '下書きを編集' });
   await expect(editDialog).toBeVisible();
-  await expect(editDialog.getByRole('combobox', { name: '1番' })).toHaveValue('horse-1');
-  await expect(editDialog.getByRole('combobox', { name: '8番' })).toHaveValue('horse-8');
+  await expect(editDialog.getByRole('combobox', { name: '1番' })).toHaveText('テスト馬1');
+  await expect(editDialog.getByRole('combobox', { name: '8番' })).toHaveText('テスト馬8');
+  // A horse taken by another position is not offered again.
+  await editDialog.getByRole('combobox', { name: '2番' }).click();
   await expect(
-    editDialog.getByRole('combobox', { name: '2番' }).locator('option[value="horse-1"]'),
+    editDialog.getByRole('listbox').getByRole('option', { name: 'テスト馬1' }),
   ).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
   await expect(page.getByText('確定済み', { exact: true })).toBeVisible({ timeout: 8_000 });
 });

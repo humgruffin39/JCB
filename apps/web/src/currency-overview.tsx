@@ -1,5 +1,6 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useRef, useState, type FormEvent } from 'react';
+import { AdminSelect } from './admin-select.js';
 import { accountTypeLabel } from './admin-labels.js';
 import {
   formatMoney,
@@ -62,21 +63,17 @@ export function CurrencyOverview({
         <TerminalPanel heading="残高補正">
           {adjustmentDraft === undefined ? (
             <form ref={adjustmentForm} className="terminal-form" onSubmit={reviewAdjustment}>
-              <label>
-                対象口座
-                <select name="accountId" required defaultValue="">
-                  <option value="" disabled>
-                    口座を選択
-                  </option>
-                  {accounts.map((account) => (
-                    <option key={String(account.id)} value={String(account.id)}>
-                      {String(account.displayName ?? account.ownerKey)} /{' '}
-                      {accountTypeLabel(String(account.accountType))} /{' '}
-                      {formatMoney(account.amount)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <AdminSelect
+                label="対象口座"
+                name="accountId"
+                placeholder="口座を選択"
+                options={accounts.map((account) => ({
+                  value: String(account.id),
+                  label: `${String(account.displayName ?? account.ownerKey)} / ${accountTypeLabel(
+                    String(account.accountType),
+                  )} / ${formatMoney(account.amount)}`,
+                }))}
+              />
               <label>
                 補正額
                 <input name="amount" type="number" step={1} required />

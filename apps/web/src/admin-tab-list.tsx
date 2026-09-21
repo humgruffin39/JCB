@@ -32,9 +32,6 @@ export function AdminTabList<Id extends string>({
   const tabRefs = useRef(new Map<Id, HTMLButtonElement>());
   const listRef = useRef<HTMLElement>(null);
   const [indicator, setIndicator] = useState<Indicator>();
-  // The first measurement places the lit surface; it does not slide into place
-  // from nowhere. Only a change of tab is movement worth showing.
-  const [hasPlaced, setHasPlaced] = useState(false);
 
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -71,16 +68,6 @@ export function AdminTabList<Id extends string>({
     };
   }, [selected, tabs]);
 
-  // The surface appears where it belongs. It animates only once it is there,
-  // which is what keeps a first paint from sliding out of the corner.
-  useLayoutEffect(() => {
-    if (indicator === undefined || hasPlaced) return;
-    const frame = requestAnimationFrame(() => setHasPlaced(true));
-    return () => {
-      cancelAnimationFrame(frame);
-    };
-  }, [hasPlaced, indicator]);
-
   const selectAt = (index: number): void => {
     const tab = tabs[wrappedTabIndex(index, tabs.length)];
     if (tab === undefined) return;
@@ -94,7 +81,6 @@ export function AdminTabList<Id extends string>({
         <span
           className="admin-tab-indicator"
           aria-hidden="true"
-          data-placed={hasPlaced ? '' : undefined}
           style={{
             transform: `translate(${String(indicator.left)}px, ${String(indicator.top)}px)`,
             width: indicator.width,

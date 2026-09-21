@@ -171,11 +171,7 @@ export function RaceForm({
       canCancel={!isSubmitting}
       footer={
         <div className="form-actions">
-          <button
-            type="submit"
-            form={formId}
-            disabled={activeHorseCount < 8 || isSubmitting}
-          >
+          <button type="submit" form={formId} disabled={activeHorseCount < 8 || isSubmitting}>
             {isSubmitting ? '保存中…' : race === undefined ? '下書きを保存' : '変更を保存'}
           </button>
           <button

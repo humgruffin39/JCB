@@ -20,23 +20,22 @@ export function AbilitySlider({
 
   return (
     <div className="ability-slider">
+      {/* The field is the readout. A separate one beside the label said the
+          same number twice and cost a row of the dialog for each ability. */}
       <div className="ability-slider__heading">
         <label htmlFor={id}>{label}</label>
-        <output htmlFor={id} aria-live="off">
-          {draft}
-        </output>
+        <input
+          id={id}
+          name={name}
+          type="number"
+          min={0}
+          max={100}
+          step={1}
+          value={draft}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onBlur={normalize}
+        />
       </div>
-      <input
-        id={id}
-        name={name}
-        type="number"
-        min={0}
-        max={100}
-        step={1}
-        value={draft}
-        onChange={(event) => setDraft(event.currentTarget.value)}
-        onBlur={normalize}
-      />
       <div className="ability-meter" aria-hidden="true">
         <span style={{ width: `${String(value)}%` }} />
       </div>

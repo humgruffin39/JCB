@@ -72,33 +72,38 @@ test('opens compact forms and edits abilities with accessible number inputs', as
   ]);
   await expect(horseDialog.getByRole('spinbutton')).toHaveCount(8);
   await expect(horseDialog.locator('.preference-slider__scale')).toHaveCount(0);
+  await expect(horseDialog.locator('output')).toHaveCount(0);
 
   const distance = horseDialog.getByRole('spinbutton', { name: '距離適性' });
   await distance.fill('-50');
   await distance.blur();
   await expect(distance).toHaveValue('-50');
-  await expect(horseDialog.locator('output').filter({ hasText: /^-50$/ })).toBeVisible();
 
   const preference = horseDialog.getByRole('spinbutton', { name: 'コース適性' });
   await preference.fill('-100');
   await preference.blur();
   await expect(preference).toHaveValue('-100');
-  await expect(horseDialog.locator('output').filter({ hasText: /^-100$/ })).toBeVisible();
   await preference.fill('100');
   await preference.blur();
   await expect(preference).toHaveValue('100');
-  await expect(horseDialog.locator('output').filter({ hasText: /^100$/ })).toBeVisible();
   await expect(horseDialog.getByRole('spinbutton', { name: 'スピード' })).toHaveValue('50');
 
-  const outputFont = await page
-    .locator('.ability-slider output')
+  const valueFont = await page
+    .locator('.ability-slider__heading input')
     .first()
     .evaluate((element) => getComputedStyle(element).fontFamily);
-  expect(outputFont).toContain('Noto Sans JP Variable');
-  await expect(horseDialog.locator('.preference-slider > input').first()).toHaveCSS(
+  expect(valueFont).toContain('Noto Sans JP Variable');
+  await expect(horseDialog.locator('.preference-slider__heading input').first()).toHaveCSS(
     'border-left-color',
     'rgb(33, 33, 33)',
   );
+  // The marker is placed rather than filled, so a rule that only sets its
+  // offset leaves it with no width and nothing on screen.
+  const markerWidth = await horseDialog
+    .locator('.preference-meter span')
+    .first()
+    .evaluate((element) => element.getBoundingClientRect().width);
+  expect(markerWidth).toBeGreaterThan(0);
   const coloredAdminValues = await page.locator('.app-shell--admin').evaluate((root) => {
     const elements = [root, ...root.querySelectorAll('*')];
     const properties = [

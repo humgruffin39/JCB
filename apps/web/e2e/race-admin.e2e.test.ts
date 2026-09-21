@@ -86,10 +86,9 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   const createDialog = page.getByRole('dialog', { name: 'レースを作成' });
   await expect(createDialog).toBeVisible();
   await expect(createDialog.getByLabel('開催日')).toBeFocused();
-  const entryLegend = createDialog.locator('legend');
-  await expect(entryLegend).toContainText('出走馬');
-  await expect(entryLegend).not.toContainText('8頭');
-  await createDialog.getByRole('button', { name: '自動決定' }).click();
+  const entries = createDialog.getByRole('group', { name: '出走馬' });
+  await expect(entries).toBeVisible();
+  await createDialog.getByRole('button', { name: '自動選択' }).click();
   const automaticallyAssignedHorseIds = await createDialog
     .locator('select[name^="horse-"]')
     .evaluateAll((selects) =>

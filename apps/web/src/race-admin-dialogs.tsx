@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
+import { AdminDialog } from './admin-dialog.js';
 import { apiAbsoluteUrl, apiRequest } from './api.js';
 import type { AdminRace } from './race-admin-model.js';
 import { useSubmitLock } from './use-submit-lock.js';
@@ -10,7 +11,6 @@ export interface CancellationDialogProps {
 }
 
 export function CancellationDialog({ race, onClose, onConfirm }: CancellationDialogProps) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState('');
   const {
     isLocked: isSubmitting,
@@ -18,11 +18,6 @@ export function CancellationDialog({ race, onClose, onConfirm }: CancellationDia
     unlock: unlockSubmission,
   } = useSubmitLock();
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    dialog.current?.showModal();
-    return () => dialog.current?.close();
-  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -37,18 +32,14 @@ export function CancellationDialog({ race, onClose, onConfirm }: CancellationDia
   }
 
   return (
-    <dialog
-      ref={dialog}
+    <AdminDialog
       className="confirmation-dialog"
-      aria-labelledby="cancel-race-title"
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!isSubmitting) onClose();
-      }}
+      title={`「${race.name}」を中止しますか`}
+      description="販売済み馬券は全額返金され、中止理由と実行者が監査ログへ残ります。"
+      onCancel={onClose}
+      canCancel={!isSubmitting}
     >
       <form onSubmit={(event) => void submit(event)}>
-        <h2 id="cancel-race-title">「{race.name}」を中止しますか</h2>
-        <p>販売済み馬券は全額返金され、中止理由と実行者が監査ログへ残ります。</p>
         <label>
           中止理由
           <textarea
@@ -56,7 +47,6 @@ export function CancellationDialog({ race, onClose, onConfirm }: CancellationDia
             onChange={(event) => setReason(event.currentTarget.value)}
             minLength={3}
             maxLength={300}
-            autoFocus
             required
           />
         </label>
@@ -67,7 +57,7 @@ export function CancellationDialog({ race, onClose, onConfirm }: CancellationDia
         )}
         <div className="inline-actions">
           <button type="submit" className="button-danger" disabled={isSubmitting}>
-            {isSubmitting ? '処理中' : '中止して返金する'}
+            {isSubmitting ? '処理中…' : '中止して返金する'}
           </button>
           <button
             type="button"
@@ -79,7 +69,7 @@ export function CancellationDialog({ race, onClose, onConfirm }: CancellationDia
           </button>
         </div>
       </form>
-    </dialog>
+    </AdminDialog>
   );
 }
 
@@ -90,7 +80,6 @@ export interface RehearsalDialogProps {
 }
 
 export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogProps) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const {
     isLocked: isSubmitting,
     lock: lockSubmission,
@@ -98,20 +87,13 @@ export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogPro
   } = useSubmitLock();
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    dialog.current?.showModal();
-    return () => dialog.current?.close();
-  }, []);
-
   return (
-    <dialog
-      ref={dialog}
+    <AdminDialog
       className="confirmation-dialog"
-      aria-labelledby="rehearse-race-title"
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!isSubmitting) onClose();
-      }}
+      title={`「${race.name}」を今すぐ進行しますか`}
+      description="観戦画面をすぐに公開し、1分後に発走します。レース終了後に自動で精算します。"
+      onCancel={onClose}
+      canCancel={!isSubmitting}
     >
       <form
         onSubmit={(event) => {
@@ -125,8 +107,6 @@ export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogPro
             .finally(unlockSubmission);
         }}
       >
-        <h2 id="rehearse-race-title">「{race.name}」を今すぐ進行しますか</h2>
-        <p>観戦画面をすぐに公開し、1分後に発走します。レース終了後に自動で精算します。</p>
         {error === '' ? null : (
           <p className="field-error" role="alert">
             {error}
@@ -146,7 +126,7 @@ export function RehearsalDialog({ race, onClose, onConfirm }: RehearsalDialogPro
           </button>
         </div>
       </form>
-    </dialog>
+    </AdminDialog>
   );
 }
 
@@ -156,7 +136,6 @@ export interface EmergencyRevealDialogProps {
 }
 
 export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogProps) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState('');
   const [result, setResult] = useState<unknown>();
   const [error, setError] = useState('');
@@ -165,11 +144,6 @@ export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogPr
     lock: lockSubmission,
     unlock: unlockSubmission,
   } = useSubmitLock();
-
-  useEffect(() => {
-    dialog.current?.showModal();
-    return () => dialog.current?.close();
-  }, []);
 
   async function reveal(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -190,17 +164,13 @@ export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogPr
   }
 
   return (
-    <dialog
-      ref={dialog}
+    <AdminDialog
       className="confirmation-dialog"
-      aria-labelledby="reveal-title"
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!isSubmitting) onClose();
-      }}
+      title="正式結果を緊急閲覧"
+      onCancel={onClose}
+      canCancel={!isSubmitting}
     >
       <form onSubmit={(event) => void reveal(event)}>
-        <h2 id="reveal-title">正式結果を緊急閲覧</h2>
         <p>
           <strong>警告:</strong>{' '}
           発走前結果の閲覧です。実行者、理由、IPハッシュが監査ログへ永続記録されます。
@@ -231,7 +201,7 @@ export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogPr
         )}
         <div className="inline-actions">
           <button type="submit" className="button-danger" disabled={isSubmitting}>
-            {isSubmitting ? '復号中' : '警告を理解して閲覧'}
+            {isSubmitting ? '復号中…' : '警告を理解して閲覧'}
           </button>
           <button
             type="button"
@@ -243,6 +213,6 @@ export function EmergencyRevealDialog({ race, onClose }: EmergencyRevealDialogPr
           </button>
         </div>
       </form>
-    </dialog>
+    </AdminDialog>
   );
 }

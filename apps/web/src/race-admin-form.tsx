@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { AdminDateField } from './admin-date-field.js';
 import { AdminDialog } from './admin-dialog.js';
 import { apiRequest } from './api.js';
@@ -45,6 +45,8 @@ export function RaceForm({
   onCancel,
   returnFocusRef,
 }: RaceFormProps) {
+  const entryGroupId = useId();
+  const formId = useId();
   const [error, setError] = useState('');
   const {
     isLocked: isSubmitting,
@@ -167,8 +169,28 @@ export function RaceForm({
       onCancel={onCancel}
       returnFocusRef={returnFocusRef}
       canCancel={!isSubmitting}
+      footer={
+        <div className="form-actions">
+          <button
+            type="submit"
+            form={formId}
+            disabled={activeHorseCount < 8 || isSubmitting}
+          >
+            {isSubmitting ? '保存中…' : race === undefined ? '下書きを保存' : '変更を保存'}
+          </button>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            キャンセル
+          </button>
+        </div>
+      }
     >
       <form
+        id={formId}
         className="terminal-form"
         aria-busy={isSubmitting}
         onSubmit={(event) => void submit(event)}
@@ -217,83 +239,76 @@ export function RaceForm({
             </select>
           </label>
         </div>
-        <fieldset className="entry-selects">
-          <legend>
-            <span>出走馬</span>
-            <span className="entry-selects-divider" aria-hidden="true" />
+        {/*
+          Not a fieldset: a legend is drawn across its box's top edge, which
+          left the label sitting half on the sunken surface and half off it.
+          A group with its own labelled header keeps the label inside the box.
+        */}
+        <div className="entry-selects" role="group" aria-labelledby={entryGroupId}>
+          <div className="entry-selects__header">
+            <span id={entryGroupId}>出走馬</span>
             <button
               type="button"
-              className="text-button"
+              className="text-button entry-selects__auto"
               onClick={autoAssignHorses}
               disabled={activeHorseCount < 8 || isSubmitting}
             >
-              自動決定
+              自動選択
             </button>
-          </legend>
-          {Array.from({ length: 8 }, (_, index) => {
-            const selectedHorseId = selectedHorseIds[index] ?? '';
-            return (
-              <label key={index}>
-                {String(index + 1)}番
-                <select
-                  name={`horse-${String(index + 1)}`}
-                  required
-                  value={selectedHorseId}
-                  onChange={(event) => {
-                    const nextHorseId = event.currentTarget.value;
-                    setSelectedHorseIds((current) =>
-                      current.map((horseId, horseIndex) =>
-                        horseIndex === index ? nextHorseId : horseId,
-                      ),
-                    );
-                    setError('');
-                  }}
-                >
-                  <option value="" disabled>
-                    馬を選択
-                  </option>
-                  {horses
-                    .filter((horse) => horse.status !== 'retired' || horse.id === selectedHorseId)
-                    .filter(
-                      (horse) =>
-                        !selectedHorseIds.some(
-                          (selectedHorseIdAtOtherPosition, selectedIndex) =>
-                            selectedIndex !== index && selectedHorseIdAtOtherPosition === horse.id,
+          </div>
+          <div className="entry-selects__grid">
+            {Array.from({ length: 8 }, (_, index) => {
+              const selectedHorseId = selectedHorseIds[index] ?? '';
+              return (
+                <label key={index}>
+                  {String(index + 1)}番
+                  <select
+                    name={`horse-${String(index + 1)}`}
+                    value={selectedHorseId}
+                    data-empty={selectedHorseId === '' ? '' : undefined}
+                    onChange={(event) => {
+                      const nextHorseId = event.currentTarget.value;
+                      setSelectedHorseIds((current) =>
+                        current.map((horseId, horseIndex) =>
+                          horseIndex === index ? nextHorseId : horseId,
                         ),
-                    )
-                    .map((horse) => (
-                      <option key={horse.id} value={horse.id}>
-                        {horse.status === 'retired'
-                          ? `${horse.name}（引退・交換してください）`
-                          : horse.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            );
-          })}
-        </fieldset>
+                      );
+                      setError('');
+                    }}
+                  >
+                    <option value="">馬を選択</option>
+                    {horses
+                      .filter((horse) => horse.status !== 'retired' || horse.id === selectedHorseId)
+                      .filter(
+                        (horse) =>
+                          !selectedHorseIds.some(
+                            (selectedHorseIdAtOtherPosition, selectedIndex) =>
+                              selectedIndex !== index &&
+                              selectedHorseIdAtOtherPosition === horse.id,
+                          ),
+                      )
+                      .map((horse) => (
+                        <option key={horse.id} value={horse.id}>
+                          {horse.status === 'retired'
+                            ? `${horse.name}（引退・交換してください）`
+                            : horse.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        {/* One message at a time. The shortage is the reason the form cannot
+            be submitted at all, so it outranks anything a submit would say. */}
         {activeHorseCount < 8 ? (
           <p className="field-error">レース作成には、引退していない馬が8頭必要です。</p>
-        ) : null}
-        {error === '' ? null : (
+        ) : error === '' ? null : (
           <p className="field-error" role="alert">
             {error}
           </p>
         )}
-        <div className="form-actions">
-          <button type="submit" disabled={activeHorseCount < 8 || isSubmitting}>
-            {isSubmitting ? '保存中…' : race === undefined ? '下書きを保存' : '変更を保存'}
-          </button>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={onCancel}
-            disabled={isSubmitting}
-          >
-            キャンセル
-          </button>
-        </div>
       </form>
     </AdminDialog>
   );

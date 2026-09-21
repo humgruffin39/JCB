@@ -1,6 +1,7 @@
 import { TerminalPanel } from '@jcb/ui';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { z } from 'zod';
+import { AdminDialog } from './admin-dialog.js';
 import { AddIcon, RemoveIcon } from './admin-icons.js';
 import { useAdminToast } from './admin-toaster.js';
 import { apiRequest } from './api.js';
@@ -184,26 +185,19 @@ function AdministratorRemovalDialog({
   readonly onClose: () => void;
   readonly onConfirm: (discordUserId: string, reason: string) => Promise<void>;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState('');
   const {
     isLocked: isSubmitting,
     lock: lockSubmission,
     unlock: unlockSubmission,
   } = useSubmitLock();
-  useEffect(() => {
-    dialog.current?.showModal();
-    return () => dialog.current?.close();
-  }, []);
   return (
-    <dialog
-      ref={dialog}
+    <AdminDialog
       className="confirmation-dialog"
-      aria-labelledby="remove-admin-title"
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!isSubmitting) onClose();
-      }}
+      title="管理者権限を外しますか"
+      description={`${discordUserId} は次のリクエストから管理画面を利用できなくなります。`}
+      onCancel={onClose}
+      canCancel={!isSubmitting}
     >
       <form
         onSubmit={(event) => {
@@ -212,8 +206,6 @@ function AdministratorRemovalDialog({
           void onConfirm(discordUserId, reason.trim()).finally(unlockSubmission);
         }}
       >
-        <h2 id="remove-admin-title">管理者権限を外しますか</h2>
-        <p>{discordUserId} は次のリクエストから管理画面を利用できなくなります。</p>
         <label>
           削除理由
           <textarea
@@ -221,7 +213,6 @@ function AdministratorRemovalDialog({
             onChange={(event) => setReason(event.currentTarget.value)}
             minLength={5}
             maxLength={300}
-            autoFocus
             required
           />
         </label>
@@ -239,7 +230,7 @@ function AdministratorRemovalDialog({
           </button>
         </div>
       </form>
-    </dialog>
+    </AdminDialog>
   );
 }
 

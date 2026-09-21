@@ -195,6 +195,10 @@ export function betStatusLabel(status: string): string {
   return BET_STATUS_LABELS[status] ?? '状態を確認してください';
 }
 
+export function runningStyleLabel(runningStyle: string): string {
+  return runningStyle === 'front_runner' ? '逃げ' : '差し';
+}
+
 export function horseStatusLabel(status: string): string {
   return HORSE_STATUS_LABELS[status] ?? '状態を確認してください';
 }

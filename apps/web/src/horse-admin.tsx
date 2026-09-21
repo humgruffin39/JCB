@@ -1,9 +1,10 @@
 import { TerminalPanel } from '@jcb/ui';
 import { useCallback, useRef, useState } from 'react';
-import { AddIcon, EditIcon } from './admin-icons.js';
+import { AddIcon, EditIcon, RetireIcon } from './admin-icons.js';
 import {
   distancePreferenceLabel,
   horseStatusLabel,
+  runningStyleLabel,
   surfacePreferenceLabel,
 } from './admin-labels.js';
 import { useAdminToast } from './admin-toaster.js';
@@ -18,6 +19,7 @@ export function HorseAdmin() {
   const [horseFormOpen, setHorseFormOpen] = useState(false);
   const horseFormReturnFocus = useRef<HTMLElement | null>(null);
   const [operationError, setOperationError] = useState('');
+  const [retiringId, setRetiringId] = useState<string>();
   const { success } = useAdminToast();
   const refresh = useCallback(async () => {
     setHorses(await apiRequest<readonly Horse[]>('/api/v1/admin/horses'));
@@ -28,6 +30,28 @@ export function HorseAdmin() {
     setEditing(horse);
     horseFormReturnFocus.current = trigger;
     setHorseFormOpen(true);
+  }
+
+  /*
+   * Retiring is undone by editing the horse back to active, so it asks nothing
+   * first. The row already says which horse it is.
+   */
+  async function retireHorse(horse: Horse): Promise<void> {
+    if (retiringId !== undefined) return;
+    setRetiringId(horse.id);
+    setOperationError('');
+    try {
+      await apiRequest(`/api/v1/admin/horses/${horse.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'retired' }),
+      });
+      success(`${horse.name}を殺害しました。`);
+      await refreshNow();
+    } catch (caught) {
+      setOperationError(caught instanceof Error ? caught.message : '馬を殺害できません。');
+    } finally {
+      setRetiringId(undefined);
+    }
   }
 
   return (
@@ -62,7 +86,12 @@ export function HorseAdmin() {
             <span>上の「馬を登録」から追加できます。</span>
           </div>
         ) : (
-          <HorseTable horses={horses} onEdit={openHorseForm} />
+          <HorseTable
+            horses={horses}
+            retiringId={retiringId}
+            onEdit={openHorseForm}
+            onRetire={retireHorse}
+          />
         )}
       </TerminalPanel>
       {horseFormOpen ? (
@@ -96,10 +125,14 @@ export function HorseAdmin() {
 
 function HorseTable({
   horses,
+  retiringId,
   onEdit,
+  onRetire,
 }: {
   readonly horses: readonly Horse[];
+  readonly retiringId: string | undefined;
   readonly onEdit: (horse: Horse, trigger: HTMLElement) => void;
+  readonly onRetire: (horse: Horse) => Promise<void>;
 }) {
   return (
     <div className="data-table-wrap">
@@ -129,7 +162,7 @@ function HorseTable({
                   {horseStatusLabel(horse.status)}
                 </span>
               </td>
-              <td>{horse.runningStyle === 'front_runner' ? '逃げ' : '差し'}</td>
+              <td>{runningStyleLabel(horse.runningStyle)}</td>
               <td>{horseCoatLabel(horse.coatColor)}</td>
               <td>{distancePreferenceLabel(horse.distancePreference)}</td>
               <td>{surfacePreferenceLabel(horse.surfacePreference)}</td>
@@ -139,9 +172,20 @@ function HorseTable({
                     type="button"
                     className="text-button"
                     onClick={(event) => onEdit(horse, event.currentTarget)}
+                    aria-label={`${horse.name}を編集`}
                   >
                     <EditIcon size={13} ariaHidden />
-                    編集する
+                    編集
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button button-danger"
+                    onClick={() => void onRetire(horse)}
+                    disabled={horse.status === 'retired' || retiringId !== undefined}
+                    aria-label={`${horse.name}を殺害`}
+                  >
+                    <RetireIcon size={13} ariaHidden />
+                    {retiringId === horse.id ? '処理中…' : '殺害'}
                   </button>
                 </div>
               </td>

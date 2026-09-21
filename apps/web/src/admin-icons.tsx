@@ -14,6 +14,8 @@ import {
   IconChevronLeftMedium,
   IconChevronRightMedium,
   IconCrossMedium,
+  IconSword,
+  IconDice5,
   IconExclamationCircle,
   IconEyeOpen,
   IconLock,
@@ -47,6 +49,8 @@ export const RevealIcon = raw(IconEyeOpen);
 export const CancelIcon = raw(IconStopCircle);
 export const CloseIcon = raw(IconCrossMedium);
 export const RemoveIcon = raw(IconMinusMedium);
+export const ShuffleIcon = raw(IconDice5);
+export const RetireIcon = raw(IconSword);
 export const CalendarIcon = raw(IconCalendar1);
 export const ChevronLeftIcon = raw(IconChevronLeftMedium);
 export const ChevronRightIcon = raw(IconChevronRightMedium);

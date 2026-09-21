@@ -324,7 +324,16 @@
  * say by moving.
  */
 
+/*
+ * Positioned, so the table's own overflow is the only thing that scrolls. The
+ * visually hidden column heading is absolutely positioned, and without a
+ * containing block here it was laid out against the page at the table's full
+ * width. On a phone that widened the document past the viewport, and Chrome
+ * answers that by widening the layout viewport and scaling the whole page
+ * down.
+ */
 .data-table-wrap {
+  position: relative;
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }
@@ -370,6 +379,8 @@
  * The palette carries three meanings and no more. Anything else is neutral.
  */
 
+/* A status sits in a table cell beside ordinary values, so it is read at the
+   same size as they are. */
 .status-badge {
   display: inline-flex;
   min-height: auto;
@@ -380,7 +391,7 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
-  font: 500 var(--text-meta) / 1.4 var(--font-display);
+  font: 400 var(--text-body) / 1.4 var(--font-display);
   white-space: nowrap;
 }
 
@@ -435,9 +446,11 @@
      and containing the overscroll stops a scroll from running on into the page
      behind once the dialog reaches its end. */
   box-sizing: border-box;
+  display: flex;
   max-height: calc(100dvh - 2rem);
   padding: 0.75rem;
-  overflow: auto;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
   color: var(--fg);
   background: var(--panel);
@@ -477,6 +490,23 @@
   from {
     opacity: 0;
   }
+}
+
+/* The header and the buttons hold still and the fields between them scroll.
+   With the whole dialog scrolling, a form long enough to need it carried its
+   own submit off the bottom edge. */
+.admin-dialog__body {
+  min-height: 0;
+  margin: 0 -0.75rem;
+  padding: 0 0.75rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.admin-dialog__footer {
+  margin: 0 -0.75rem -0.75rem;
+  padding: 0.75rem;
+  border-top: 0.0625rem solid var(--line);
 }
 
 .admin-dialog__header {
@@ -524,8 +554,8 @@
   line-height: 1.6;
 }
 
-.admin-dialog > .terminal-form,
-.admin-dialog > form {
+.admin-dialog__body > .terminal-form,
+.admin-dialog__body > form {
   margin-top: 0.75rem;
 }
 
@@ -534,18 +564,8 @@
   gap: 0.75rem;
 }
 
-.confirmation-dialog h2,
 .confirmation-dialog p {
   margin: 0;
-}
-
-.confirmation-dialog h2 {
-  color: var(--fg);
-  font: 600 var(--text-title) / 1.3 var(--font-display);
-  letter-spacing: -0.01em;
-}
-
-.confirmation-dialog p {
   color: var(--muted);
   font-size: var(--text-label);
   line-height: 1.6;
@@ -586,13 +606,6 @@
   appearance: none;
 }
 
-/* The browser's own clock button opens a picker nobody asked for, in a style
-   that belongs to the browser rather than to this app. The field takes a
-   typed time. */
-.app-shell--admin input[type='time']::-webkit-calendar-picker-indicator {
-  display: none;
-}
-
 /* ---- Forms ---------------------------------------------------------------
  * A label is 12px medium and muted; the hint beside it is 11px and fainter.
  */
@@ -614,7 +627,7 @@
 .form-row,
 .ability-grid,
 .preference-grid,
-.entry-selects {
+.entry-selects__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
@@ -631,7 +644,7 @@
 .form-row > *,
 .ability-grid > *,
 .preference-grid > *,
-.entry-selects > * {
+.entry-selects__grid > * {
   min-width: 0;
 }
 
@@ -643,14 +656,22 @@
 }
 
 /* Content that belongs inside a card and should look inset drops back to the
-   page colour. That is how a group earns its recess without a border. */
+   page colour. The page and the panel are six values apart, which is nothing
+   on a screen, so the group keeps the same hairline a field has. */
 .entry-selects,
 .ability-group {
   margin: 0;
-  padding: 0.75rem;
+  padding: 0.625rem 0.75rem 0.75rem;
   background: var(--bg);
-  border: 0;
+  border: 0.0625rem solid var(--line);
   border-radius: var(--radius-lg);
+}
+
+/* A fieldset renders its legend outside the flow, so only the group that is
+   already a plain div takes the grid. */
+.entry-selects {
+  display: grid;
+  gap: 0.5rem;
 }
 
 /* The settings run to nine of these groups one after another. Sinking each one
@@ -666,7 +687,6 @@
 /* A legend is not a grid item: the fieldset renders it above the grid. Floating
    it, as an earlier pass did, pushes every field into the zero-width strip
    beside the float, which is what collapsed these groups. */
-.entry-selects legend,
 .ability-group legend {
   width: 100%;
   margin-bottom: 0.625rem;
@@ -675,22 +695,25 @@
   font: 500 var(--text-label) / 1.3 var(--font-display);
 }
 
-.entry-selects legend {
+/* The group's header sits inside the box, on one surface, with the label on
+   the left and its one action on the right. */
+.entry-selects__header {
   display: flex;
+  min-height: var(--control);
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
+  color: var(--muted);
+  font: 500 var(--text-label) / 1.3 var(--font-display);
 }
 
-.entry-selects legend .entry-selects-divider {
-  flex: 1 1 auto;
-  min-width: 0.5rem;
-  height: 0;
-  border-block-start: 0.0625rem solid var(--line);
-}
-
-.entry-selects legend .text-button {
-  flex: 0 0 auto;
-  font: inherit;
+/* The action that fills all eight at once. It was a 24px icon with its name
+   only in a tooltip, which is the one control here worth naming. Pulling it
+   into the group's padding made the header wider than the group at 360px,
+   which is enough to widen the whole page, so it keeps inside the box. */
+.app-shell--admin .entry-selects__auto {
+  padding: 0 0.5rem;
+  flex: 0 1 auto;
 }
 
 .settings-form {
@@ -739,7 +762,7 @@
 .ability-slider__heading,
 .preference-slider__heading {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
@@ -750,29 +773,10 @@
   font: 500 var(--text-label) / 1.2 var(--font-display);
 }
 
-.ability-slider__heading output,
-.preference-slider__heading output {
-  min-width: 4ch;
-  padding: 0;
-  color: var(--faint);
-  background: transparent;
-  font: 400 var(--text-meta) / 1.2 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-}
-
-.ability-slider__value,
-.preference-slider__value {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-.ability-slider__value input[type='number'],
-.preference-slider__value input[type='number'],
-.ability-slider > input[type='number'],
-.preference-slider > input[type='number'] {
-  width: 4.5rem;
+.ability-slider__heading input[type='number'],
+.preference-slider__heading input[type='number'] {
+  width: 4rem;
+  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -786,8 +790,7 @@
   border-radius: 999px;
 }
 
-.ability-meter span,
-.preference-meter span {
+.ability-meter span {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -795,6 +798,20 @@
   width: 0;
   background: var(--accent);
   border-radius: 999px;
+}
+
+/* A preference runs either side of centre, so the bar carries a marker rather
+   than a fill. It is placed by its left edge, which is why it is pulled back
+   by half its own width. */
+.preference-meter span {
+  position: absolute;
+  top: 50%;
+  display: block;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--accent);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
 }
 
 .preference-meter::after {
@@ -807,75 +824,8 @@
   content: '';
 }
 
-.ability-slider input[type='range'],
-.preference-slider input[type='range'] {
-  min-height: var(--control);
-  margin: 0;
-  padding: 0;
-  appearance: none;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  cursor: ew-resize;
-}
-
-.ability-slider input[type='range']::-webkit-slider-runnable-track,
-.preference-slider input[type='range']::-webkit-slider-runnable-track {
-  height: 0.25rem;
-  background: var(--line-strong);
-  border-radius: 999px;
-}
-
-.ability-slider input[type='range']::-moz-range-track,
-.preference-slider input[type='range']::-moz-range-track {
-  height: 0.25rem;
-  background: var(--line-strong);
-  border-radius: 999px;
-}
-
-.ability-slider input[type='range']::-webkit-slider-thumb,
-.preference-slider input[type='range']::-webkit-slider-thumb {
-  width: 0.75rem;
-  height: 0.75rem;
-  margin-top: -0.25rem;
-  background: var(--fg);
-  border: 0;
-  border-radius: 999px;
-  appearance: none;
-}
-
-.ability-slider input[type='range']::-moz-range-thumb,
-.preference-slider input[type='range']::-moz-range-thumb {
-  width: 0.75rem;
-  height: 0.75rem;
-  background: var(--fg);
-  border: 0;
-  border-radius: 999px;
-}
-
 .preference-grid {
   grid-template-columns: 1fr;
-}
-
-.preference-slider__control {
-  position: relative;
-}
-
-.preference-slider__control::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0.0625rem;
-  height: 1rem;
-  background: var(--line-strong);
-  content: '';
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.preference-slider input[type='range'] {
-  position: relative;
-  z-index: 1;
 }
 
 /* ---- Readouts ------------------------------------------------------------ */
@@ -973,7 +923,11 @@
   grid-column: 1 / -1;
 }
 
-/* ---- Toasts -------------------------------------------------------------- */
+/* ---- Toasts --------------------------------------------------------------
+ * A line of text with a mark in front of it, on the floating surface. It sizes
+ * to what it says rather than holding a fixed box, and it leaves when its time
+ * is up without counting the seconds down on screen.
+ */
 
 [data-sonner-toaster] {
   --normal-bg: #131313;
@@ -982,49 +936,26 @@
 }
 
 [data-sonner-toast].admin-toast {
-  width: min(22rem, calc(100vw - 2rem));
-  min-height: 2.75rem;
-  padding: 0.625rem 0.75rem;
+  display: flex;
+  width: auto;
+  max-width: min(24rem, calc(100vw - 2rem));
+  min-height: 0;
+  padding: 0.5rem 0.875rem;
+  align-items: center;
   color: #ededed !important;
   background: #131313 !important;
-  border: 0.0625rem solid #212121 !important;
+  border: 0.0625rem solid #303030 !important;
   border-radius: 1rem !important;
   box-shadow:
     0 16px 40px -12px rgb(0 0 0 / 75%),
     0 4px 12px rgb(0 0 0 / 45%) !important;
-  font: 400 0.8125rem/1.5 var(--font-display);
-}
-
-[data-sonner-toast].admin-toast::before {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  z-index: 1;
-  width: 0;
-  height: 0.125rem;
-  background: #848484;
-  border-radius: 999px;
-  content: '';
-  pointer-events: none;
-  animation: admin-toast-progress 4.2s linear forwards;
-}
-
-[data-sonner-toast].admin-toast[data-expanded='true']::before {
-  animation-play-state: paused;
+  font: 400 0.8125rem/1.45 var(--font-display);
 }
 
 [data-sonner-toast].admin-toast [data-title] {
+  margin: 0;
   color: inherit;
-}
-
-@keyframes admin-toast-progress {
-  from {
-    width: 0;
-  }
-
-  to {
-    width: 100%;
-  }
+  font: inherit;
 }
 
 /* ---- Breakpoints ---------------------------------------------------------
@@ -1117,7 +1048,7 @@
   }
 
   .form-row,
-  .entry-selects {
+  .entry-selects__grid {
     grid-template-columns: 1fr;
   }
 

@@ -9,6 +9,7 @@ export function AdminDialog({
   title,
   description,
   children,
+  footer,
   onCancel,
   initialFocusRef,
   returnFocusRef,
@@ -18,6 +19,12 @@ export function AdminDialog({
   readonly title: string;
   readonly description?: string;
   readonly children: ReactNode;
+  /**
+   * The buttons that close the dialog. They sit outside the scrolling body, so
+   * a form long enough to scroll cannot carry them off the bottom edge. A
+   * submit in here belongs to the form by its `form` attribute.
+   */
+  readonly footer?: ReactNode;
   readonly onCancel: () => void;
   readonly initialFocusRef?: FocusTarget;
   readonly returnFocusRef?: FocusTarget;
@@ -96,7 +103,8 @@ export function AdminDialog({
           {description}
         </p>
       )}
-      {children}
+      <div className="admin-dialog__body scroll-area">{children}</div>
+      {footer === undefined ? null : <div className="admin-dialog__footer">{footer}</div>}
     </dialog>
   );
 }

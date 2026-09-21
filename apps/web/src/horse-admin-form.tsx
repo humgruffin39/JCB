@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { AbilitySlider } from './ability-slider.js';
 import { AdminDialog } from './admin-dialog.js';
 import { apiRequest } from './api.js';
@@ -29,6 +29,7 @@ export function HorseAdminForm({
   readonly onCancel: () => void;
   readonly returnFocusRef: { readonly current: HTMLElement | null };
 }) {
+  const formId = useId();
   const [error, setError] = useState('');
   const {
     isLocked: isSubmitting,
@@ -60,8 +61,24 @@ export function HorseAdminForm({
       onCancel={onCancel}
       returnFocusRef={returnFocusRef}
       canCancel={!isSubmitting}
+      footer={
+        <div className="form-actions">
+          <button type="submit" form={formId} disabled={isSubmitting}>
+            {isSubmitting ? '保存中…' : horse === undefined ? '馬を登録' : '変更を保存'}
+          </button>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            キャンセル
+          </button>
+        </div>
+      }
     >
       <form
+        id={formId}
         className="terminal-form"
         aria-busy={isSubmitting}
         onSubmit={(event) => void submit(event)}
@@ -124,19 +141,6 @@ export function HorseAdminForm({
             {error}
           </p>
         )}
-        <div className="form-actions">
-          <button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '保存中…' : horse === undefined ? '馬を登録' : '変更を保存'}
-          </button>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={onCancel}
-            disabled={isSubmitting}
-          >
-            キャンセル
-          </button>
-        </div>
       </form>
     </AdminDialog>
   );

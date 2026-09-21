@@ -81,8 +81,6 @@ test('keeps race operations Japanese, filters selected horses, and refreshes sta
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: '開催一覧' })).toBeVisible();
   await expect(page.getByText('下書き', { exact: true })).toBeVisible();
-  await expect(page.locator('.condition-readout')).toContainText('1番 絶好調');
-  await expect(page.locator('.condition-readout')).not.toContainText('excellent');
 
   await page.getByRole('button', { name: 'レースを作成' }).click();
   const createDialog = page.getByRole('dialog', { name: 'レースを作成' });

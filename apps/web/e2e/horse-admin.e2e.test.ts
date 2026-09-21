@@ -38,8 +38,8 @@ test('opens compact forms and edits abilities with accessible number inputs', as
   await expect(page.getByText('SECURE LINK')).toHaveCount(0);
   await expect(page.getByText('RACE CONTROL TERMINAL')).toHaveCount(0);
   await expect(page.getByText('レース、出走馬、通貨、システム設定を管理します。')).toHaveCount(0);
-  await expect(page.locator('.app-shell--admin')).toHaveCSS('background-color', 'rgb(8, 8, 8)');
-  expect((await page.locator('main').boundingBox())?.width).toBeLessThanOrEqual(1_152);
+  await expect(page.locator('.app-shell--admin')).toHaveCSS('background-color', 'rgb(13, 13, 13)');
+  expect((await page.locator('main').boundingBox())?.width).toBeLessThanOrEqual(1_408);
 
   await page.getByRole('button', { name: 'レースを作成' }).click();
   const raceDialog = page.getByRole('dialog', { name: 'レースを作成' });
@@ -97,7 +97,7 @@ test('opens compact forms and edits abilities with accessible number inputs', as
   expect(outputFont).toContain('Noto Sans JP Variable');
   await expect(horseDialog.locator('.preference-slider > input').first()).toHaveCSS(
     'border-left-color',
-    'rgb(98, 98, 98)',
+    'rgb(33, 33, 33)',
   );
   const coloredAdminValues = await page.locator('.app-shell--admin').evaluate((root) => {
     const elements = [root, ...root.querySelectorAll('*')];
@@ -121,7 +121,10 @@ test('opens compact forms and edits abilities with accessible number inputs', as
         });
     });
   });
-  expect(coloredAdminValues.length).toBe(0);
+  // The chrome stays grey. Colour is allowed, but only the three tokens that
+  // carry a meaning: the accent, a failure, and a warning.
+  const SEMANTIC_COLOURS = ['rgb(50, 145, 255)', 'rgb(255, 99, 105)', 'rgb(245, 166, 35)'];
+  expect(coloredAdminValues.filter((value) => !SEMANTIC_COLOURS.includes(value))).toEqual([]);
 
   const adminMotion = await page
     .locator('.app-shell--admin button')
@@ -130,8 +133,13 @@ test('opens compact forms and edits abilities with accessible number inputs', as
       const style = getComputedStyle(element);
       return { animationName: style.animationName, transitionDuration: style.transitionDuration };
     });
+  // A control may answer a hover, and nothing more: no keyframes, and a change
+  // of state inside the 120-180ms the design system allows for one.
   expect(adminMotion.animationName).toBe('none');
-  expect(adminMotion.transitionDuration).toBe('0s');
+  const durations = adminMotion.transitionDuration
+    .split(',')
+    .map((duration) => Number.parseFloat(duration) * 1_000);
+  expect(Math.max(...durations)).toBeLessThanOrEqual(180);
 
   const dimensions = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,

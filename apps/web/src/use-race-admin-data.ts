@@ -29,7 +29,9 @@ export interface UseRaceAdminData {
 
 interface AdminSettingsResponse {
   readonly gameSettings: ScheduleSettings & {
-    readonly raceBetLimits: Readonly<Record<string, number>>;
+    /* Optional, because a response that predates the field, or one that has
+       been trimmed, must not take the whole list down with it. */
+    readonly raceBetLimits?: Readonly<Record<string, number>>;
   };
 }
 
@@ -73,7 +75,7 @@ export function useRaceAdminData(): UseRaceAdminData {
         bettingCloseTime: settings.bettingCloseTime,
         startTime: settings.startTime,
       });
-      setBetLimits(settings.raceBetLimits);
+      setBetLimits(settings.raceBetLimits ?? {});
 
       setFormOptionsError('');
     } catch (caught) {

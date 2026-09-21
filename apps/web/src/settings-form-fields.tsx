@@ -201,6 +201,15 @@ const CONDITION_FIELDS = [
   ['excellent', '絶好調'],
 ] as const;
 
+/**
+ * A time is typed, not picked.
+ *
+ * `type="time"` hands the field to the browser: its own segmented boxes, its
+ * own clock button, its own popup, all drawn to the browser's taste rather than
+ * to this app's. Hiding the button takes a different vendor prefix per engine
+ * and silently does nothing on the ones you did not name, so the control itself
+ * goes instead. The value is the same `HH:MM:SS` string either way.
+ */
 function TimeField(input: {
   readonly name: string;
   readonly label: string;
@@ -209,7 +218,15 @@ function TimeField(input: {
   return (
     <label>
       {input.label}
-      <input name={input.name} type="time" step={1} defaultValue={input.value} required />
+      <input
+        name={input.name}
+        type="text"
+        inputMode="numeric"
+        pattern="(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d"
+        placeholder="HH:MM:SS"
+        defaultValue={input.value}
+        required
+      />
     </label>
   );
 }
